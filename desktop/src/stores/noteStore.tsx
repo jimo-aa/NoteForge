@@ -33,7 +33,7 @@ export function useNoteStore() {
   const persistedRef = useRef(false);
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({ visible: false, x: 0, y: 0, noteId: null, notebookId: null, kind: null });
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [entityModal, setEntityModal] = useState<EntityModalState>({ open: false, mode: null, title: '', label: '', value: '', confirmText: '确定' });
+  const [entityModal, setEntityModal] = useState<EntityModalState>({ open: false, mode: null, title: '', label: '', value: '', confirmText: '确定', targetId: null });
   const toastIdRef = useRef(0);
 
   const refreshNotebooks = useCallback(async () => {
@@ -118,7 +118,7 @@ export function useNoteStore() {
   const renameNotebook = useCallback(async (id: string, name: string) => { const notebook = await tauriInvoke<Notebook>('rename_notebook', { id, name }); if (notebook) { await refreshNotebooks(); showToast('success', '✏️ 已重命名'); } return notebook; }, [refreshNotebooks, showToast]);
   const deleteNotebook = useCallback(async (id: string) => { const ok = await tauriInvoke<boolean>('delete_notebook', { id }); if (ok !== false) { await refreshNotes(); await refreshNotebooks(); if (activeNotebook === id) setActiveNotebook('all'); showToast('success', '🗑 已删除笔记本'); return true; } return false; }, [activeNotebook, refreshNotes, refreshNotebooks, showToast]);
   const openEntityModal = useCallback((next: EntityModalState) => setEntityModal(next), []);
-  const closeEntityModal = useCallback(() => setEntityModal({ open: false, mode: null, title: '', label: '', value: '', confirmText: '确定' }), []);
+  const closeEntityModal = useCallback(() => setEntityModal({ open: false, mode: null, title: '', label: '', value: '', confirmText: '确定', targetId: null }), []);
 
   const tags = Array.from(new Set(notes.flatMap((n) => n.meta.tags)));
   const totalCount = notes.length;

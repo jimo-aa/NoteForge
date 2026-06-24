@@ -23,9 +23,10 @@ export default function App() {
       <NewNoteModal open={newNoteOpen} notebooks={store.notebooks} onClose={() => setNewNoteOpen(false)} onCreate={({ title, content, notebookId, tags }) => { store.createNote(title, content, notebookId, tags); setNewNoteOpen(false); }} />
       <EntityModal state={store.entityModal} onClose={store.closeEntityModal} onConfirm={async (value) => {
         if (!value) return;
+        const targetId = store.entityModal.targetId;
         if (store.entityModal.mode === 'create-notebook') await store.createNotebook(value);
-        if (store.entityModal.mode === 'rename-notebook' && store.contextMenu.notebookId) await store.renameNotebook(store.contextMenu.notebookId, value);
-        if (store.entityModal.mode === 'rename-note' && store.contextMenu.noteId) store.updateNote(store.contextMenu.noteId, { title: value });
+        if (store.entityModal.mode === 'rename-notebook' && targetId) await store.renameNotebook(targetId, value);
+        if (store.entityModal.mode === 'rename-note' && targetId) store.updateNote(targetId, { title: value });
         store.closeEntityModal();
       }} />
       <ContextMenu />

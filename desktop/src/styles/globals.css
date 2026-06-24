@@ -118,17 +118,35 @@ button { cursor: pointer; }
   font-size: 12px;
   font-family: inherit;
 }
+.new-note-button,
+.new-notebook-button {
+  height: 40px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  flex: 0 0 auto;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  transition: transform 0.16s ease, box-shadow 0.16s ease, background 0.16s ease, border-color 0.16s ease;
+  -webkit-app-region: no-drag;
+}
 .new-note-button {
-  height: 38px;
-  border: 0;
-  border-radius: 9px;
   background: linear-gradient(90deg, #665cff 0%, #65d9ff 100%);
   color: #06101c;
-  font-weight: 800;
-  flex: 0 0 auto;
+  box-shadow: 0 14px 28px rgba(102, 92, 255, 0.24);
 }
+.new-notebook-button {
+  background: rgba(106, 99, 255, 0.1);
+  color: var(--text);
+  border-color: rgba(106, 99, 255, 0.18);
+}
+.new-note-button:hover,
+.new-notebook-button:hover { transform: translateY(-1px); box-shadow: 0 18px 32px rgba(102, 92, 255, 0.18); }
+.new-notebook-button:hover { background: rgba(106, 99, 255, 0.16); }
 
 .sidebar-section { display: grid; gap: 8px; flex: 0 0 auto; min-height: 0; }
+.sidebar-actions .icon-button,
+.new-note-button,
+.new-notebook-button { -webkit-app-region: no-drag; }
 .section-heading {
   width: 100%;
   display: flex;
@@ -615,6 +633,37 @@ button { cursor: pointer; }
 .new-note-actions .ghost-btn:hover { background: #f8fafc; }
 .new-note-actions .primary-btn { background: #635bff; color: #fff; border: 0; }
 .new-note-actions .primary-btn:hover { background: #574cff; }
+.context-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1250;
+  background: transparent;
+}
+.context-menu {
+  position: fixed;
+  z-index: 1260;
+  min-width: 220px;
+  padding: 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--panel) 92%, black 8%);
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(14px);
+}
+.context-menu .item {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 10px 12px;
+  border-radius: 10px;
+  color: var(--text);
+  font-size: 14px;
+  text-align: left;
+}
+.context-menu .item:hover { background: rgba(106, 99, 255, 0.16); }
+.context-menu .item.danger { color: #ff7684; }
+.context-menu .item.danger:hover { background: rgba(255, 118, 132, 0.14); }
+.context-menu .sep { height: 1px; margin: 6px 4px; background: var(--line); }
 .toast { position: fixed; right: 20px; bottom: 20px; min-width: 220px; z-index: 1200; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); }
 
 .graph-overlay {

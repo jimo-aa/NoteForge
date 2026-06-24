@@ -25,6 +25,8 @@ pub fn run() {
             commands::list_notes,
             commands::search_notes,
             commands::create_notebook,
+            commands::rename_notebook,
+            commands::delete_notebook,
             commands::list_notebooks,
             commands::list_tags,
         ])

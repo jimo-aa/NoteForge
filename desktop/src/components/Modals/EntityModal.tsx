@@ -9,6 +9,7 @@ export interface EntityModalState {
   label: string;
   value: string;
   confirmText: string;
+  targetId?: string | null;
 }
 
 export function EntityModal({ state, onClose, onConfirm }: { state: EntityModalState; onClose: () => void; onConfirm: (value: string) => void; }) {
