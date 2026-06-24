@@ -6,11 +6,12 @@ export function NoteList() {
 
   if (store.filteredNotes.length === 0) {
     return (
-      <div className="editor-view" style={{ padding: 18 }}>
-        <div className="empty-state">
-          <div className="icon">⌘</div>
-          <h2>没有匹配的笔记</h2>
-          <p>尝试切换筛选器、清空搜索关键词或创建新的笔记。</p>
+      <div className="note-list-empty">
+        <div className="empty-state empty-state--notes">
+          <div className="empty-state__icon">⌘</div>
+          <h2>暂无笔记</h2>
+          <p>当前筛选条件下没有可显示的笔记。</p>
+          <div className="empty-state__hint">可以尝试切换筛选、清空搜索或新建一条笔记。</div>
         </div>
       </div>
     );

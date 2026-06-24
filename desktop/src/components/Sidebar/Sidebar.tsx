@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { useStore } from '../../stores/context';
 import { useTheme } from '@/hooks/useTheme';
+import { SearchBox } from '@/components/Sidebar/SearchBox';
 import type { EntityModalState } from '@/components/Modals/EntityModal';
 
 const FILTERS = [
@@ -22,7 +23,7 @@ export function Sidebar({ onNewNote }: SidebarProps) {
   return (
     <aside className="sidebar sidebar--compact">
       <header className="sidebar-top"><div className="brand-block"><div className="brand-logo">✦</div><div className="brand-copy"><strong>NoteForge</strong><span>Offline Desktop</span></div></div><div className="sidebar-actions"><button className="icon-button" onClick={toggleTheme} title="切换颜色主题">{theme === 'light' ? '◐' : '◑'}</button><button className="icon-button" onClick={() => setIsGraphOpen(true)} title="打开图谱视图">♢</button></div></header>
-      <div className="sidebar-search"><span>🔍</span><input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="搜索笔记..." /><kbd>⌘K</kbd></div>
+      <div className="sidebar-search"><SearchBox /></div>
       <button className="new-note-button" onClick={onNewNote}>＋ 新建笔记</button>
       <button className="new-notebook-button" onClick={openNotebookModal}>＋ 新建笔记本</button>
       <section className="sidebar-section notebooks-section"><button className="section-heading" type="button"><span>笔记本</span><span>⌄</span></button><div className="notebook-list">{notebooks.map((notebook) => (<button key={notebook.id} className={notebook.id === activeNotebook ? 'notebook-item active' : 'notebook-item'} onClick={() => setActiveNotebook(notebook.id)} onContextMenu={(e) => { if (notebook.id === 'all') return; e.preventDefault(); setContextMenu({ visible: true, x: e.clientX, y: e.clientY, noteId: null, notebookId: notebook.id, kind: 'notebook' }); }}><span className="notebook-icon">{notebook.icon}</span><span className="notebook-name">{notebook.name}</span><span className="notebook-count">{notebook.noteCount}</span></button>))}</div></section>

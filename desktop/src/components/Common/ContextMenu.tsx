@@ -21,7 +21,7 @@ export function ContextMenu() {
         { label: note.meta.isPinned ? '📌 取消固定' : '📌 固定', action: () => run(() => { store.updateNote(noteId, { isPinned: !note.meta.isPinned }); store.showToast('info', note.meta.isPinned ? '已取消固定' : '已固定'); }) },
         { label: note.meta.isFavorite ? '⭐ 取消收藏' : '⭐ 收藏', action: () => run(() => { store.updateNote(noteId, { isFavorite: !note.meta.isFavorite }); store.showToast('success', note.meta.isFavorite ? '已取消收藏' : '⭐ 已收藏'); }) },
         null,
-        { label: '🗑 删除文档', action: () => run(() => { if (confirm('确定删除这篇文档吗？')) store.deleteNote(noteId); }), danger: true },
+        { label: '🗑 删除文档', action: () => run(() => store.deleteNote(noteId)), danger: true },
       ];
     }
 
@@ -31,7 +31,7 @@ export function ContextMenu() {
       return [
         { label: '✏️ 重命名', action: () => run(() => store.openEntityModal({ open: true, mode: 'rename-notebook', title: '重命名笔记本', label: '笔记本名称', value: notebook.name, confirmText: '保存', targetId: notebookId })) },
         null,
-        { label: '🗑 删除笔记本', action: () => run(() => { if (confirm(`删除「${notebook.name}」？笔记会移回默认笔记本。`)) store.deleteNotebook(notebookId); }), danger: true },
+        { label: '🗑 删除笔记本', action: () => run(() => store.deleteNotebook(notebookId)), danger: true },
       ];
     }
 
