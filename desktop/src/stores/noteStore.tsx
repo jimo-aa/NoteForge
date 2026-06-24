@@ -23,7 +23,7 @@ export function useNoteStore() {
   const [currentFilter, setCurrentFilter] = useState<NoteFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [activeNotebook, setActiveNotebook] = useState('all');
-  const [activeTag, setActiveTag] = useState<string>('');
+  const [activeTags, setActiveTags] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState<SortOption>('updated');
   const [isPreviewVisible, setIsPreviewVisible] = useState(true);
   const [isGraphOpen, setIsGraphOpen] = useState(false);
@@ -75,7 +75,7 @@ export function useNoteStore() {
     if (activeNotebook !== 'all' && n.meta.notebookId !== activeNotebook) return false;
     if (currentFilter === 'favorites' && !n.meta.isFavorite) return false;
     if (currentFilter === 'pinned' && !n.meta.isPinned) return false;
-    if (currentFilter === 'tag' && activeTag && !n.meta.tags.includes(activeTag)) return false;
+    if (activeTags.length > 0 && !activeTags.every((tag) => n.meta.tags.includes(tag))) return false;
     return true;
   }));
 
@@ -125,7 +125,7 @@ export function useNoteStore() {
   const favoriteCount = notes.filter((n) => n.meta.isFavorite).length;
   const searchResultCount = searchQuery ? filteredNotes.length : null;
 
-  return { notes, filteredNotes, currentNote, currentNoteId, notebooks, activeNotebook, currentFilter, searchQuery, sortBy, activeTag, isPreviewVisible, isGraphOpen, isPropertiesOpen, toasts, contextMenu, settingsOpen, isLoading, entityModal, totalCount, favoriteCount, searchResultCount, tags, setActiveNotebook, setCurrentFilter, setSearchQuery, setSortBy, setActiveTag, setIsPreviewVisible, setIsGraphOpen, setIsPropertiesOpen, setContextMenu, setSettingsOpen, openEntityModal, closeEntityModal, selectNote, createNote, updateNote, deleteNote, duplicateNote, toggleFavorite, togglePin, createNotebook, renameNotebook, deleteNotebook, refreshNotes, refreshNotebooks, showToast, setCurrentNoteId };
+  return { notes, filteredNotes, currentNote, currentNoteId, notebooks, activeNotebook, currentFilter, searchQuery, sortBy, activeTags, isPreviewVisible, isGraphOpen, isPropertiesOpen, toasts, contextMenu, settingsOpen, isLoading, entityModal, totalCount, favoriteCount, searchResultCount, tags, setActiveNotebook, setCurrentFilter, setSearchQuery, setSortBy, setActiveTags, setIsPreviewVisible, setIsGraphOpen, setIsPropertiesOpen, setContextMenu, setSettingsOpen, openEntityModal, closeEntityModal, selectNote, createNote, updateNote, deleteNote, duplicateNote, toggleFavorite, togglePin, createNotebook, renameNotebook, deleteNotebook, refreshNotes, refreshNotebooks, showToast, setCurrentNoteId };
 }
 
 export const NoteContext = createContext<NoteStore | null>(null);

@@ -195,12 +195,6 @@ button { cursor: pointer; }
   padding: 0 2px 2px;
 }
 .tag-strip { display: none; }
-.tag-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 0 2px 2px;
-}
 .tag-pill {
   flex: 0 0 auto;
   height: 28px;
@@ -212,20 +206,31 @@ button { cursor: pointer; }
   font-size: 12px;
   font-weight: 700;
 }
-.tag-pill.active { background: rgba(106, 99, 255, 0.22); border-color: rgba(106, 99, 255, 0.35); }
+.tag-pill.active { background: rgba(106, 99, 255, 0.22); border-color: rgba(106, 99, 255, 0.35); color: var(--text); }
 .tag-empty {
   width: 100%;
-  min-height: 72px;
   display: grid;
-  place-items: center;
-  padding: 12px 10px;
+  gap: 4px;
+  padding: 12px 12px 11px;
   border: 1px dashed var(--line-strong);
-  border-radius: 12px;
+  border-radius: 14px;
   background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
+  color: var(--text-muted);
+  text-align: left;
+}
+.tag-empty--inline {
+  grid-column: 1 / -1;
+  margin-top: 2px;
+}
+.tag-empty__title {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+}
+.tag-empty__desc {
   color: var(--text-muted);
   font-size: 12px;
   line-height: 1.45;
-  text-align: center;
 }
 .sidebar--compact { transform: scale(0.9); transform-origin: top left; width: calc(100% / 0.9); height: calc(100vh / 0.9); }
 .tag-pill {
