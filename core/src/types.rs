@@ -1,7 +1,7 @@
 //! NoteForge Core — 公共类型定义
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+
 
 // ============================================================
 // 笔记

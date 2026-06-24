@@ -27,7 +27,12 @@ export function NoteList() {
           onContextMenu={e => {
             e.preventDefault();
             store.setContextMenu({
-              visible: true, x: e.clientX, y: e.clientY, noteId: note.meta.id,
+              visible: true,
+              x: e.clientX,
+              y: e.clientY,
+              noteId: note.meta.id,
+              notebookId: null,
+              kind: 'note',
             });
           }}
           draggable

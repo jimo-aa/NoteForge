@@ -3,7 +3,7 @@
 import { createContext, useContext, useState, useCallback, useRef, useEffect, type ReactNode } from 'react';
 import type { Note, NoteFilter, ToastMessage, ContextMenuState, SortOption, Notebook } from '@/types';
 import type { EntityModalState } from '@/components/Modals/EntityModal';
-import { generateId, countWords } from '@/utils/markdown';
+import { countWords } from '@/utils/markdown';
 
 async function tauriInvoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T | null> {
   try {
@@ -50,7 +50,7 @@ export function useNoteStore() {
   }, []);
 
   useEffect(() => { void (async () => { await Promise.all([refreshNotes(), refreshNotebooks()]); setIsLoading(false); })(); }, [refreshNotes, refreshNotebooks]);
-  useEffect(() => { localStorage.setItem('nf_last_note', currentNoteId); }, [currentNoteId]);
+  useEffect(() => { void tauriInvoke('set_last_note', { id: currentNoteId }); }, [currentNoteId]);
   useEffect(() => { void refreshNotebooks(); }, [notes, refreshNotebooks]);
 
   const sortNotes = useCallback((notesToSort: Note[]) => {
@@ -82,21 +82,23 @@ export function useNoteStore() {
   const currentNote = notes.find((n) => n.meta.id === currentNoteId) || null;
   const selectNote = useCallback((id: string) => setCurrentNoteId(id), []);
 
-  const createNote = useCallback((title: string, content: string, notebookId: string, tags: string[]) => {
-    const now = Date.now();
-    const note: Note = { meta: { id: generateId(), title, notebookId, tags, isPinned: false, isFavorite: false, wordCount: countWords(content), version: 1, createdAt: now, updatedAt: now, backlinks: 0 }, content };
-    setNotes((prev) => [note, ...prev]);
-    setCurrentNoteId(note.meta.id);
-    void tauriInvoke('create_note', { request: { title, content, notebook_id: notebookId, tags } });
-    return note;
+  const createNote = useCallback(async (title: string, content: string, notebookId: string, tags: string[]) => {
+    const note = await tauriInvoke<Note>('create_note', { request: { title, content, notebook_id: notebookId, tags } });
+    if (note) {
+      setNotes((prev) => [note, ...prev.filter((item) => item.meta.id !== note.meta.id)]);
+      setCurrentNoteId(note.meta.id);
+      return note;
+    }
+    return null;
   }, []);
 
   const updateNote = useCallback((id: string, updates: Partial<Note['meta'] & { content: string }>) => {
     setNotes((prev) => prev.map((n) => {
       if (n.meta.id !== id) return n;
-      const newMeta = { ...n.meta, ...updates, updatedAt: Date.now() };
-      if (updates.content !== undefined) newMeta.wordCount = countWords(updates.content);
-      return { meta: newMeta, content: updates.content ?? n.content };
+      return {
+        meta: { ...n.meta, ...updates, updatedAt: Date.now() },
+        content: updates.content ?? n.content,
+      };
     }));
     if (updates.title !== undefined || updates.content !== undefined || updates.tags !== undefined || updates.isPinned !== undefined || updates.isFavorite !== undefined) {
       void tauriInvoke('update_note', { id, title: updates.title ?? null, content: updates.content ?? null, tags: updates.tags ?? null, isPinned: updates.isPinned ?? null, isFavorite: updates.isFavorite ?? null });
@@ -110,9 +112,9 @@ export function useNoteStore() {
   }, []);
 
   const deleteNote = useCallback((id: string) => { setNotes((prev) => prev.filter((n) => n.meta.id !== id)); setCurrentNoteId((prev) => (prev === id ? '' : prev)); void tauriInvoke('delete_note', { id }); }, []);
-  const duplicateNote = useCallback((id: string) => { const note = notes.find((n) => n.meta.id === id); if (!note) return; const copy: Note = { meta: { ...note.meta, id: generateId(), title: `${note.meta.title} (副本)`, createdAt: Date.now(), updatedAt: Date.now() }, content: note.content }; setNotes((prev) => [copy, ...prev]); setCurrentNoteId(copy.meta.id); showToast('success', '📋 已复制'); }, [notes, showToast]);
-  const toggleFavorite = useCallback((id: string) => { setNotes((prev) => prev.map((n) => n.meta.id === id ? { ...n, meta: { ...n.meta, isFavorite: !n.meta.isFavorite, updatedAt: Date.now() } } : n)); }, []);
-  const togglePin = useCallback((id: string) => { setNotes((prev) => prev.map((n) => n.meta.id === id ? { ...n, meta: { ...n.meta, isPinned: !n.meta.isPinned, updatedAt: Date.now() } } : n)); }, []);
+  const duplicateNote = useCallback((id: string) => { const note = notes.find((n) => n.meta.id === id); if (!note) return; void createNote(`${note.meta.title} (副本)`, note.content, note.meta.notebookId || 'default', note.meta.tags); showToast('success', '📋 已复制'); }, [createNote, notes, showToast]);
+  const toggleFavorite = useCallback((id: string) => { const note = notes.find((n) => n.meta.id === id); if (!note) return; updateNote(id, { isFavorite: !note.meta.isFavorite }); }, [notes, updateNote]);
+  const togglePin = useCallback((id: string) => { const note = notes.find((n) => n.meta.id === id); if (!note) return; updateNote(id, { isPinned: !note.meta.isPinned }); }, [notes, updateNote]);
 
   const createNotebook = useCallback(async (name: string) => { const notebook = await tauriInvoke<Notebook>('create_notebook', { name }); if (notebook) { await refreshNotebooks(); showToast('success', '📒 已创建笔记本'); return notebook; } return null; }, [refreshNotebooks, showToast]);
   const renameNotebook = useCallback(async (id: string, name: string) => { const notebook = await tauriInvoke<Notebook>('rename_notebook', { id, name }); if (notebook) { await refreshNotebooks(); showToast('success', '✏️ 已重命名'); } return notebook; }, [refreshNotebooks, showToast]);

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useStore } from '@/stores/context';
 
@@ -10,40 +10,49 @@ type SearchResultItem = {
   updatedAt: string;
   type: 'note' | 'tag' | 'command';
   noteId?: string;
+  line?: number;
+  column?: number;
 };
 
-const MOCK_RESULTS: SearchResultItem[] = [
-  { id: 'mock-tag-1', title: '固定笔记', snippet: '快速定位高频查看的内容，减少重复查找。', tag: '#功能', updatedAt: '今天', type: 'tag' },
-  { id: 'mock-cmd-1', title: '创建新笔记', snippet: '直接生成一篇新的 Markdown 文档。', tag: '快捷操作', updatedAt: '快捷入口', type: 'command' },
-];
+function tauriInvoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T | null> {
+  return import('@tauri-apps/api/core').then(({ invoke }) => invoke<T>(cmd, args).catch(() => null)).catch(() => null);
+}
+
 export function SearchBox() {
   const store = useStore();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState(store.searchQuery);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [results, setResults] = useState<SearchResultItem[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const results = useMemo<SearchResultItem[]>(() => {
-    const base = store.notes.slice(0, 8).map((note) => ({
-      id: note.meta.id,
-      title: note.meta.title,
-      snippet: note.content.replace(/[#*`>-]/g, '').slice(0, 70) || '暂无内容预览',
-      tag: note.meta.tags[0] ? `#${note.meta.tags[0]}` : '无标签',
-      updatedAt: '最近更新',
-      type: 'note' as const,
-      noteId: note.meta.id,
-    }));
-    const mockOnly = MOCK_RESULTS;
-    const q = query.trim().toLowerCase();
-    const merged = [...base, ...mockOnly];
-    if (!q) return merged;
-    return merged.filter((item) => [item.title, item.snippet, item.tag, item.type].some((text) => text.toLowerCase().includes(q)));
-  }, [query, store.notes]);
+  const close = () => setOpen(false);
+  const openSearch = () => {
+    setQuery(store.searchQuery);
+    setActiveIndex(0);
+    setOpen(true);
+    window.setTimeout(() => inputRef.current?.focus(), 0);
+  };
 
   useEffect(() => {
     if (!open) return;
-    setActiveIndex((prev) => Math.min(prev, Math.max(results.length - 1, 0)));
-  }, [open, results.length]);
+    const t = window.setTimeout(async () => {
+      const hits = await tauriInvoke<Array<{ id: string; title: string; snippet: string; updatedAt: number; line: number; column: number }>>('search_note_hits', { query });
+      setResults((hits ?? []).map((hit) => ({
+        id: hit.id,
+        title: hit.title,
+        snippet: hit.snippet || '暂无片段',
+        tag: '笔记命中',
+        updatedAt: new Date(hit.updatedAt).toLocaleString(),
+        type: 'note',
+        noteId: hit.id,
+        line: hit.line,
+        column: hit.column,
+      })));
+      setActiveIndex(0);
+    }, 200);
+    return () => window.clearTimeout(t);
+  }, [open, query]);
 
   useEffect(() => {
     if (!open) return;
@@ -54,34 +63,14 @@ export function SearchBox() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [open]);
 
-  const close = () => setOpen(false);
-  const openSearch = () => {
-    setQuery(store.searchQuery);
-    setActiveIndex(0);
-    setOpen(true);
-    window.setTimeout(() => inputRef.current?.focus(), 0);
-  };
-  const applyQuery = (value: string) => setQuery(value);
-
-  const handleSelect = (index: number) => {
+  const handleSelect = async (index: number) => {
     const item = results[index];
-    if (!item) return;
-    if (item.type === 'note' && item.noteId) {
-      store.selectNote(item.noteId);
-      const note = store.notes.find((n) => n.meta.id === item.noteId);
-      if (note) {
-        store.setSearchQuery(note.meta.title);
-        store.setCurrentNoteId(note.meta.id);
-      }
-      close();
-      return;
-    }
-    if (item.type === 'tag') {
-      store.setSearchQuery(item.tag.replace(/^#/, ''));
-      close();
-      return;
-    }
+    if (!item?.noteId) return;
+    store.selectNote(item.noteId);
+    store.setCurrentNoteId(item.noteId);
+    store.setSearchQuery(query);
     close();
+    window.dispatchEvent(new CustomEvent('noteforge:jump-to-hit', { detail: { noteId: item.noteId, line: item.line ?? 1, column: item.column ?? 1 } }));
   };
 
   const modal = open ? createPortal(
@@ -94,13 +83,13 @@ export function SearchBox() {
             autoFocus
             className="search-modal__input"
             value={query}
-            onChange={(e) => { applyQuery(e.target.value); setActiveIndex(0); }}
-            placeholder="输入关键词搜索笔记、标签、命令..."
+            onChange={(e) => { setQuery(e.target.value); setActiveIndex(0); }}
+            placeholder="输入关键词搜索笔记..."
             onKeyDown={(e) => {
               if (e.key === 'Escape') close();
               if (e.key === 'ArrowDown') { e.preventDefault(); setActiveIndex((prev) => Math.min(prev + 1, Math.max(results.length - 1, 0))); }
               if (e.key === 'ArrowUp') { e.preventDefault(); setActiveIndex((prev) => Math.max(prev - 1, 0)); }
-              if (e.key === 'Enter') { e.preventDefault(); handleSelect(activeIndex); }
+              if (e.key === 'Enter') { e.preventDefault(); void handleSelect(activeIndex); }
             }}
           />
           <button type="button" className="search-modal__close" onClick={close}>×</button>
@@ -116,7 +105,7 @@ export function SearchBox() {
             <div className="search-empty">
               <div className="search-empty__icon">⌕</div>
               <strong>没有找到相关内容</strong>
-              <p>尝试更换关键词，或者搜索笔记标题、标签、命令名称。</p>
+              <p>尝试更换关键词，或确认笔记已经完成索引。</p>
             </div>
           ) : (
             <div className="search-results">
@@ -126,11 +115,11 @@ export function SearchBox() {
                   type="button"
                   className={`search-result${index === activeIndex ? ' active' : ''}`}
                   onMouseEnter={() => setActiveIndex(index)}
-                  onClick={() => handleSelect(index)}
+                  onClick={() => void handleSelect(index)}
                 >
                   <div className="search-result__top">
                     <div className="search-result__title-row">
-                      <span className={`search-result__type search-result__type--${item.type}`}>{item.type === 'note' ? '笔记' : item.type === 'tag' ? '标签' : '命令'}</span>
+                      <span className="search-result__type search-result__type--note">笔记</span>
                       <strong>{item.title}</strong>
                     </div>
                     <span className="search-result__time">{item.updatedAt}</span>
@@ -138,7 +127,7 @@ export function SearchBox() {
                   <p>{item.snippet}</p>
                   <div className="search-result__footer">
                     <span>{item.tag}</span>
-                    <span>{index === activeIndex ? '回车打开' : '点击打开'}</span>
+                    <span>{index === activeIndex ? `回车跳转到第 ${item.line ?? 1} 行` : '点击跳转'}</span>
                   </div>
                 </button>
               ))}

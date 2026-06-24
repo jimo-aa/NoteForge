@@ -23,15 +23,6 @@ pub struct NoteForge {
 
 impl NoteForge {
     /// 打开（或创建）一个笔记本仓库
-    ///
-    /// # 参数
-    /// - `data_dir`: 存储目录路径
-    ///
-    /// # 示例
-    /// ```no_run
-    /// use noteforge_core::NoteForge;
-    /// let nf = NoteForge::open("./my-notes").unwrap();
-    /// ```
     pub fn open<P: AsRef<Path>>(data_dir: P) -> Result<Self, Box<dyn std::error::Error>> {
         let data_dir = data_dir.as_ref();
         std::fs::create_dir_all(data_dir)?;
@@ -44,7 +35,6 @@ impl NoteForge {
         Ok(Self { storage, search })
     }
 
-    /// 获取引擎版本信息
     pub fn version() -> &'static str {
         env!("CARGO_PKG_VERSION")
     }

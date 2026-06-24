@@ -49,17 +49,11 @@ impl LocalStorage {
                  content_plain  TEXT NOT NULL DEFAULT '',
                  is_pinned      INTEGER NOT NULL DEFAULT 0,
                  is_favorite    INTEGER NOT NULL DEFAULT 0,
-                 is_deleted     INTEGER NOT NULL DEFAULT 0,
                  word_count     INTEGER NOT NULL DEFAULT 0,
                  version        INTEGER NOT NULL DEFAULT 1,
                  created_at     INTEGER NOT NULL,
                  updated_at     INTEGER NOT NULL
              );
-
-             CREATE INDEX IF NOT EXISTS idx_notes_notebook
-                 ON notes(notebook_id) WHERE is_deleted = 0;
-             CREATE INDEX IF NOT EXISTS idx_notes_updated
-                 ON notes(updated_at DESC);
 
              CREATE TABLE IF NOT EXISTS tags (
                  id     TEXT PRIMARY KEY,
@@ -80,6 +74,36 @@ impl LocalStorage {
              );
              "
         )?;
+
+        self.ensure_note_columns()?;
+        self.ensure_indexes()?;
+        Ok(())
+    }
+
+    fn ensure_indexes(&self) -> Result<(), Box<dyn std::error::Error>> {
+        self.conn.execute("CREATE INDEX IF NOT EXISTS idx_notes_notebook ON notes(notebook_id) WHERE is_deleted = 0", [])?;
+        self.conn.execute("CREATE INDEX IF NOT EXISTS idx_notes_updated ON notes(updated_at DESC)", [])?;
+        Ok(())
+    }
+
+    fn ensure_note_columns(&self) -> Result<(), Box<dyn std::error::Error>> {
+        let mut stmt = self.conn.prepare("PRAGMA table_info(notes)")?;
+        let existing = stmt
+            .query_map([], |row| row.get::<_, String>(1))?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        if !existing.iter().any(|c| c == "is_deleted") {
+            self.conn.execute("ALTER TABLE notes ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0", [])?;
+        }
+        if !existing.iter().any(|c| c == "content_plain") {
+            self.conn.execute("ALTER TABLE notes ADD COLUMN content_plain TEXT NOT NULL DEFAULT ''", [])?;
+        }
+        if !existing.iter().any(|c| c == "word_count") {
+            self.conn.execute("ALTER TABLE notes ADD COLUMN word_count INTEGER NOT NULL DEFAULT 0", [])?;
+        }
+        if !existing.iter().any(|c| c == "version") {
+            self.conn.execute("ALTER TABLE notes ADD COLUMN version INTEGER NOT NULL DEFAULT 1", [])?;
+        }
         Ok(())
     }
 
@@ -302,13 +326,12 @@ impl LocalStorage {
 
         let mut stmt = self.conn.prepare(&sql)?;
 
+        let mut all_params: Vec<Box<dyn rusqlite::types::ToSql>> = params_vec;
+        all_params.push(Box::new(limit as i64));
+        all_params.push(Box::new(offset as i64));
+
         let metas = stmt.query_map(
-            rusqlite::params_from_iter(
-                params_vec.iter().chain(vec![
-                    Box::new(limit as i64),
-                    Box::new(offset as i64),
-                ]).map(|v| v.as_ref())
-            ),
+            rusqlite::params_from_iter(all_params.iter().map(|v| v.as_ref())),
             |row| {
                 Ok(NoteMeta {
                     id: row.get(0)?,

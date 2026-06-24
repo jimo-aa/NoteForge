@@ -8,7 +8,7 @@ export function ContextMenu() {
   const { visible, x, y, noteId, notebookId, kind } = store.contextMenu;
 
   const close = () => store.setContextMenu({ visible: false, x: 0, y: 0, noteId: null, notebookId: null, kind: null });
-  const run = (fn: () => void | Promise<void>) => { void Promise.resolve(fn()).finally(close); };
+  const run = (fn: () => void | Promise<void>) => { void Promise.resolve(fn()).finally(() => close()); };
 
   const actions = useMemo<MenuAction[]>(() => {
     if (!visible || !kind) return [];
@@ -31,7 +31,7 @@ export function ContextMenu() {
       return [
         { label: '✏️ 重命名', action: () => run(() => store.openEntityModal({ open: true, mode: 'rename-notebook', title: '重命名笔记本', label: '笔记本名称', value: notebook.name, confirmText: '保存', targetId: notebookId })) },
         null,
-        { label: '🗑 删除笔记本', action: () => run(() => store.deleteNotebook(notebookId)), danger: true },
+        { label: '🗑 删除笔记本', action: () => run(() => void store.deleteNotebook(notebookId)), danger: true },
       ];
     }
 
