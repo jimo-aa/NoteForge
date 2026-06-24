@@ -8,9 +8,7 @@ const FILTERS = [
   { id: 'recent', icon: '🕘', label: '最近查看' },
 ] as const;
 
-interface SidebarProps {
-  onNewNote?: () => void;
-}
+interface SidebarProps { onNewNote?: () => void; }
 
 export function Sidebar({ onNewNote }: SidebarProps) {
   const {
@@ -21,26 +19,24 @@ export function Sidebar({ onNewNote }: SidebarProps) {
     activeNotebook,
     setActiveNotebook,
     notebooks,
-    notes,
+    tags,
     favoriteCount,
     totalCount,
     searchResultCount,
     setIsGraphOpen,
     selectNote,
     currentNoteId,
+    activeTag,
+    setActiveTag,
+    filteredNotes,
   } = useStore();
   const { theme, toggleTheme } = useTheme();
 
-  const tags = useMemo(() => {
-    const map = new Map<string, number>();
-    notes.forEach((note) => note.meta.tags.forEach((tag) => map.set(tag, (map.get(tag) ?? 0) + 1)));
-    return Array.from(map.entries()).slice(0, 24);
-  }, [notes]);
-
-  const visibleNotes = useMemo(() => notes.slice(0, 30), [notes]);
+  const visibleTags = useMemo(() => tags, [tags]);
+  const visibleNotes = useMemo(() => filteredNotes.slice(0, 30), [filteredNotes]);
 
   return (
-    <aside className="sidebar">
+    <aside className="sidebar sidebar--compact">
       <header className="sidebar-top">
         <div className="brand-block">
           <div className="brand-logo">✦</div>
@@ -50,9 +46,7 @@ export function Sidebar({ onNewNote }: SidebarProps) {
           </div>
         </div>
         <div className="sidebar-actions">
-          <button className="icon-button" onClick={toggleTheme} title="切换颜色主题">
-            {theme === 'light' ? '◐' : '◑'}
-          </button>
+          <button className="icon-button" onClick={toggleTheme} title="切换颜色主题">{theme === 'light' ? '◐' : '◑'}</button>
           <button className="icon-button" onClick={() => setIsGraphOpen(true)} title="打开图谱视图">♢</button>
         </div>
       </header>
@@ -66,17 +60,10 @@ export function Sidebar({ onNewNote }: SidebarProps) {
       <button className="new-note-button" onClick={onNewNote}>＋ 新建笔记</button>
 
       <section className="sidebar-section notebooks-section">
-        <button className="section-heading" type="button">
-          <span>笔记本</span>
-          <span>⌄</span>
-        </button>
+        <button className="section-heading" type="button"><span>笔记本</span><span>⌄</span></button>
         <div className="notebook-list">
           {notebooks.map((notebook) => (
-            <button
-              key={notebook.id}
-              className={notebook.id === activeNotebook ? 'notebook-item active' : 'notebook-item'}
-              onClick={() => setActiveNotebook(notebook.id)}
-            >
+            <button key={notebook.id} className={notebook.id === activeNotebook ? 'notebook-item active' : 'notebook-item'} onClick={() => setActiveNotebook(notebook.id)}>
               <span className="notebook-icon">{notebook.icon}</span>
               <span className="notebook-name">{notebook.name}</span>
               <span className="notebook-count">{notebook.noteCount}</span>
@@ -86,17 +73,10 @@ export function Sidebar({ onNewNote }: SidebarProps) {
       </section>
 
       <section className="sidebar-section filters-section">
-        <button className="section-heading" type="button">
-          <span>筛选</span>
-          <span>⌄</span>
-        </button>
+        <button className="section-heading" type="button"><span>筛选</span><span>⌄</span></button>
         <div className="filter-list">
           {FILTERS.map((filter) => (
-            <button
-              key={filter.id}
-              className={filter.id === currentFilter ? 'filter-item active' : 'filter-item'}
-              onClick={() => setCurrentFilter(filter.id)}
-            >
+            <button key={filter.id} className={filter.id === currentFilter ? 'filter-item active' : 'filter-item'} onClick={() => setCurrentFilter(filter.id)}>
               <span>{filter.icon}</span>
               <span>{filter.label}</span>
             </button>
@@ -105,12 +85,11 @@ export function Sidebar({ onNewNote }: SidebarProps) {
       </section>
 
       <section className="sidebar-section tags-section">
-        <div className="section-heading static">
-          <span>标签</span>
-        </div>
-        <div className="tag-strip">
-          {tags.map(([tag, count]) => (
-            <button key={tag} className="tag-pill" title={`#${tag} · ${count} 篇`}>
+        <div className="section-heading static"><span>标签</span></div>
+        <div className="tag-grid">
+          <button className={!activeTag && currentFilter !== 'tag' ? 'tag-pill active' : 'tag-pill'} onClick={() => { setActiveTag(''); setCurrentFilter('all'); }}>全部</button>
+          {visibleTags.length === 0 ? <span className="tag-empty">暂无标签</span> : visibleTags.map((tag) => (
+            <button key={tag} className={activeTag === tag ? 'tag-pill active' : 'tag-pill'} onClick={() => { setActiveTag(tag); setCurrentFilter('tag'); }} title={`#${tag}`}>
               #{tag}
             </button>
           ))}
@@ -118,27 +97,13 @@ export function Sidebar({ onNewNote }: SidebarProps) {
       </section>
 
       <section className="sidebar-notes">
-        <div className="section-heading static notes-heading">
-          <span>最近笔记</span>
-          <span>{searchResultCount ?? totalCount} 条</span>
-        </div>
+        <div className="section-heading static notes-heading"><span>最近笔记</span><span>{searchResultCount ?? totalCount} 条</span></div>
         <div className="sidebar-note-scroll">
-          {visibleNotes.map((note) => (
-            <button
-              key={note.meta.id}
-              className={note.meta.id === currentNoteId ? 'sidebar-note active' : 'sidebar-note'}
-              onClick={() => selectNote(note.meta.id)}
-            >
-              <div className="sidebar-note-title">
-                <span>{note.meta.isPinned ? '📌' : note.meta.isFavorite ? '⭐' : ''}</span>
-                <strong>{note.meta.title}</strong>
-              </div>
+          {visibleNotes.length === 0 ? <div className="sidebar-empty">暂无笔记</div> : visibleNotes.map((note) => (
+            <button key={note.meta.id} className={note.meta.id === currentNoteId ? 'sidebar-note active' : 'sidebar-note'} onClick={() => selectNote(note.meta.id)}>
+              <div className="sidebar-note-title"><span>{note.meta.isPinned ? '📌' : note.meta.isFavorite ? '⭐' : ''}</span><strong>{note.meta.title}</strong></div>
               <p>{note.content.replace(/[#*`>-]/g, '').slice(0, 42)}...</p>
-              <div className="sidebar-note-meta">
-                <span>{formatRelativeTime(note.meta.updatedAt)}</span>
-                <span>{note.meta.wordCount} 字</span>
-                {note.meta.backlinks > 0 && <span>🔗 {note.meta.backlinks}</span>}
-              </div>
+              <div className="sidebar-note-meta"><span>0分钟前</span></div>
             </button>
           ))}
         </div>
@@ -151,12 +116,4 @@ export function Sidebar({ onNewNote }: SidebarProps) {
       </footer>
     </aside>
   );
-}
-
-function formatRelativeTime(time: number) {
-  const minutes = Math.max(1, Math.floor((Date.now() - time) / 60000));
-  if (minutes < 60) return `${minutes}分钟前`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}小时前`;
-  return `${Math.floor(hours / 24)}天前`;
 }

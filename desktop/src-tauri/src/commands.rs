@@ -1,15 +1,24 @@
-//! NoteForge Desktop — Tauri 命令
-//!
-//! 所有笔记操作使用本地内存数据。
-//! 未来可切换到 Rust Core 引擎 + SQLite 后端。
-
+use once_cell::sync::OnceCell;
+use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
-use std::sync::Mutex;
-use tauri::State;
+use std::{path::PathBuf, sync::Mutex};
+use tauri::{AppHandle, Manager, State};
 
-// ============================================================
-// 类型
-// ============================================================
+#[derive(Debug, thiserror::Error)]
+pub enum DbError {
+    #[error("数据库初始化失败: {0}")]
+    Init(String),
+    #[error("数据库访问失败: {0}")]
+    Sqlite(#[from] rusqlite::Error),
+    #[error("应用路径错误")]
+    Path,
+}
+
+pub struct AppState {
+    pub db: Mutex<Connection>,
+}
+
+static DB_PATH: OnceCell<PathBuf> = OnceCell::new();
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -34,7 +43,6 @@ pub struct Note {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct Notebook {
     pub id: String,
     pub name: String,
@@ -64,123 +72,98 @@ pub struct SearchResult {
     pub snippet: String,
 }
 
-// ============================================================
-// 应用状态
-// ============================================================
+pub fn init_db(app: &AppHandle) -> Result<Connection, DbError> {
+    let path = app.path().app_data_dir().map_err(|_| DbError::Path)?;
+    std::fs::create_dir_all(&path).map_err(|e| DbError::Init(e.to_string()))?;
+    let db_path = path.join("noteforge.db");
+    let _ = DB_PATH.set(db_path.clone());
 
-pub struct AppState {
-    pub notes: Mutex<Vec<Note>>,
+    let conn = Connection::open(db_path)?;
+    conn.pragma_update(None, "journal_mode", "WAL")?;
+    conn.execute_batch(
+        r#"
+        CREATE TABLE IF NOT EXISTS notes (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            notebook_id TEXT NOT NULL,
+            tags TEXT NOT NULL DEFAULT '[]',
+            is_pinned INTEGER NOT NULL DEFAULT 0,
+            is_favorite INTEGER NOT NULL DEFAULT 0,
+            word_count INTEGER NOT NULL DEFAULT 0,
+            version INTEGER NOT NULL DEFAULT 1,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL,
+            backlinks INTEGER NOT NULL DEFAULT 0,
+            content TEXT NOT NULL DEFAULT ''
+        );
+        CREATE TABLE IF NOT EXISTS notebooks (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            icon TEXT NOT NULL
+        );
+        INSERT OR IGNORE INTO notebooks (id, name, icon) VALUES
+            ('default', '默认笔记本', '📓'),
+            ('tech', '技术笔记', '💻'),
+            ('project', '项目文档', '🗂️');
+        "#,
+    )?;
+    Ok(conn)
 }
 
-impl AppState {
-    pub fn new() -> Self {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_millis() as u64;
-
-        Self {
-            notes: Mutex::new(vec![
-                Note {
-                    meta: NoteMeta {
-                        id: "1".into(),
-                        title: "NoteForge 架构设计".into(),
-                        notebook_id: "tech".into(),
-                        tags: vec!["架构".into(), "Rust".into(), "Tauri".into()],
-                        is_pinned: true,
-                        is_favorite: false,
-                        word_count: 128,
-                        version: 3,
-                        created_at: now - 86400000 * 3,
-                        updated_at: now - 300000,
-                        backlinks: 2,
-                    },
-                    content: "# NoteForge 架构设计\n\n## 系统概览\n\nNoteForge 采用 **离线优先** 架构。\n\n- **Markdown 解析** — 10万字 < 8ms\n- **本地存储** — SQLite + WAL\n- **全文搜索** — Tantivy\n\n> 数据属于用户。".into(),
-                },
-                Note {
-                    meta: NoteMeta {
-                        id: "2".into(),
-                        title: "Rust 内存安全入门".into(),
-                        notebook_id: "tech".into(),
-                        tags: vec!["Rust".into()],
-                        is_pinned: false,
-                        is_favorite: true,
-                        word_count: 340,
-                        version: 2,
-                        created_at: now - 86400000 * 2,
-                        updated_at: now - 3600000,
-                        backlinks: 0,
-                    },
-                    content: "# Rust 内存安全入门\n\n## 所有权系统\n\nRust 在**编译期**保证内存安全。\n\n```rust\nlet s = String::from(\"hello\");\n```".into(),
-                },
-                Note {
-                    meta: NoteMeta {
-                        id: "3".into(),
-                        title: "2026 Q2 学习计划".into(),
-                        notebook_id: "default".into(),
-                        tags: vec!["计划".into()],
-                        is_pinned: true,
-                        is_favorite: false,
-                        word_count: 89,
-                        version: 1,
-                        created_at: now - 86400000,
-                        updated_at: now - 86400000 * 2,
-                        backlinks: 0,
-                    },
-                    content: "# 2026 Q2 学习计划\n\n- [ ] 深入 Rust 异步编程\n- [ ] 学习 Tauri 插件开发\n- [ ] 完成 NoteForge MVP".into(),
-                },
-            ]),
-        }
-    }
+fn now_ms() -> u64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as u64
 }
 
-// ============================================================
-// 命令
-// ============================================================
-
-#[tauri::command]
-pub fn get_version() -> String {
-    env!("CARGO_PKG_VERSION").to_string()
-}
-
-#[tauri::command]
-pub fn get_app_info() -> serde_json::Value {
-    serde_json::json!({
-        "name": "NoteForge",
-        "version": env!("CARGO_PKG_VERSION"),
-        "description": "全平台智能笔记系统",
-        "offline": true,
+fn row_to_note(row: &rusqlite::Row<'_>) -> Result<Note, rusqlite::Error> {
+    let tags_json: String = row.get("tags")?;
+    Ok(Note {
+        meta: NoteMeta {
+            id: row.get("id")?,
+            title: row.get("title")?,
+            notebook_id: row.get("notebook_id")?,
+            tags: serde_json::from_str(&tags_json).unwrap_or_default(),
+            is_pinned: row.get::<_, i64>("is_pinned")? != 0,
+            is_favorite: row.get::<_, i64>("is_favorite")? != 0,
+            word_count: row.get::<_, i64>("word_count")? as u32,
+            version: row.get::<_, i64>("version")? as u32,
+            created_at: row.get::<_, i64>("created_at")? as u64,
+            updated_at: row.get::<_, i64>("updated_at")? as u64,
+            backlinks: row.get::<_, i64>("backlinks")? as u32,
+        },
+        content: row.get("content")?,
     })
 }
 
 #[tauri::command]
-pub fn list_notes(state: State<AppState>) -> Result<Vec<Note>, String> {
-    let notes = state.notes.lock().map_err(|e| e.to_string())?;
-    Ok(notes.clone())
+pub fn get_version() -> String { env!("CARGO_PKG_VERSION").to_string() }
+
+#[tauri::command]
+pub fn get_app_info() -> serde_json::Value {
+    serde_json::json!({"name":"NoteForge","version":env!("CARGO_PKG_VERSION"),"description":"全平台智能笔记系统","offline":true})
 }
 
 #[tauri::command]
-pub fn get_note(state: State<AppState>, id: String) -> Result<Note, String> {
-    let notes = state.notes.lock().map_err(|e| e.to_string())?;
-    notes
-        .iter()
-        .find(|n| n.meta.id == id)
-        .cloned()
-        .ok_or_else(|| "笔记未找到".into())
+pub fn list_notes(state: State<'_, AppState>) -> Result<Vec<Note>, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    let mut stmt = conn.prepare("SELECT * FROM notes ORDER BY updated_at DESC").map_err(|e| e.to_string())?;
+    let notes = stmt
+        .query_map([], row_to_note)
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    Ok(notes)
 }
 
 #[tauri::command]
-pub fn create_note(
-    state: State<AppState>,
-    request: CreateNoteRequest,
-) -> Result<Note, String> {
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_millis() as u64;
+pub fn get_note(state: State<'_, AppState>, id: String) -> Result<Note, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    conn.query_row("SELECT * FROM notes WHERE id = ?1", [id], row_to_note).map_err(|_| "笔记未找到".into())
+}
 
-    let id = format!("{}-{:06x}", now, rand_noise());
-
+#[tauri::command]
+pub fn create_note(state: State<'_, AppState>, request: CreateNoteRequest) -> Result<Note, String> {
+    let now = now_ms();
+    let id = format!("{}-{:06x}", now, now & 0xFFFFFF);
     let note = Note {
         meta: NoteMeta {
             id: id.clone(),
@@ -189,7 +172,7 @@ pub fn create_note(
             tags: request.tags,
             is_pinned: false,
             is_favorite: false,
-            word_count: request.content.len() as u32,
+            word_count: request.content.chars().count() as u32,
             version: 1,
             created_at: now,
             updated_at: now,
@@ -197,115 +180,105 @@ pub fn create_note(
         },
         content: request.content,
     };
-
-    let mut notes = state.notes.lock().map_err(|e| e.to_string())?;
-    notes.insert(0, note.clone());
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    conn.execute(
+        "INSERT INTO notes (id, title, notebook_id, tags, is_pinned, is_favorite, word_count, version, created_at, updated_at, backlinks, content) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+        params![note.meta.id, note.meta.title, note.meta.notebook_id, serde_json::to_string(&note.meta.tags).unwrap_or("[]".into()), 0, 0, note.meta.word_count, 1, now, now, 0, note.content],
+    ).map_err(|e| e.to_string())?;
     Ok(note)
 }
 
 #[tauri::command]
-pub fn update_note(
-    state: State<AppState>,
-    id: String,
-    title: Option<String>,
-    content: Option<String>,
-    tags: Option<Vec<String>>,
-    is_pinned: Option<bool>,
-    is_favorite: Option<bool>,
-) -> Result<Note, String> {
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_millis() as u64;
-
-    let mut notes = state.notes.lock().map_err(|e| e.to_string())?;
-    let note = notes
-        .iter_mut()
-        .find(|n| n.meta.id == id)
-        .ok_or_else(|| -> String { "笔记未找到".to_string() })?;
-
-    if let Some(t) = title { note.meta.title = t; }
-    if let Some(c) = content {
-        note.content = c;
-        note.meta.word_count = note.content.len() as u32;
-    }
-    if let Some(t) = tags { note.meta.tags = t; }
-    if let Some(p) = is_pinned { note.meta.is_pinned = p; }
-    if let Some(f) = is_favorite { note.meta.is_favorite = f; }
-    note.meta.version += 1;
-    note.meta.updated_at = now;
-
-    Ok(note.clone())
+pub fn update_note(state: State<'_, AppState>, id: String, title: Option<String>, content: Option<String>, tags: Option<Vec<String>>, is_pinned: Option<bool>, is_favorite: Option<bool>) -> Result<Note, String> {
+    let current = get_note(state.clone(), id.clone())?;
+    let now = now_ms();
+    let note = Note {
+        meta: NoteMeta {
+            id: id.clone(),
+            title: title.clone().unwrap_or(current.meta.title),
+            notebook_id: current.meta.notebook_id,
+            tags: tags.clone().unwrap_or(current.meta.tags),
+            is_pinned: is_pinned.unwrap_or(current.meta.is_pinned),
+            is_favorite: is_favorite.unwrap_or(current.meta.is_favorite),
+            word_count: content.as_ref().map(|c| c.chars().count() as u32).unwrap_or(current.meta.word_count),
+            version: current.meta.version + 1,
+            created_at: current.meta.created_at,
+            updated_at: now,
+            backlinks: current.meta.backlinks,
+        },
+        content: content.clone().unwrap_or(current.content),
+    };
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    conn.execute(
+        "UPDATE notes SET title=?2, content=?3, tags=?4, is_pinned=?5, is_favorite=?6, word_count=?7, version=?8, updated_at=?9 WHERE id=?1",
+        params![note.meta.id, note.meta.title, note.content, serde_json::to_string(&note.meta.tags).unwrap_or("[]".into()), note.meta.is_pinned as i64, note.meta.is_favorite as i64, note.meta.word_count, note.meta.version, now],
+    ).map_err(|e| e.to_string())?;
+    Ok(note)
 }
 
 #[tauri::command]
-pub fn delete_note(state: State<AppState>, id: String) -> Result<(), String> {
-    let mut notes = state.notes.lock().map_err(|e| e.to_string())?;
-    notes.retain(|n| n.meta.id != id);
+pub fn delete_note(state: State<'_, AppState>, id: String) -> Result<(), String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    conn.execute("DELETE FROM notes WHERE id = ?1", [id]).map_err(|e| e.to_string())?;
     Ok(())
 }
 
 #[tauri::command]
-pub fn search_notes(state: State<AppState>, query: String) -> Result<Vec<SearchResult>, String> {
-    let notes = state.notes.lock().map_err(|e| e.to_string())?;
-    let q = query.to_lowercase();
-    Ok(notes
-        .iter()
-        .filter(|n| {
-            n.meta.title.to_lowercase().contains(&q)
-                || n.meta.tags.iter().any(|t| t.to_lowercase().contains(&q))
-                || n.content.to_lowercase().contains(&q)
+pub fn search_notes(state: State<'_, AppState>, query: String) -> Result<Vec<SearchResult>, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    let pattern = format!("%{}%", query);
+    let mut stmt = conn
+        .prepare("SELECT id, title, content FROM notes WHERE title LIKE ?1 OR content LIKE ?1 OR tags LIKE ?1 ORDER BY updated_at DESC")
+        .map_err(|e| e.to_string())?;
+    let results = stmt
+        .query_map([pattern], |row| {
+            Ok(SearchResult {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                snippet: row.get::<_, String>(2)?.chars().take(80).collect(),
+            })
         })
-        .map(|n| SearchResult {
-            id: n.meta.id.clone(),
-            title: n.meta.title.clone(),
-            snippet: n.content.chars().take(60).collect(),
-        })
-        .collect())
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    Ok(results)
 }
 
 #[tauri::command]
-pub fn create_notebook(_state: State<AppState>, _name: String) -> Result<Notebook, String> {
-    Ok(Notebook {
-        id: "default".into(),
-        name: "默认笔记本".into(),
-        icon: "📓".into(),
-        note_count: 0,
-    })
-}
-
-#[tauri::command]
-pub fn list_notebooks(state: State<AppState>) -> Result<Vec<Notebook>, String> {
-    let notes = state.notes.lock().map_err(|e| e.to_string())?;
-    let mut nbs: Vec<Notebook> = vec![
-        Notebook { id: "default".into(), name: "默认笔记本".into(), icon: "📓".into(), note_count: 0 },
-        Notebook { id: "tech".into(), name: "技术笔记".into(), icon: "💻".into(), note_count: 0 },
-        Notebook { id: "project".into(), name: "项目文档".into(), icon: "🗂️".into(), note_count: 0 },
-    ];
-    for nb in &mut nbs {
-        nb.note_count = notes.iter().filter(|n| n.meta.notebook_id == nb.id).count() as u32;
-    }
-    Ok(nbs)
-}
-
-#[tauri::command]
-pub fn list_tags(state: State<AppState>) -> Result<Vec<TagInfo>, String> {
-    let notes = state.notes.lock().map_err(|e| e.to_string())?;
-    let mut tag_counts: std::collections::HashMap<String, u32> = std::collections::HashMap::new();
-    for note in notes.iter() {
-        for tag in &note.meta.tags {
-            *tag_counts.entry(tag.clone()).or_insert(0) += 1;
+pub fn list_notebooks(state: State<'_, AppState>) -> Result<Vec<Notebook>, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    let mut stmt = conn.prepare("SELECT id, name, icon FROM notebooks ORDER BY id").map_err(|e| e.to_string())?;
+    let mut notebooks = stmt
+        .query_map([], |row| Ok(Notebook { id: row.get(0)?, name: row.get(1)?, icon: row.get(2)?, note_count: 0 }))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    let mut note_stmt = conn.prepare("SELECT notebook_id, COUNT(*) FROM notes GROUP BY notebook_id").map_err(|e| e.to_string())?;
+    let counts = note_stmt
+        .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)? as u32)))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    for nb in &mut notebooks {
+        if let Some((_, count)) = counts.iter().find(|(id, _)| id == &nb.id) {
+            nb.note_count = *count;
         }
     }
-    Ok(tag_counts
-        .into_iter()
-        .map(|(name, count)| TagInfo { name, count })
-        .collect())
+    Ok(notebooks)
 }
 
-/// 基于时间生成一个随机噪声值
-fn rand_noise() -> u64 {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let d = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-    (d.as_nanos() & 0xFFFFFF) as u64
+#[tauri::command]
+pub fn list_tags(state: State<'_, AppState>) -> Result<Vec<TagInfo>, String> {
+    let notes = list_notes(state)?;
+    let mut map = std::collections::HashMap::<String, u32>::new();
+    for note in notes { for tag in note.meta.tags { *map.entry(tag).or_default() += 1; } }
+    Ok(map.into_iter().map(|(name, count)| TagInfo { name, count }).collect())
+}
+
+#[tauri::command]
+pub fn create_notebook(state: State<'_, AppState>, name: String) -> Result<Notebook, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    let id = name.to_lowercase().replace(' ', "-");
+    conn.execute("INSERT OR IGNORE INTO notebooks (id, name, icon) VALUES (?1, ?2, '📓')", params![id, name]).map_err(|e| e.to_string())?;
+    Ok(Notebook { id, name, icon: "📓".into(), note_count: 0 })
 }

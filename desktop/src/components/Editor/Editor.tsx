@@ -219,8 +219,20 @@ export function Editor() {
           </section>
           <section>
             <h4>双向链接</h4>
-            <div className="backlink-item"><span>🔗</span><div><strong>CRDT 同步协议设计</strong><p>CRDT Conflict-free Replica...</p></div></div>
-            <div className="backlink-item"><span>🔗</span><div><strong>知识图谱构建方案</strong><p>实体提取 使用 LLM 从...</p></div></div>
+            {(() => {
+              const backlinks = notes.filter((item) => item.meta.id !== meta.id && item.content.includes(`[[${meta.title}]]`));
+              return backlinks.length === 0 ? (
+                <p className="drawer-hint">暂无双向链接</p>
+              ) : backlinks.map((item) => (
+                <button key={item.meta.id} className="backlink-item backlink-button" onClick={() => { setIsPropertiesOpen(false); updateNote(item.meta.id, { content: item.content }); }}>
+                  <span>🔗</span>
+                  <div>
+                    <strong>{item.meta.title}</strong>
+                    <p>{item.content.replace(/\s+/g, ' ').slice(0, 42)}...</p>
+                  </div>
+                </button>
+              ));
+            })()}
           </section>
           <section>
             <h4>引用此页</h4>

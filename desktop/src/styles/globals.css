@@ -52,10 +52,10 @@ button { cursor: pointer; }
 .sidebar {
   height: 100vh;
   min-height: 0;
-  padding: 18px 14px 14px;
+  padding: 18px 13px 14px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 11px;
   overflow: hidden;
   background: var(--sidebar-bg);
   border-right: 1px solid var(--line);
@@ -172,14 +172,33 @@ button { cursor: pointer; }
 }
 
 .tags-section { overflow: hidden; }
-.tag-strip {
+.tag-grid {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
-  overflow-x: auto;
-  overflow-y: hidden;
-  padding: 0 2px 7px;
-  scrollbar-width: thin;
+  padding: 0 2px 2px;
 }
+.tag-strip { display: none; }
+.tag-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 2px 2px;
+}
+.tag-pill {
+  flex: 0 0 auto;
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+}
+.tag-pill.active { background: rgba(106, 99, 255, 0.22); border-color: rgba(106, 99, 255, 0.35); }
+.tag-empty { color: var(--text-muted); font-size: 12px; padding-left: 4px; }
+.sidebar--compact { transform: scale(0.9); transform-origin: top left; width: calc(100% / 0.9); height: calc(100vh / 0.9); }
 .tag-pill {
   flex: 0 0 auto;
   height: 28px;
@@ -475,7 +494,8 @@ button { cursor: pointer; }
 .property-row { display: flex; justify-content: space-between; gap: 16px; margin: 12px 0; }
 .property-row span { color: #66708a; }
 .property-row strong { color: #111827; }
-.backlink-item { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 8px; padding: 10px 0; border-bottom: 1px solid #edf0f5; }
+.backlink-item { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 8px; padding: 10px 0; border-bottom: 1px solid #edf0f5; text-align: left; }
+.backlink-button { width: 100%; border: 0; background: transparent; }
 .backlink-item strong { color: #5f5cff; font-weight: 500; }
 .backlink-item p, .drawer-hint { margin: 4px 0 0; color: #8c95ad; font-size: 13px; }
 .danger-button {

@@ -26,7 +26,7 @@ export interface Notebook {
   noteCount: number;
 }
 
-export type NoteFilter = 'all' | 'favorites' | 'pinned' | 'recent';
+export type NoteFilter = 'all' | 'favorites' | 'pinned' | 'recent' | 'tag';
 export type SortOption = 'updated' | 'created' | 'title' | 'words';
 
 export type ThemeMode = 'light' | 'dark' | 'system';

@@ -1,7 +1,4 @@
 //! NoteForge Desktop — Tauri 入口
-//!
-//! 离线优先架构：所有核心功能在本地完成，
-//! 不依赖后端 API。
 
 use tauri::Manager;
 
@@ -12,11 +9,10 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .setup(|app| {
+            let conn = commands::init_db(app.handle()).map_err(|e| e.to_string())?;
+            app.manage(commands::AppState { db: std::sync::Mutex::new(conn) });
             #[cfg(debug_assertions)]
-            {
-                let window = app.get_webview_window("main").unwrap();
-                window.open_devtools();
-            }
+            if let Some(window) = app.get_webview_window("main") { window.open_devtools(); }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
