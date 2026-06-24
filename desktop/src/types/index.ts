@@ -36,6 +36,8 @@ export interface ContextMenuState {
   x: number;
   y: number;
   noteId: string | null;
+  notebookId: string | null;
+  kind: 'note' | 'notebook' | null;
 }
 
 export type ToastType = 'success' | 'error' | 'info';
