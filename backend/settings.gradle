@@ -1,0 +1,4 @@
+rootProject.name = 'noteforge-backend'
+
+include 'note-service'
+include 'user-service'

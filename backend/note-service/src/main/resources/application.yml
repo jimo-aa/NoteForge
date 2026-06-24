@@ -1,0 +1,27 @@
+spring:
+  application:
+    name: note-service
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/noteforge
+    username: noteforge
+    password: noteforge123
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 3
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+    show-sql: false
+
+server:
+  port: 8081
+
+jwt:
+  secret: noteforge-jwt-secret-key-change-in-production
+  expiration: 86400000  # 24小时

@@ -1,0 +1,49 @@
+version: '3.8'
+name: noteforge
+
+services:
+  # === PostgreSQL + pgvector ===
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: noteforge-postgres
+    environment:
+      POSTGRES_DB: noteforge
+      POSTGRES_USER: noteforge
+      POSTGRES_PASSWORD: noteforge123
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U noteforge"]
+      interval: 5s
+      retries: 5
+
+  # === Redis ===
+  redis:
+    image: redis:7-alpine
+    container_name: noteforge-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+
+  # === MinIO (对象存储) ===
+  minio:
+    image: minio/minio
+    container_name: noteforge-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: noteforge
+      MINIO_ROOT_PASSWORD: noteforge123
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - miniodata:/data
+
+volumes:
+  pgdata:
+  redisdata:
+  miniodata:

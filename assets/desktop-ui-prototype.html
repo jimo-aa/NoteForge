@@ -1,0 +1,1457 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NoteForge v0.2 — 全功能交互原型</title>
+<style>
+/* ================================================================
+   Design System — Tokens
+   ================================================================ */
+:root {
+  --sidebar-w: 280px;
+  --properties-w: 280px;
+  --bg: #f8f9fb;
+  --bg-card: #ffffff;
+  --sidebar-bg: #1a1b2e;
+  --sidebar-hover: #262840;
+  --sidebar-active: #32345a;
+  --sidebar-text: #c8cae0;
+  --sidebar-muted: #6b6e8a;
+  --accent: #6366f1;
+  --accent-hover: #5558e6;
+  --accent-subtle: #eef2ff;
+  --accent-glow: rgba(99,102,241,0.15);
+  --text: #171a23;
+  --text-secondary: #5a5f73;
+  --text-muted: #989daf;
+  --border: #e6e8ee;
+  --border-light: #f0f2f6;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --radius-sm: 6px;
+  --radius: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
+  --shadow: 0 1px 4px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+  --shadow-lg: 0 8px 30px rgba(0,0,0,0.12);
+  --font: -apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei','Noto Sans SC',sans-serif;
+  --font-mono: 'JetBrains Mono','Fira Code','Consolas','SF Mono',monospace;
+  --transition: 0.2s cubic-bezier(0.4,0,0.2,1);
+}
+
+/* Dark theme */
+[data-theme="dark"] {
+  --bg: #12131e;
+  --bg-card: #1a1b2e;
+  --sidebar-bg: #0f101a;
+  --sidebar-hover: #1e1f35;
+  --sidebar-active: #28294a;
+  --sidebar-text: #c8cae0;
+  --sidebar-muted: #55587a;
+  --accent: #7c7fff;
+  --accent-subtle: #28294a;
+  --accent-glow: rgba(124,127,255,0.12);
+  --text: #e4e6f0;
+  --text-secondary: #989daf;
+  --text-muted: #5a5f73;
+  --border: #2a2c42;
+  --border-light: #1e2037;
+  --shadow: 0 1px 4px rgba(0,0,0,0.3);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.4);
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:var(--font); background:var(--bg); color:var(--text); overflow:hidden; height:100vh; }
+::selection { background:var(--accent); color:#fff; }
+::-webkit-scrollbar { width:5px; height:5px; }
+::-webkit-scrollbar-track { background:transparent; }
+::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
+::-webkit-scrollbar-thumb:hover { background:var(--text-muted); }
+
+/* ================================================================
+   Layout
+   ================================================================ */
+.app { display:flex; height:100vh; }
+
+/* ================================================================
+   Sidebar
+   ================================================================ */
+.sidebar {
+  width:var(--sidebar-w); background:var(--sidebar-bg); color:var(--sidebar-text);
+  display:flex; flex-direction:column; flex-shrink:0; user-select:none; position:relative; z-index:10;
+}
+
+.sidebar-header {
+  padding:14px 16px 10px; border-bottom:1px solid rgba(255,255,255,0.06);
+  display:flex; align-items:center; gap:10px;
+}
+.sidebar-header .logo {
+  width:26px;height:26px;background:var(--accent);border-radius:6px;
+  display:flex;align-items:center;justify-content:center;font-size:15px;color:#fff;flex-shrink:0;
+}
+.sidebar-header h1 { font-size:15px; font-weight:600; color:#fff; flex:1; }
+.sidebar-header .actions { display:flex; gap:4px; }
+.sidebar-header .actions button {
+  width:24px;height:24px;border:none;background:transparent;border-radius:4px;
+  cursor:pointer;font-size:12px;color:var(--sidebar-muted);display:flex;align-items:center;justify-content:center;
+  transition:var(--transition);
+}
+.sidebar-header .actions button:hover { background:var(--sidebar-hover); color:var(--sidebar-text); }
+
+/* Search */
+.search-box { margin:10px 12px 8px; position:relative; }
+.search-box .icon {
+  position:absolute;left:10px;top:50%;transform:translateY(-50%);
+  font-size:13px;color:var(--sidebar-muted);pointer-events:none;
+}
+.search-box input {
+  width:100%;padding:7px 10px 7px 30px;border:1px solid rgba(255,255,255,0.06);
+  border-radius:var(--radius);background:rgba(255,255,255,0.04);
+  color:var(--sidebar-text);font-size:12.5px;outline:none;transition:var(--transition);
+  font-family:var(--font);
+}
+.search-box input:focus { border-color:var(--accent); background:rgba(255,255,255,0.07); }
+.search-box input::placeholder { color:var(--sidebar-muted); }
+.search-shortcut {
+  position:absolute;right:8px;top:50%;transform:translateY(-50%);
+  font-size:10px;color:var(--sidebar-muted);background:rgba(255,255,255,0.05);
+  padding:1px 5px;border-radius:3px;
+}
+
+/* New note btn */
+.new-note-btn {
+  margin:0 12px 8px;padding:7px 14px;background:var(--accent);color:#fff;
+  border:none;border-radius:var(--radius);font-size:12.5px;font-weight:500;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;
+  transition:var(--transition);font-family:var(--font);
+}
+.new-note-btn:hover { background:var(--accent-hover); transform:translateY(-1px); }
+.new-note-btn:active { transform:translateY(0); }
+
+/* Nav tabs */
+.nav-section { padding:0 12px; margin-bottom:2px; }
+.nav-section-header {
+  display:flex;align-items:center;justify-content:space-between;
+  padding:6px 4px;font-size:11px;font-weight:600;color:var(--sidebar-muted);
+  text-transform:uppercase;letter-spacing:0.5px;cursor:pointer;border-radius:4px;
+  transition:var(--transition);
+}
+.nav-section-header:hover { color:var(--sidebar-text); }
+.nav-item {
+  display:flex;align-items:center;gap:8px;padding:5px 8px;margin:1px 0;
+  border-radius:var(--radius-sm);font-size:12.5px;cursor:pointer;
+  transition:var(--transition);color:var(--sidebar-muted);border:none;background:transparent;
+  width:100%;text-align:left;font-family:var(--font);
+}
+.nav-item:hover { background:var(--sidebar-hover); color:var(--sidebar-text); }
+.nav-item.active { background:var(--accent-subtle); color:var(--accent); }
+.nav-item .count {
+  margin-left:auto;font-size:11px;background:rgba(255,255,255,0.06);
+  padding:0 6px;border-radius:8px;color:var(--sidebar-muted);
+}
+
+/* Note list */
+.note-list-wrap { flex:1; overflow-y:auto; padding:2px 6px 8px; }
+.note-item {
+  padding:9px 10px;border-radius:var(--radius);cursor:pointer;
+  transition:var(--transition);margin-bottom:1px;position:relative;
+  animation:fadeSlideIn 0.2s ease-out;
+}
+.note-item:hover { background:var(--sidebar-hover); }
+.note-item.active { background:var(--sidebar-active); }
+.note-item.dragging { opacity:0.5; }
+.note-item.drag-over { border-top:2px solid var(--accent); }
+.note-item .row1 {
+  display:flex;align-items:center;gap:4px;margin-bottom:2px;
+}
+.note-item .pin-icon { font-size:11px; flex-shrink:0; }
+.note-item .fav-icon { font-size:11px; color:var(--warning); flex-shrink:0; }
+.note-item .title {
+  font-size:13px;font-weight:500;color:var(--sidebar-text);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;
+}
+.note-item .title .highlight { color:var(--accent); background:rgba(99,102,241,0.15); border-radius:2px; padding:0 1px; }
+.note-item .preview {
+  font-size:11.5px;color:var(--sidebar-muted);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px;
+}
+.note-item .meta {
+  font-size:10.5px;color:var(--sidebar-muted);display:flex;gap:6px;align-items:center;
+}
+.note-item .meta .tag-dot { font-size:9px; }
+.note-item .active-bar {
+  display:none;position:absolute;left:0;top:7px;bottom:7px;width:3px;
+  background:var(--accent);border-radius:0 2px 2px 0;
+}
+.note-item.active .active-bar { display:block; }
+
+/* Drop zone hint */
+.drop-zone {
+  display:none;text-align:center;padding:20px;border:2px dashed var(--border);
+  border-radius:var(--radius-lg);color:var(--text-muted);font-size:13px;margin:40px;
+}
+.drop-zone.show { display:block; }
+
+/* Sidebar footer */
+.sidebar-footer {
+  padding:10px 14px;border-top:1px solid rgba(255,255,255,0.06);
+  display:flex;align-items:center;gap:6px;font-size:11px;color:var(--sidebar-muted);
+}
+.sidebar-footer .status-dot {
+  width:7px;height:7px;border-radius:50%;flex-shrink:0;
+}
+.sidebar-footer .status-dot.online { background:var(--success); box-shadow:0 0 4px rgba(16,185,129,0.4); }
+.sidebar-footer .status-dot.offline { background:var(--danger); }
+.sidebar-footer .status-dot.syncing { background:var(--warning); animation:pulse 1s infinite; }
+
+/* ============================================================
+   Main Content Area
+   ============================================================ */
+.main { flex:1; display:flex; flex-direction:column; min-width:0; position:relative; }
+
+/* Empty state */
+.empty-state {
+  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:10px;color:var(--text-muted);animation:fadeIn 0.3s ease-out;
+}
+.empty-state .icon { font-size:56px; opacity:0.3; }
+.empty-state h2 { font-size:20px;font-weight:600;color:var(--text-secondary); }
+.empty-state p { font-size:13.5px;max-width:360px;text-align:center;line-height:1.7; }
+
+/* Editor Header */
+.editor-header {
+  padding:10px 20px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:8px;background:var(--bg-card);flex-shrink:0;
+}
+.editor-header .title-input {
+  flex:1;border:none;outline:none;font-size:20px;font-weight:600;
+  color:var(--text);background:transparent;font-family:var(--font);
+}
+.editor-header .title-input::placeholder { color:var(--text-muted); }
+.editor-actions { display:flex; gap:3px; }
+.editor-actions button {
+  width:30px;height:30px;border-radius:var(--radius-sm);border:1px solid transparent;
+  background:transparent;cursor:pointer;display:flex;align-items:center;
+  justify-content:center;font-size:13px;color:var(--text-secondary);
+  transition:var(--transition);
+}
+.editor-actions button:hover { background:var(--border-light); border-color:var(--border); }
+.editor-actions button.active { color:var(--accent); background:var(--accent-subtle); }
+.editor-actions .divider { width:1px;background:var(--border);margin:4px; }
+
+/* Tags bar */
+.tags-bar {
+  padding:6px 20px;border-bottom:1px solid var(--border-light);
+  background:var(--bg-card);display:flex;gap:4px;flex-wrap:wrap;align-items:center;flex-shrink:0;
+}
+.tag-pill {
+  display:inline-flex;align-items:center;gap:3px;padding:2px 8px;
+  border-radius:10px;font-size:11px;background:var(--accent-subtle);color:var(--accent);
+  cursor:pointer;transition:var(--transition);border:1px solid transparent;
+}
+.tag-pill:hover { border-color:var(--accent); }
+.tag-pill .remove {
+  font-size:13px;opacity:0.5;cursor:pointer;line-height:1;
+}
+.tag-pill .remove:hover { opacity:1; }
+.add-tag-btn {
+  border:1px dashed var(--border);background:transparent;padding:2px 10px;
+  border-radius:10px;font-size:11px;color:var(--text-muted);cursor:pointer;
+  transition:var(--transition);font-family:var(--font);
+}
+.add-tag-btn:hover { border-color:var(--accent); color:var(--accent); }
+
+/* Toolbar */
+.toolbar {
+  padding:4px 20px;border-bottom:1px solid var(--border);
+  display:flex;gap:1px;background:var(--bg-card);flex-shrink:0;align-items:center;
+}
+.toolbar button {
+  width:28px;height:28px;border:none;background:transparent;border-radius:var(--radius-sm);
+  cursor:pointer;font-size:13px;color:var(--text-secondary);display:flex;
+  align-items:center;justify-content:center;transition:var(--transition);
+  font-family:var(--font);
+}
+.toolbar button:hover { background:var(--border-light); color:var(--text); }
+.toolbar .sep { width:1px;height:18px;background:var(--border);margin:0 4px;flex-shrink:0; }
+.toolbar .spacer { flex:1; }
+.toolbar .toggle-preview-btn {
+  font-size:12px;gap:4px;width:auto;padding:0 8px;color:var(--accent);
+}
+.toolbar .toggle-preview-btn:hover { background:var(--accent-subtle); }
+
+/* Editor Container */
+.editor-container {
+  flex:1;display:flex;overflow:hidden;position:relative;
+}
+.editor-pane {
+  flex:1;display:flex;flex-direction:column;min-width:0;overflow:hidden;
+}
+.editor-pane textarea {
+  flex:1;padding:20px 24px;font-family:var(--font-mono);font-size:13.5px;
+  line-height:1.85;border:none;outline:none;resize:none;width:100%;
+  background:var(--bg-card);color:var(--text);tab-size:2;
+}
+.editor-pane textarea::placeholder { color:var(--text-muted); }
+
+/* Resize handle */
+.resize-handle {
+  width:4px;cursor:col-resize;background:transparent;
+  position:relative;flex-shrink:0;transition:var(--transition);z-index:5;
+}
+.resize-handle:hover, .resize-handle:active {
+  background:var(--accent); opacity:0.3;
+}
+.resize-handle::after {
+  content:'';position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  width:2px;height:24px;background:var(--border);border-radius:1px;transition:var(--transition);
+}
+.resize-handle:hover::after { background:var(--accent); }
+
+/* Preview Pane */
+.preview-pane {
+  width:45%;border-left:1px solid var(--border);padding:24px 28px;
+  overflow-y:auto;background:var(--bg-card);animation:fadeIn 0.2s ease-out;
+}
+.preview-pane.preview-hidden { display:none; }
+.preview-pane h1 { font-size:26px;margin-bottom:16px;padding-bottom:10px;border-bottom:2px solid var(--accent); font-weight:700; }
+.preview-pane h2 { font-size:20px;margin:22px 0 8px;font-weight:600; }
+.preview-pane h3 { font-size:16px;margin:16px 0 6px;font-weight:600;color:var(--text-secondary); }
+.preview-pane p { margin-bottom:12px;line-height:1.85;color:var(--text-secondary); font-size:14px; }
+.preview-pane strong { color:var(--text); }
+.preview-pane code {
+  background:var(--border-light);padding:2px 6px;border-radius:4px;
+  font-family:var(--font-mono);font-size:12.5px;
+}
+.preview-pane pre {
+  background:var(--sidebar-bg);color:var(--sidebar-text);padding:16px 18px;
+  border-radius:var(--radius);overflow-x:auto;margin:14px 0;
+  font-family:var(--font-mono);font-size:12.5px;line-height:1.7;
+}
+.preview-pane blockquote {
+  border-left:3px solid var(--accent);padding:8px 16px;margin:14px 0;
+  color:var(--text-secondary);background:var(--accent-subtle);border-radius:0 var(--radius) var(--radius) 0;
+  font-style:italic;
+}
+.preview-pane table { width:100%;border-collapse:collapse;margin:14px 0;font-size:13px; }
+.preview-pane th { background:var(--border-light);padding:8px 12px;border:1px solid var(--border);text-align:left;font-weight:600; }
+.preview-pane td { padding:7px 12px;border:1px solid var(--border); }
+.preview-pane tr:nth-child(even) { background:var(--border-light); }
+.preview-pane ul,.preview-pane ol { margin:8px 0 8px 20px;color:var(--text-secondary); }
+.preview-pane li { margin-bottom:3px;line-height:1.7; }
+.preview-pane img { max-width:100%;border-radius:var(--radius-sm);margin:12px 0; }
+.preview-pane a { color:var(--accent);text-decoration:none; }
+.preview-pane a:hover { text-decoration:underline; }
+.preview-pane .tag { display:inline-block;background:var(--accent-subtle);color:var(--accent);padding:1px 8px;border-radius:4px;font-size:11px;margin:1px; }
+.preview-pane .wiki-link { color:var(--accent);border-bottom:1px dashed var(--accent);cursor:pointer; }
+.preview-pane .wiki-link:hover { background:var(--accent-subtle); }
+.preview-pane hr { border:none;border-top:1px solid var(--border);margin:20px 0; }
+.preview-pane .task-list { list-style:none;padding-left:0; }
+.preview-pane .task-list li::before { content:'';margin-right:4px; }
+.preview-pane .task-done { color:var(--text-muted);text-decoration:line-through; }
+
+/* Status bar */
+.status-bar {
+  padding:3px 20px;border-top:1px solid var(--border-light);
+  display:flex;justify-content:space-between;font-size:11px;color:var(--text-muted);
+  background:var(--bg-card);flex-shrink:0;align-items:center;
+}
+.status-bar .left,.status-bar .right { display:flex;gap:14px; }
+.status-bar .save-indicator { display:flex;align-items:center;gap:4px; }
+.status-bar .save-dot { width:5px;height:5px;border-radius:50%; }
+.status-bar .save-dot.saved { background:var(--success); }
+.status-bar .save-dot.saving { background:var(--warning); animation:pulse 1s infinite; }
+
+/* ============================================================
+   Properties Panel (right side)
+   ============================================================ */
+.properties-panel {
+  width:0;overflow:hidden;background:var(--bg-card);
+  border-left:1px solid var(--border);transition:width 0.25s cubic-bezier(0.4,0,0.2,1);flex-shrink:0;
+}
+.properties-panel.open { width:var(--properties-w); overflow-y:auto; }
+.properties-panel .panel-header {
+  padding:14px 16px;border-bottom:1px solid var(--border);
+  display:flex;justify-content:space-between;align-items:center;
+}
+.properties-panel .panel-header h3 { font-size:13px;font-weight:600; }
+.properties-panel .panel-header .close-btn {
+  border:none;background:transparent;cursor:pointer;font-size:16px;color:var(--text-muted);
+  width:24px;height:24px;border-radius:4px;display:flex;align-items:center;justify-content:center;
+}
+.properties-panel .panel-header .close-btn:hover { background:var(--border-light); }
+.prop-section { padding:12px 16px;border-bottom:1px solid var(--border-light); }
+.prop-section h4 { font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;margin-bottom:8px;letter-spacing:0.3px; }
+.prop-row { display:flex;justify-content:space-between;padding:4px 0;font-size:12.5px; }
+.prop-row .label { color:var(--text-secondary); }
+.prop-row .value { color:var(--text);font-weight:500; }
+.backlinks-list { list-style:none; }
+.backlinks-list li {
+  padding:6px 0;font-size:12.5px;color:var(--accent);cursor:pointer;
+  border-bottom:1px solid var(--border-light);display:flex;align-items:center;gap:6px;
+}
+.backlinks-list li:hover { background:var(--accent-subtle);margin:0 -12px;padding:6px 12px;border-radius:4px; }
+.backlinks-list .backlink-preview { color:var(--text-muted);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+
+/* ============================================================
+   Graph View Modal
+   ============================================================ */
+.graph-overlay {
+  display:none;position:fixed;inset:0;background:var(--sidebar-bg);
+  z-index:200;animation:fadeIn 0.2s ease-out;
+}
+.graph-overlay.show { display:flex; flex-direction:column; }
+.graph-toolbar {
+  padding:12px 20px;display:flex;align-items:center;gap:12px;border-bottom:1px solid rgba(255,255,255,0.06);
+}
+.graph-toolbar h2 { color:#fff;font-size:15px;font-weight:600;flex:1; }
+.graph-toolbar button {
+  padding:6px 14px;border-radius:var(--radius-sm);border:1px solid rgba(255,255,255,0.1);
+  background:transparent;color:var(--sidebar-text);cursor:pointer;font-size:12px;transition:var(--transition);
+  font-family:var(--font);
+}
+.graph-toolbar button:hover { background:rgba(255,255,255,0.06); }
+.graph-canvas { flex:1;position:relative;overflow:hidden; }
+.graph-node {
+  position:absolute;background:var(--accent-subtle);color:var(--accent);padding:6px 14px;
+  border-radius:20px;font-size:12px;cursor:pointer;border:1px solid rgba(99,102,241,0.2);
+  box-shadow:0 2px 8px rgba(99,102,241,0.1);transition:var(--transition);user-select:none;
+}
+.graph-node:hover { transform:scale(1.08);border-color:var(--accent);box-shadow:0 4px 16px var(--accent-glow); }
+.graph-node.center { background:var(--accent);color:#fff;border-color:var(--accent);box-shadow:0 0 20px var(--accent-glow); }
+.graph-line {
+  position:absolute;height:1px;background:rgba(255,255,255,0.08);transform-origin:left center;
+}
+
+/* ============================================================
+   Modals
+   ============================================================ */
+.modal-overlay {
+  display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);
+  backdrop-filter:blur(6px);z-index:300;align-items:center;justify-content:center;
+}
+.modal-overlay.show { display:flex; }
+.modal {
+  background:var(--bg-card);border-radius:var(--radius-xl);padding:28px;
+  width:520px;max-width:92vw;box-shadow:var(--shadow-lg);animation:dialogIn 0.2s ease-out;
+  max-height:85vh;overflow-y:auto;
+}
+.modal h2 { font-size:18px;margin-bottom:20px;display:flex;align-items:center;gap:8px; }
+.modal .field { margin-bottom:16px; }
+.modal label { display:block;font-size:12.5px;font-weight:500;margin-bottom:5px;color:var(--text-secondary); }
+.modal input,.modal select,.modal textarea {
+  width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius);
+  font-size:13.5px;outline:none;font-family:var(--font);background:var(--bg-card);color:var(--text);
+  transition:var(--transition);
+}
+.modal input:focus,.modal select:focus,.modal textarea:focus { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-glow); }
+.modal .field-row { display:flex;gap:12px; }
+.modal .field-row .field { flex:1; }
+.modal-actions { display:flex;justify-content:flex-end;gap:8px;margin-top:24px; }
+.modal-actions button {
+  padding:7px 18px;border-radius:var(--radius);font-size:12.5px;cursor:pointer;
+  transition:var(--transition);font-family:var(--font);
+}
+.modal-actions .btn-secondary { border:1px solid var(--border);background:var(--bg-card);color:var(--text); }
+.modal-actions .btn-secondary:hover { background:var(--border-light); }
+.modal-actions .btn-primary { background:var(--accent);color:#fff;border:1px solid var(--accent); }
+.modal-actions .btn-primary:hover { background:var(--accent-hover); }
+
+/* ============================================================
+   Context Menu
+   ============================================================ */
+.context-menu {
+  display:none;position:fixed;background:var(--bg-card);border:1px solid var(--border);
+  border-radius:var(--radius);box-shadow:var(--shadow-md);z-index:400;
+  min-width:180px;padding:4px;animation:scaleIn 0.1s ease-out;
+}
+.context-menu.show { display:block; }
+.context-menu .item {
+  padding:6px 12px;font-size:12.5px;border-radius:4px;cursor:pointer;
+  display:flex;align-items:center;gap:8px;transition:var(--transition);
+}
+.context-menu .item:hover { background:var(--accent-subtle);color:var(--accent); }
+.context-menu .item.danger { color:var(--danger); }
+.context-menu .item.danger:hover { background:#fef2f2; }
+.context-menu .sep { height:1px;background:var(--border);margin:4px 0; }
+.context-menu .shortcut { margin-left:auto;color:var(--text-muted);font-size:11px; }
+
+/* ============================================================
+   Toast
+   ============================================================ */
+.toast-container {
+  position:fixed;bottom:24px;right:24px;z-index:500;display:flex;flex-direction:column;gap:8px;
+}
+.toast {
+  padding:10px 16px;border-radius:var(--radius);font-size:12.5px;
+  box-shadow:var(--shadow-md);animation:slideInUp 0.25s ease-out;
+  display:flex;align-items:center;gap:8px;max-width:360px;
+}
+.toast.success { background:var(--success);color:#fff; }
+.toast.error { background:var(--danger);color:#fff; }
+.toast.info { background:var(--sidebar-bg);color:var(--sidebar-text); }
+
+/* ============================================================
+   Animations
+   ============================================================ */
+@keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
+@keyframes fadeSlideIn { from { opacity:0;transform:translateY(6px); } to { opacity:1;transform:translateY(0); } }
+@keyframes dialogIn { from { opacity:0;transform:scale(0.95) translateY(10px); } to { opacity:1;transform:scale(1) translateY(0); } }
+@keyframes scaleIn { from { opacity:0;transform:scale(0.95); } to { opacity:1;transform:scale(1); } }
+@keyframes slideInUp { from { opacity:0;transform:translateY(16px); } to { opacity:1;transform:translateY(0); } }
+@keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
+@keyframes spin { to { transform:rotate(360deg); } }
+
+/* ============================================================
+   Responsive
+   ============================================================ */
+@media (max-width:900px) {
+  .preview-pane { display:none !important; }
+  .properties-panel.open { width:100% !important; position:fixed;right:0;top:0;bottom:0;z-index:100;box-shadow:var(--shadow-lg); }
+}
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ============================================================
+       Sidebar
+       ============================================================ -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="logo">✦</div>
+      <h1>NoteForge</h1>
+      <div class="actions">
+        <button title="切换暗色模式" onclick="toggleTheme()">🌓</button>
+        <button title="图谱视图" onclick="toggleGraph()">🕸</button>
+      </div>
+    </div>
+
+    <div class="search-box">
+      <span class="icon">🔍</span>
+      <input type="text" id="searchInput" placeholder="搜索笔记..." oninput="filterNotes(this.value)" onkeydown="if(event.key==='Escape')this.blur()">
+      <span class="search-shortcut">⌘K</span>
+    </div>
+
+    <button class="new-note-btn" onclick="showModal('newNoteModal')">
+      <span>✚</span> 新建笔记
+    </button>
+
+    <div class="nav-section">
+      <div class="nav-section-header" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
+        笔记本 <span>▾</span>
+      </div>
+      <div>
+        <button class="nav-item active" onclick="selectNotebook(this,'all')" data-nb="all">
+          📋 全部笔记 <span class="count" id="totalCount">12</span>
+        </button>
+        <button class="nav-item" onclick="selectNotebook(this,'default')">
+          📓 默认笔记本 <span class="count">8</span>
+        </button>
+        <button class="nav-item" onclick="selectNotebook(this,'tech')">
+          💻 技术笔记 <span class="count">3</span>
+        </button>
+        <button class="nav-item" onclick="selectNotebook(this,'project')">
+          🗂️ 项目文档 <span class="count">1</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-section-header" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
+        筛选 <span>▾</span>
+      </div>
+      <div>
+        <button class="nav-item" onclick="switchQuickFilter(this,'favorites')">⭐ 收藏的笔记</button>
+        <button class="nav-item" onclick="switchQuickFilter(this,'pinned')">📌 已固定</button>
+        <button class="nav-item" onclick="switchQuickFilter(this,'recent')">🕐 最近查看</button>
+      </div>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-section-header">标签</div>
+      <div style="display:flex;flex-wrap:wrap;gap:3px;padding:4px;margin-top:2px;">
+        <span class="tag-pill" onclick="switchTag(this,'Rust')" style="font-size:10.5px;background:rgba(99,102,241,0.08);color:var(--sidebar-text)">#Rust</span>
+        <span class="tag-pill" onclick="switchTag(this,'架构')" style="font-size:10.5px;background:rgba(99,102,241,0.08);color:var(--sidebar-text)">#架构</span>
+        <span class="tag-pill" onclick="switchTag(this,'AI')" style="font-size:10.5px;background:rgba(99,102,241,0.08);color:var(--sidebar-text)">#AI</span>
+        <span class="tag-pill" onclick="switchTag(this,'Tauri')" style="font-size:10.5px;background:rgba(99,102,241,0.08);color:var(--sidebar-text)">#Tauri</span>
+      </div>
+    </div>
+
+    <div class="note-list-wrap" id="noteList">
+      <!-- Rendered by JS -->
+    </div>
+
+    <div class="sidebar-footer">
+      <span class="status-dot online" id="statusDot"></span>
+      <span id="syncStatus">已同步</span>
+      <span style="flex:1"></span>
+      <span id="noteCount">12 条笔记</span>
+    </div>
+  </aside>
+
+  <!-- ============================================================
+       Main Content
+       ============================================================ -->
+  <main class="main" id="mainContent">
+    <!-- Empty State -->
+    <div class="empty-state" id="emptyState">
+      <div class="icon">✦</div>
+      <h2>欢迎来到 NoteForge</h2>
+      <p>你的知识起点。左侧选择笔记，或从这里开始你的第一篇。</p>
+      <button class="new-note-btn" onclick="showModal('newNoteModal')" style="margin-top:4px">✚ 新建笔记</button>
+    </div>
+
+    <!-- Editor View -->
+    <div id="editorView" style="display:none;flex:1;flex-direction:column;min-height:0">
+      <!-- Tags -->
+      <div class="tags-bar" id="tagsBar">
+        <span class="tag-pill" id="tag0" onclick="this.remove()">架构设计 <span class="remove">×</span></span>
+        <span class="tag-pill" id="tag1" onclick="this.remove()">Rust <span class="remove">×</span></span>
+        <span class="tag-pill" id="tag2" onclick="this.remove()">Tauri <span class="remove">×</span></span>
+        <span class="tag-pill" id="tag3" onclick="this.remove()">NoteForge <span class="remove">×</span></span>
+        <button class="add-tag-btn" onclick="addTag()">+ 添加标签</button>
+      </div>
+
+      <!-- Title -->
+      <div class="editor-header">
+        <input class="title-input" id="noteTitle" value="NoteForge 架构设计" placeholder="笔记标题..."
+               oninput="onTitleChange(this.value)">
+        <div class="editor-actions">
+          <button title="收藏" id="favBtn" onclick="toggleFav()">☆</button>
+          <button title="固定" id="pinBtn" onclick="togglePinEditor()">📌</button>
+          <div class="divider"></div>
+          <button title="属性" onclick="toggleProperties()">ℹ</button>
+          <button title="导出" onclick="showToast('info','导出功能即将开放')">⬇</button>
+          <button title="更多" onclick="showNoteMenu(event)">⋯</button>
+        </div>
+      </div>
+
+      <!-- Toolbar -->
+      <div class="toolbar">
+        <button title="加粗 (Ctrl+B)" onclick="wrapText('**','**')"><b>B</b></button>
+        <button title="斜体 (Ctrl+I)" onclick="wrapText('*','*')"><i>I</i></button>
+        <button title="删除线" onclick="wrapText('~~','~~')"><s>S</s></button>
+        <button title="行内代码" onclick="wrapText('`','`')"><code>`</code></button>
+        <span class="sep"></span>
+        <button title="标题" onclick="insertText('\n## ')">H</button>
+        <button title="无序列表" onclick="insertText('\n- ')">•</button>
+        <button title="有序列表" onclick="insertText('\n1. ')">1.</button>
+        <button title="待办" onclick="insertText('\n- [ ] ')">☐</button>
+        <button title="引用" onclick="insertText('\n> ')">❝</button>
+        <button title="代码块" onclick="insertText('\n```\n\n```')">&lt;/&gt;</button>
+        <span class="sep"></span>
+        <button title="链接" onclick="insertText('[文本](url)')">🔗</button>
+        <button title="表格" onclick="insertText('\n| 表头 | 表头 |\n|------|------|\n| 数据 | 数据 |')">⊞</button>
+        <button title="分割线" onclick="insertText('\n---\n')">—</button>
+        <span class="spacer"></span>
+        <button class="toggle-preview-btn" onclick="togglePreview()">
+          <span id="previewBtnContent">👁 预览</span>
+        </button>
+      </div>
+
+      <!-- Editor Container -->
+      <div class="editor-container">
+        <div class="editor-pane">
+          <textarea id="noteContent" placeholder="开始写作..." oninput="onContentChange(this.value)"
+          ># NoteForge 架构设计
+
+## 系统概览
+
+NoteForge 采用 **离线优先** 架构。核心由 Rust 引擎驱动关键操作：
+
+- **Markdown 解析** — 基于 pulldown-cmark，10万字 < 8ms
+- **本地存储** — SQLite + WAL 模式，支持事务
+- **全文搜索** — Tantivy 嵌入式搜索引擎
+- **CRDT 同步** — Automerge 冲突自由合并
+
+### 技术栈
+
+| 层级 | 技术 | 说明 |
+|------|------|------|
+| 桌面端 | Tauri + React | 高性能原生 |
+| 核心引擎 | Rust | 零成本抽象 |
+| 向量搜索 | pgvector / Milvus | 语义相似度 |
+
+## 离线同步
+
+使用 `[[CRDT]]` 协议实现冲突自由合并，离线编辑 → 恢复网络自动同步。
+
+### 关键特性
+
+- [x] 本地优先 — 离线也可用
+- [ ] 端到端加密 (Phase 2)
+- [ ] AI 智能写作 (Phase 3)
+
+> 🎯 **核心原则**：数据属于用户。我们只是保管者。
+
+参考文档：`[[同步协议设计]]` 和 `[[知识图谱构建方案]]`
+
+## 性能指标
+
+| 操作 | 目标 | 实测 |
+|------|:----:|:----:|
+| Markdown 解析 | < 10ms | 7.2ms |
+| 全文搜索 | < 50ms | 32ms |
+| SQLite 写入 | > 1000 tps | 2400 tps |</textarea>
+        </div>
+
+        <div class="resize-handle" id="resizeHandle"></div>
+
+        <div class="preview-pane" id="previewPane">
+          <div id="previewContent"></div>
+        </div>
+      </div>
+
+      <!-- Status Bar -->
+      <div class="status-bar">
+        <div class="left">
+          <span>字数: <span id="wordCount">128</span></span>
+          <span>行: <span id="lineCount">38</span></span>
+        </div>
+        <div class="save-indicator">
+          <span class="save-dot saved" id="saveDot"></span>
+          <span id="saveStatus">已保存</span>
+        </div>
+        <div class="right">
+          <span>最后编辑: 刚刚</span>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- ============================================================
+       Properties Panel
+       ============================================================ -->
+  <div class="properties-panel" id="propertiesPanel">
+    <div class="panel-header">
+      <h3>笔记属性</h3>
+      <button class="close-btn" onclick="toggleProperties()">×</button>
+    </div>
+    <div class="prop-section">
+      <h4>信息</h4>
+      <div class="prop-row"><span class="label">创建时间</span><span class="value" id="propCreated">2026-06-20 14:32</span></div>
+      <div class="prop-row"><span class="label">更新时间</span><span class="value" id="propUpdated">刚刚</span></div>
+      <div class="prop-row"><span class="label">版本</span><span class="value">v3</span></div>
+      <div class="prop-row"><span class="label">笔记本</span><span class="value">技术笔记</span></div>
+    </div>
+    <div class="prop-section">
+      <h4>双向链接</h4>
+      <ul class="backlinks-list">
+        <li>🔗 <span>CRDT 同步协议设计</span><br><span class="backlink-preview">CRDT (Conflict-free Replicated Data Types)...</span></li>
+        <li>🔗 <span>知识图谱构建方案</span><br><span class="backlink-preview">## 实体提取 使用 LLM 从笔记中提取...</span></li>
+      </ul>
+    </div>
+    <div class="prop-section">
+      <h4>引用此页</h4>
+      <div style="font-size:11px;color:var(--text-muted);padding:4px 0">
+        在其它笔记中输入 <code style="font-size:11px">[[NoteForge 架构设计]]</code> 创建链接
+      </div>
+    </div>
+    <div class="prop-section">
+      <h4>操作</h4>
+      <div style="display:flex;flex-direction:column;gap:4px;">
+        <button class="new-note-btn" style="background:transparent;color:var(--danger);border:1px solid var(--danger);font-size:12px;padding:5px 10px;" onclick="confirmDelete()">🗑 删除此笔记</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     Context Menu
+     ============================================================ -->
+<div class="context-menu" id="contextMenu">
+  <div class="item" onclick="contextAction('rename')">✏️ 重命名</div>
+  <div class="item" onclick="contextAction('duplicate')">📋 复制笔记</div>
+  <div class="item" onclick="contextAction('move')">📂 移动到...</div>
+  <div class="sep"></div>
+  <div class="item" onclick="contextAction('pin')">📌 固定/取消固定</div>
+  <div class="item" onclick="contextAction('favorite')">⭐ 收藏/取消收藏</div>
+  <div class="sep"></div>
+  <div class="item" onclick="contextAction('export')">⬇ 导出为 Markdown</div>
+  <div class="item danger" onclick="contextAction('delete')">🗑 删除 <span class="shortcut">Del</span></div>
+</div>
+
+<!-- ============================================================
+     New Note Modal
+     ============================================================ -->
+<div class="modal-overlay" id="newNoteModal">
+  <div class="modal">
+    <h2>✚ 新建笔记</h2>
+    <div class="field">
+      <label>标题</label>
+      <input type="text" id="newNoteTitle" placeholder="笔记标题..." value="新笔记" autofocus>
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label>笔记本</label>
+        <select id="newNoteNb">
+          <option>默认笔记本</option>
+          <option>技术笔记</option>
+          <option>项目文档</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>模板</label>
+        <select id="newNoteTmpl">
+          <option value="blank">空白笔记</option>
+          <option value="meeting">会议记录</option>
+          <option value="project">项目计划</option>
+          <option value="diary">每日日记</option>
+        </select>
+      </div>
+    </div>
+    <div class="field">
+      <label>标签（逗号分隔）</label>
+      <input type="text" id="newNoteTags" placeholder="如: Rust, 架构, 笔记">
+    </div>
+    <div class="field">
+      <label>内容预览</label>
+      <textarea rows="4" id="newNoteContent" placeholder="可选的笔记内容...\n留空则使用模板内容" style="font-size:12.5px"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeModal('newNoteModal')">取消</button>
+      <button class="btn-primary" onclick="createNote()">创建笔记</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     Settings Modal
+     ============================================================ -->
+<div class="modal-overlay" id="settingsModal">
+  <div class="modal">
+    <h2>⚙ 设置</h2>
+    <div class="field">
+      <label>主题</label>
+      <select onchange="setTheme(this.value)">
+        <option value="light">浅色</option>
+        <option value="dark">深色</option>
+        <option value="system">跟随系统</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>编辑器字体大小</label>
+      <select>
+        <option>12px</option>
+        <option selected>13.5px</option>
+        <option>15px</option>
+        <option>16px</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>自动保存间隔</label>
+      <select>
+        <option>实时</option>
+        <option selected>1 秒</option>
+        <option>3 秒</option>
+        <option>10 秒</option>
+      </select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeModal('settingsModal')">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     Graph Overlay
+     ============================================================ -->
+<div class="graph-overlay" id="graphOverlay">
+  <div class="graph-toolbar">
+    <h2>🕸 知识图谱</h2>
+    <span style="color:var(--sidebar-muted);font-size:12px">节点: 8 · 连接: 14</span>
+    <span style="flex:1"></span>
+    <button onclick="toggleGraph()">✕ 关闭</button>
+  </div>
+  <div class="graph-canvas" id="graphCanvas">
+    <div class="graph-node center" style="left:calc(50% - 70px);top:calc(45% - 16px)">NoteForge 架构设计</div>
+    <div class="graph-node" style="left:calc(50% - 200px);top:calc(25% - 16px)">CRDT 同步协议设计</div>
+    <div class="graph-node" style="left:calc(50% + 80px);top:calc(20% - 16px)">Rust 内存安全</div>
+    <div class="graph-node" style="left:calc(50% - 250px);top:calc(55% - 16px)">Tauri vs Electron</div>
+    <div class="graph-node" style="left:calc(50% + 120px);top:calc(55% - 16px)">端到端加密方案</div>
+    <div class="graph-node" style="left:calc(50% - 160px);top:calc(78% - 16px)">知识图谱构建方案</div>
+    <div class="graph-node" style="left:calc(50% + 170px);top:calc(30% - 16px)">Flutter 移动端适配</div>
+    <div class="graph-node" style="left:calc(50% - 50px);top:calc(70% - 16px)">PostgreSQL 优化</div>
+  </div>
+</div>
+
+<!-- ============================================================
+     Toast Container
+     ============================================================ -->
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+// ================================================================
+// Data
+// ================================================================
+const NOTES = [
+  { id:1, title:'NoteForge 架构设计', preview:'系统概览 NoteForge 采用离线优先架构...', tags:['架构','Rust','Tauri','NoteForge'], nb:'tech', pin:true, fav:false, updated:'5分钟前', words:128, backlinks:2 },
+  { id:2, title:'Rust 内存安全入门', preview:'所有权系统是 Rust 最独特的特性，它在编译期保证内存安全...', tags:['Rust'], nb:'tech', pin:false, fav:true, updated:'1小时前', words:2340, backlinks:0 },
+  { id:3, title:'Tauri vs Electron 对比分析', preview:'| 维度 | Tauri | Electron | 安装包体积...', tags:['Tauri','前端'], nb:'tech', pin:false, fav:false, updated:'3小时前', words:1560, backlinks:1 },
+  { id:4, title:'CRDT 同步协议设计', preview:'CRDT (Conflict-free Replicated Data Types) 是一种无需中心化协调即可自动合并的数据结构...', tags:['同步','架构'], nb:'project', pin:false, fav:true, updated:'昨天', words:3200, backlinks:3 },
+  { id:5, title:'2026 Q2 学习计划', preview:'- [ ] 深入 Rust 异步编程\n- [ ] 学习 Tauri 插件开发...', tags:['计划'], nb:'default', pin:true, fav:false, updated:'2天前', words:89, backlinks:0 },
+  { id:6, title:'PostgreSQL 优化笔记', preview:'## 索引策略\n1. 复合索引...', tags:['数据库'], nb:'tech', pin:false, fav:false, updated:'3天前', words:567, backlinks:0 },
+  { id:7, title:'AI Prompt 工程最佳实践', preview:'## 结构化 Prompt\n写清晰明确的指令，给模型足够的上下文...', tags:['AI'], nb:'default', pin:false, fav:true, updated:'5天前', words:1890, backlinks:1 },
+  { id:8, title:'知识图谱构建方案', preview:'## 实体提取\n使用 LLM 从笔记中提取实体和关系...', tags:['AI','架构'], nb:'default', pin:false, fav:false, updated:'1周前', words:2100, backlinks:1 },
+  { id:9, title:'Flutter 移动端适配计划', preview:'## 迁移策略\n1. 共享 Rust 核心引擎...', tags:['Flutter','计划'], nb:'default', pin:false, fav:false, updated:'1周前', words:780, backlinks:0 },
+  { id:10, title:'端到端加密方案', preview:'## 加密流程\n1. 用户输入口令\n2. Argon2id 密钥派生...', tags:['安全','架构'], nb:'default', pin:false, fav:false, updated:'2周前', words:1450, backlinks:1 },
+  { id:11, title:'Docker Compose 配置备忘', preview:'```yaml\nversion: 3.8\nservices:\n  postgres:\n...', tags:['部署'], nb:'default', pin:false, fav:false, updated:'2周前', words:320, backlinks:0 },
+  { id:12, title:'性能优化 Checklist', preview:'- [ ] Markdown 解析缓存\n- [ ] SQLite WAL 模式...', tags:['性能'], nb:'default', pin:false, fav:false, updated:'3周前', words:45, backlinks:0 },
+];
+
+let currentNoteId = 1;
+let currentFilter = 'all'; // 'all'|'favorites'|'pinned'|'recent'|'tag:Rust'
+let searchQuery = '';
+let isPreviewVisible = true;
+let isPropertiesOpen = false;
+
+// ================================================================
+// Render
+// ================================================================
+function renderNotes(notes) {
+  const list = document.getElementById('noteList');
+  if (notes.length === 0) {
+    list.innerHTML = `<div style="padding:24px;text-align:center;color:var(--sidebar-muted);font-size:12px">没有匹配的笔记</div>`;
+    document.getElementById('noteCount').textContent = '0 条笔记';
+    return;
+  }
+  list.innerHTML = notes.map(n => `
+    <div class="note-item ${n.id===currentNoteId?'active':''}" id="ni-${n.id}"
+         onclick="selectNote(${n.id})"
+         oncontextmenu="showContextMenu(event,${n.id})"
+         draggable="true"
+         ondragstart="dragStart(event,${n.id})"
+         ondragover="dragOver(event)"
+         ondrop="dropNote(event,${n.id})"
+         ondragend="dragEnd()">
+      <div class="active-bar"></div>
+      <div class="row1">
+        ${n.pin?'<span class="pin-icon">📌</span>':''}
+        ${n.fav?'<span class="fav-icon">⭐</span>':''}
+        <span class="title">${highlightSearch(n.title)}</span>
+      </div>
+      <div class="preview">${highlightSearch(n.preview.slice(0,60))}</div>
+      <div class="meta">
+        <span>${n.updated}</span>
+        <span>${n.words} 字</span>
+        ${n.backlinks>0?`<span>🔗 ${n.backlinks}</span>`:''}
+      </div>
+    </div>
+  `).join('');
+  document.getElementById('noteCount').textContent = `${notes.length} 条笔记`;
+}
+
+function highlightSearch(text) {
+  if (!searchQuery) return text;
+  const q = searchQuery.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+  return text.replace(new RegExp(q,'gi'), m => `<span class="highlight">${m}</span>`);
+}
+
+function getFilteredNotes() {
+  let notes = [...NOTES];
+  if (currentFilter === 'favorites') notes = notes.filter(n=>n.fav);
+  else if (currentFilter === 'pinned') notes = notes.filter(n=>n.pin);
+  else if (currentFilter === 'recent') notes = notes.sort((a,b)=>a.updated.localeCompare(b.updated)).slice(0,5);
+  else if (currentFilter.startsWith('tag:')) {
+    const tag = currentFilter.slice(4);
+    notes = notes.filter(n=>n.tags.includes(tag));
+  }
+  if (searchQuery) {
+    const q = searchQuery.toLowerCase();
+    notes = notes.filter(n => n.title.toLowerCase().includes(q) || n.tags.some(t=>t.toLowerCase().includes(q)));
+  }
+  return notes;
+}
+
+function refreshList() { renderNotes(getFilteredNotes()); }
+
+// ================================================================
+// Note Selection
+// ================================================================
+function selectNote(id) {
+  currentNoteId = id;
+  const note = NOTES.find(n=>n.id===id);
+  if (!note) return;
+  refreshList();
+  document.getElementById('emptyState').style.display='none';
+  const ev = document.getElementById('editorView');
+  ev.style.display='flex';
+  ev.style.flexDirection='column';
+  document.getElementById('noteTitle').value=note.title;
+  const favBtn = document.getElementById('favBtn');
+  favBtn.textContent = note.fav?'★':'☆';
+  favBtn.style.color = note.fav?'var(--warning)':'';
+  const pinBtn = document.getElementById('pinBtn');
+  pinBtn.style.color = note.pin?'rgb(245,158,11)':'';
+  updatePreview();
+  updateWordCount();
+}
+
+// ================================================================
+// Filter / Search / Tab
+// ================================================================
+function filterNotes(q) {
+  searchQuery = q.trim();
+  refreshList();
+}
+
+function selectNotebook(el, nb) {
+  document.querySelectorAll('.nav-item').forEach(e=>e.classList.remove('active'));
+  el.classList.add('active');
+  currentFilter = nb === 'all' ? 'all' : nb;
+  refreshList();
+}
+
+function switchQuickFilter(el, type) {
+  document.querySelectorAll('.nav-item').forEach(e=>e.classList.remove('active'));
+  el.classList.add('active');
+  currentFilter = type;
+  refreshList();
+}
+
+function switchTag(el, tag) {
+  el.style.background = el.style.background === 'rgba(99, 102, 241, 0.15)' ? '' : 'rgba(99,102,241,0.15)';
+  el.style.color = el.style.color === 'rgb(255, 255, 255)' ? '' : '#fff';
+  currentFilter = 'tag:'+tag;
+  refreshList();
+}
+
+// ================================================================
+// Editor Actions
+// ================================================================
+function toggleFav() {
+  const btn = document.getElementById('favBtn');
+  const note = NOTES.find(n=>n.id===currentNoteId);
+  if (!note) return;
+  note.fav = !note.fav;
+  btn.textContent = note.fav?'★':'☆';
+  btn.style.color = note.fav?'var(--warning)':'';
+  refreshList();
+  showToast('success', note.fav?'已收藏':'已取消收藏');
+}
+
+function togglePinEditor() {
+  const btn = document.getElementById('pinBtn');
+  const note = NOTES.find(n=>n.id===currentNoteId);
+  if (!note) return;
+  note.pin = !note.pin;
+  btn.style.color = note.pin?'rgb(245,158,11)':'';
+  refreshList();
+  showToast('success', note.pin?'已固定':'已取消固定');
+}
+
+function wrapText(before, after) {
+  const ta = document.getElementById('noteContent');
+  const start = ta.selectionStart, end = ta.selectionEnd;
+  const text = ta.value;
+  ta.value = text.slice(0,start) + before + text.slice(start,end) + after + text.slice(end);
+  ta.selectionStart = ta.selectionEnd = end + before.length + after.length;
+  ta.focus();
+  onContentChange(ta.value);
+}
+
+function insertText(text) {
+  const ta = document.getElementById('noteContent');
+  const start = ta.selectionStart;
+  ta.value = ta.value.slice(0,start) + text + ta.value.slice(ta.selectionEnd);
+  ta.selectionStart = ta.selectionEnd = start + text.length;
+  ta.focus();
+  onContentChange(ta.value);
+}
+
+function togglePreview() {
+  isPreviewVisible = !isPreviewVisible;
+  document.getElementById('previewPane').classList.toggle('preview-hidden');
+  document.getElementById('previewBtnContent').textContent = isPreviewVisible?'👁 预览':'✏ 编辑';
+}
+
+function toggleProperties() {
+  isPropertiesOpen = !isPropertiesOpen;
+  document.getElementById('propertiesPanel').classList.toggle('open', isPropertiesOpen);
+}
+
+function toggleTheme() {
+  const html = document.documentElement;
+  const current = html.getAttribute('data-theme');
+  html.setAttribute('data-theme', current==='dark'?'light':'dark');
+  showToast('info', current==='dark'?'☀️ 浅色模式':'🌙 深色模式');
+}
+
+function setTheme(val) {
+  if (val === 'system') {
+    const dark = window.matchMedia('(prefers-color-scheme:dark)').matches;
+    document.documentElement.setAttribute('data-theme', dark?'dark':'light');
+  } else {
+    document.documentElement.setAttribute('data-theme', val);
+  }
+}
+
+// ================================================================
+// Content Change → Live Preview
+// ================================================================
+function onContentChange(text) {
+  updatePreview();
+  updateWordCount();
+  // Simulate save indicator
+  const dot = document.getElementById('saveDot');
+  const status = document.getElementById('saveStatus');
+  dot.className = 'save-dot saving';
+  status.textContent = '保存中...';
+  clearTimeout(window._saveTimer);
+  window._saveTimer = setTimeout(() => {
+    dot.className = 'save-dot saved';
+    status.textContent = '已保存';
+  }, 400);
+}
+
+function onTitleChange(title) {
+  const note = NOTES.find(n=>n.id===currentNoteId);
+  if (note) note.title = title;
+  refreshList();
+}
+
+function updateWordCount() {
+  const text = document.getElementById('noteContent').value;
+  const words = text.replace(/\s/g,'').length || 0;
+  const lines = text.split('\n').length;
+  document.getElementById('wordCount').textContent = words;
+  document.getElementById('lineCount').textContent = lines;
+}
+
+// ================================================================
+// Markdown → Preview (real-time)
+// ================================================================
+function updatePreview() {
+  const md = document.getElementById('noteContent').value;
+  const preview = document.getElementById('previewContent');
+  preview.innerHTML = renderMarkdown(md);
+}
+
+function renderMarkdown(md) {
+  let html = '';
+  const lines = md.split('\n');
+  let inTable = false, inCode = false, codeBuf = [], codeLang='';
+  let i=0;
+
+  function flushCode() {
+    if (codeBuf.length) {
+      html += `<pre><code>${codeBuf.join('\n')}</code></pre>`;
+      codeBuf = [];
+    }
+  }
+  function flushTable() { inTable=false; }
+
+  for (const raw of lines) {
+    const line = raw;
+    i++;
+
+    // Code block
+    if (line.startsWith('```')) {
+      if (!inCode) { inCode=true; codeLang=line.slice(3).trim(); continue; }
+      else { inCode=false; flushCode(); continue; }
+    }
+    if (inCode) { codeBuf.push(escapeHtml(line)); continue; }
+
+    // Empty line
+    if (!line.trim()) { html += '<p style="height:0.5em"></p>'; continue; }
+
+    // Headings
+    if (/^#{1,6}\s/.test(line)) {
+      const level = line.match(/^#{1,6}/)[0].length;
+      const text = line.slice(level+1);
+      html += `<h${level}>${inlineMd(text)}</h${level}>`;
+      continue;
+    }
+
+    // Blockquote
+    if (line.startsWith('> ')) {
+      html += `<blockquote>${inlineMd(line.slice(2))}</blockquote>`;
+      continue;
+    }
+
+    // Horizontal rule
+    if (/^---\s*$/.test(line) || /^\*\*\*\s*$/.test(line)) {
+      html += '<hr>';
+      continue;
+    }
+
+    // Unordered list
+    if (/^[-*+]\s/.test(line)) {
+      html += `<li>${inlineMd(line.replace(/^[-*+]\s/,''))}</li>`;
+      continue;
+    }
+
+    // Ordered list
+    if (/^\d+\.\s/.test(line)) {
+      html += `<li>${inlineMd(line.replace(/^\d+\.\s/,''))}</li>`;
+      continue;
+    }
+
+    // Task list
+    if (/^- \[.\] /.test(line)) {
+      const done = line.includes('[x]')||line.includes('[X]');
+      const text = line.replace(/^- \[.\]\s/,'');
+      html += `<li class="${done?'task-done':''}">${done?'✅':'⬜'} ${inlineMd(text)}</li>`;
+      continue;
+    }
+
+    // Table
+    if (line.startsWith('|')) {
+      if (!inTable) { inTable=true; html+='<table>'; }
+      const cells = line.split('|').filter(c=>c.trim()).map(c=>inlineMd(c.trim()));
+      const isHeader = /^[\s:|:-]+$/.test(line);
+      if (!isHeader) {
+        html += '<tr>'+cells.map(c=>`<td>${c}</td>`).join('')+'</tr>';
+      }
+      continue;
+    } else { if (inTable) { html+='</table>'; inTable=false; } }
+
+    // Regular paragraph
+    html += `<p>${inlineMd(line)}</p>`;
+  }
+
+  if (inCode) flushCode();
+  if (inTable) html+='</table>';
+
+  return html;
+}
+
+function inlineMd(text) {
+  let r = escapeHtml(text);
+  // **bold**
+  r = r.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  // *italic*
+  r = r.replace(/\*(.+?)\*/g, '<em>$1</em>');
+  // ~~strikethrough~~
+  r = r.replace(/~~(.+?)~~/g, '<s>$1</s>');
+  // `inline code`
+  r = r.replace(/`([^`]+)`/g, '<code>$1</code>');
+  // [[Wiki Link]]
+  r = r.replace(/\[\[([^\]]+)\]\]/g, '<a class="wiki-link" href="#">$1</a>');
+  // [text](url)
+  r = r.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+  // #tag
+  r = r.replace(/(?<!\w)#([\w\u{4e00}-\u{9fff}\-]+)/gu, '<span class="tag">#$1</span>');
+  return r;
+}
+
+function escapeHtml(text) {
+  return text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ================================================================
+// Note CRUD
+// ================================================================
+function createNote() {
+  const title = document.getElementById('newNoteTitle').value.trim() || '新笔记';
+  const tags = document.getElementById('newNoteTags').value.split(',').map(t=>t.trim()).filter(Boolean);
+  const tmpl = document.getElementById('newNoteTmpl').value;
+  const content = document.getElementById('newNoteContent').value || getTemplateContent(tmpl);
+
+  const note = {
+    id: Date.now(),
+    title, tags, nb: 'default', pin: false, fav: false,
+    updated: '刚刚', words: content.length, preview: content.slice(0,50)+'...', backlinks: 0,
+  };
+  NOTES.unshift(note);
+  closeModal('newNoteModal');
+  resetNewNoteForm();
+  refreshList();
+  selectNote(note.id);
+  showToast('success', `✅ 笔记「${title}」已创建`);
+}
+
+function getTemplateContent(tmpl) {
+  const templates = {
+    blank: '',
+    meeting: '# 会议记录\n\n**日期**: \n**参与人**: \n\n## 议程\n\n1. \n2. \n\n## 决议\n\n-\n\n## 待办\n\n- [ ] \n',
+    project: '# 项目计划\n\n## 目标\n\n## 里程碑\n\n| 时间 | 里程碑 | 状态 |\n|------|--------|:----:|\n| | | 🟢 |\n\n## 风险\n\n- \n',
+    diary: '# 日记 ' + new Date().toLocaleDateString('zh-CN') + '\n\n## 今天做了什么\n\n## 感悟\n\n',
+  };
+  return templates[tmpl] || '';
+}
+
+function resetNewNoteForm() {
+  document.getElementById('newNoteTitle').value = '新笔记';
+  document.getElementById('newNoteTags').value = '';
+  document.getElementById('newNoteContent').value = '';
+}
+
+function confirmDelete() {
+  if (confirm('确定要删除这条笔记吗？')) {
+    const idx = NOTES.findIndex(n=>n.id===currentNoteId);
+    if (idx>-1) NOTES.splice(idx,1);
+    refreshList();
+    document.getElementById('editorView').style.display='none';
+    document.getElementById('emptyState').style.display='flex';
+    showToast('success','🗑 笔记已删除');
+  }
+}
+
+// ================================================================
+// Tag Management
+// ================================================================
+function addTag() {
+  const name = prompt('输入标签名称:');
+  if (!name) return;
+  const bar = document.getElementById('tagsBar');
+  const btn = bar.querySelector('.add-tag-btn');
+  const pill = document.createElement('span');
+  pill.className = 'tag-pill';
+  pill.innerHTML = `${name} <span class="remove">×</span>`;
+  pill.onclick = function(){ this.remove(); };
+  bar.insertBefore(pill, btn);
+  showToast('info', `标签 #${name} 已添加`);
+}
+
+// ================================================================
+// Context Menu
+// ================================================================
+let contextNoteId = null;
+function showContextMenu(e, noteId) {
+  e.preventDefault();
+  contextNoteId = noteId;
+  const menu = document.getElementById('contextMenu');
+  menu.style.left = Math.min(e.clientX, window.innerWidth-200)+'px';
+  menu.style.top = Math.min(e.clientY, window.innerHeight-280)+'px';
+  menu.classList.add('show');
+}
+document.addEventListener('click', () => {
+  document.getElementById('contextMenu').classList.remove('show');
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') document.getElementById('contextMenu').classList.remove('show');
+});
+
+function contextAction(action) {
+  document.getElementById('contextMenu').classList.remove('show');
+  const note = NOTES.find(n=>n.id===contextNoteId);
+  if (!note) return;
+  switch(action){
+    case 'pin': note.pin=!note.pin; refreshList(); showToast('info',note.pin?'已固定':'已取消固定'); break;
+    case 'favorite': note.fav=!note.fav; refreshList(); showToast('success',note.fav?'⭐ 已收藏':'已取消收藏'); break;
+    case 'delete':
+      const idx = NOTES.indexOf(note);
+      NOTES.splice(idx,1);
+      refreshList();
+      if (currentNoteId===note.id) { document.getElementById('editorView').style.display='none'; document.getElementById('emptyState').style.display='flex'; }
+      showToast('success','🗑 已删除'); break;
+    case 'duplicate':
+      const copy = {...note, id:Date.now(), title:note.title+' (副本)', updated:'刚刚'};
+      NOTES.splice(NOTES.indexOf(note)+1,0,copy);
+      refreshList(); showToast('success','📋 已复制'); break;
+    case 'rename':
+      const newTitle = prompt('重命名:', note.title);
+      if (newTitle) { note.title=newTitle; refreshList(); if(currentNoteId===note.id)document.getElementById('noteTitle').value=newTitle; }
+      break;
+    default: showToast('info','功能开发中');
+  }
+}
+
+// ================================================================
+// Drag & Drop reorder (simulated)
+// ================================================================
+let draggedId = null;
+function dragStart(e,id) { draggedId=id; e.dataTransfer.effectAllowed='move'; setTimeout(()=>document.getElementById('ni-'+id)?.classList.add('dragging'),0); }
+function dragOver(e) { e.preventDefault(); e.dataTransfer.dropEffect='move'; }
+function dropNote(e,targetId) {
+  e.preventDefault();
+  document.querySelectorAll('.note-item').forEach(el=>el.classList.remove('drag-over'));
+  if (draggedId && draggedId!==targetId) {
+    showToast('info','📂 笔记已移动');
+  }
+  dragEnd();
+}
+function dragEnd() {
+  document.querySelectorAll('.note-item').forEach(el=>el.classList.remove('dragging','drag-over'));
+  draggedId=null;
+}
+
+// ================================================================
+// Graph View
+// ================================================================
+function toggleGraph() {
+  document.getElementById('graphOverlay').classList.toggle('show');
+}
+
+// ================================================================
+// Modal
+// ================================================================
+function showModal(id) {
+  document.getElementById(id).classList.add('show');
+  const inp = document.querySelector(`#${id} input`);
+  if (inp) setTimeout(()=>inp.focus(),100);
+}
+function closeModal(id) {
+  document.getElementById(id).classList.remove('show');
+}
+document.querySelectorAll('.modal-overlay').forEach(el => {
+  el.addEventListener('click', e => { if(e.target===el) el.classList.remove('show'); });
+});
+
+// ================================================================
+// Toast
+// ================================================================
+function showToast(type, msg) {
+  const container = document.getElementById('toastContainer');
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  const icons = { success:'✅', error:'❌', info:'ℹ️' };
+  toast.innerHTML = `${icons[type]||''} ${msg}`;
+  container.appendChild(toast);
+  setTimeout(() => { toast.style.opacity='0'; toast.style.transform='translateY(8px)'; toast.style.transition='0.2s'; }, 2500);
+  setTimeout(() => toast.remove(), 3000);
+}
+
+// ================================================================
+// Keyboard Shortcuts
+// ================================================================
+document.addEventListener('keydown', e => {
+  const meta = e.ctrlKey || e.metaKey;
+  if (meta && e.key==='n') { e.preventDefault(); showModal('newNoteModal'); }
+  if (meta && e.key==='f') { e.preventDefault(); document.getElementById('searchInput').focus(); }
+  if (meta && e.key==='k') { e.preventDefault(); document.getElementById('searchInput').focus(); }
+  if (meta && e.key==='e') { e.preventDefault(); togglePreview(); }
+  if (e.key==='Delete' && currentNoteId) { confirmDelete(); }
+  if (e.key==='Escape') {
+    document.querySelectorAll('.modal-overlay.show').forEach(el=>el.classList.remove('show'));
+    document.getElementById('contextMenu').classList.remove('show');
+    document.getElementById('graphOverlay').classList.remove('show');
+    document.getElementById('searchInput').blur();
+  }
+});
+
+// ================================================================
+// Resize Handle
+// ================================================================
+(function() {
+  const handle = document.getElementById('resizeHandle');
+  let isResizing = false;
+  handle.addEventListener('mousedown', e => { isResizing=true; e.preventDefault(); });
+  document.addEventListener('mousemove', e => {
+    if (!isResizing) return;
+    const pane = document.getElementById('previewPane');
+    if (!pane || pane.classList.contains('preview-hidden')) return;
+    const container = pane.parentElement;
+    const rect = container.getBoundingClientRect();
+    const pct = ((rect.right - e.clientX) / rect.width * 100);
+    pane.style.width = Math.max(20, Math.min(70, pct)) + '%';
+  });
+  document.addEventListener('mouseup', () => { isResizing=false; });
+})();
+
+// ================================================================
+// Init
+// ================================================================
+refreshList();
+selectNote(1);
+updatePreview();
+</script>
+</body>
+</html>

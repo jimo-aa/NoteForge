@@ -1,0 +1,49 @@
+[workspace]
+members = [
+    "core",
+]
+
+[package]
+name = "noteforge-core"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Markdown
+pulldown-cmark = "0.11"
+comrak = "0.28"
+
+# Search
+tantivy = "0.22"
+jieba-rs = "0.7"
+unicode-segmentation = "1.12"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Local storage
+rusqlite = { version = "0.31", features = ["bundled"] }
+
+# Async
+tokio = { version = "1", features = ["full"] }
+
+# Hashing
+sha2 = "0.10"
+
+# Error handling
+thiserror = "2"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = "0.3"
+
+[lib]
+name = "noteforge_core"
+path = "src/lib.rs"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
