@@ -15,6 +15,28 @@ async function tauriInvoke<T>(cmd: string, args?: Record<string, unknown>): Prom
 }
 
 const ALL_NOTEBOOK = { id: 'all', name: '全部笔记', icon: '📋', noteCount: 0 };
+const STORAGE_PREFIX = 'noteforge';
+const draftKey = (id: string) => `${STORAGE_PREFIX}:draft:${id}`;
+const versionsKey = (id: string) => `${STORAGE_PREFIX}:versions:${id}`;
+const cursorKey = (id: string) => `${STORAGE_PREFIX}:cursor:${id}`;
+const recoveryKey = (id: string) => `${STORAGE_PREFIX}:recovery:${id}`;
+const versionInterval = 30 * 1000;
+
+type NoteVersion = { id: string; content: string; title: string; updatedAt: number };
+
+const safeRead = <T,>(key: string, fallback: T): T => {
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return fallback;
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+};
+
+const safeWrite = (key: string, value: unknown) => {
+  try { window.localStorage.setItem(key, JSON.stringify(value)); } catch {}
+};
 
 export function useNoteStore() {
   const [notes, setNotes] = useState<Note[]>([]);
@@ -30,11 +52,11 @@ export function useNoteStore() {
   const [isPropertiesOpen, setIsPropertiesOpen] = useState(false);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const persistedRef = useRef(false);
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({ visible: false, x: 0, y: 0, noteId: null, notebookId: null, kind: null });
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [entityModal, setEntityModal] = useState<EntityModalState>({ open: false, mode: null, title: '', label: '', value: '', confirmText: '确定', targetId: null });
   const toastIdRef = useRef(0);
+  const versionWriteRef = useRef<Record<string, number>>({});
 
   const refreshNotebooks = useCallback(async () => {
     const backendNotebooks = await tauriInvoke<Notebook[]>('list_notebooks');
@@ -87,23 +109,41 @@ export function useNoteStore() {
     if (note) {
       setNotes((prev) => [note, ...prev.filter((item) => item.meta.id !== note.meta.id)]);
       setCurrentNoteId(note.meta.id);
+      safeWrite(draftKey(note.meta.id), content);
+      safeWrite(versionsKey(note.meta.id), [{ id: note.meta.id, content, title, updatedAt: Date.now() } satisfies NoteVersion]);
       return note;
     }
     return null;
   }, []);
 
+  const appendVersion = useCallback((id: string, title: string, content: string) => {
+    const now = Date.now();
+    if ((versionWriteRef.current[id] ?? 0) + versionInterval > now) return;
+    versionWriteRef.current[id] = now;
+    const versions = safeRead<NoteVersion[]>(versionsKey(id), []);
+    const last = versions[0];
+    if (last && last.content === content) return;
+    const next = [{ id: `${id}:${now}`, content, title, updatedAt: now }, ...versions].slice(0, 20);
+    safeWrite(versionsKey(id), next);
+    safeWrite(recoveryKey(id), { content, title, updatedAt: now });
+  }, []);
+
   const updateNote = useCallback((id: string, updates: Partial<Note['meta'] & { content: string }>) => {
     setNotes((prev) => prev.map((n) => {
       if (n.meta.id !== id) return n;
-      return {
-        meta: { ...n.meta, ...updates, updatedAt: Date.now() },
-        content: updates.content ?? n.content,
+      const nextContent = updates.content ?? n.content;
+      const next = {
+        meta: { ...n.meta, ...updates, updatedAt: Date.now(), version: n.meta.version + (updates.content !== undefined ? 1 : 0), wordCount: countWords(nextContent) },
+        content: nextContent,
       };
+      if (updates.content !== undefined) safeWrite(draftKey(id), nextContent);
+      if (updates.content !== undefined || updates.title !== undefined) appendVersion(id, updates.title ?? n.meta.title, nextContent);
+      return next;
     }));
     if (updates.title !== undefined || updates.content !== undefined || updates.tags !== undefined || updates.isPinned !== undefined || updates.isFavorite !== undefined) {
       void tauriInvoke('update_note', { id, title: updates.title ?? null, content: updates.content ?? null, tags: updates.tags ?? null, isPinned: updates.isPinned ?? null, isFavorite: updates.isFavorite ?? null });
     }
-  }, []);
+  }, [appendVersion]);
 
   const showToast = useCallback((type: ToastMessage['type'], message: string) => {
     const id = ++toastIdRef.current;
@@ -122,12 +162,29 @@ export function useNoteStore() {
   const openEntityModal = useCallback((next: EntityModalState) => setEntityModal(next), []);
   const closeEntityModal = useCallback(() => setEntityModal({ open: false, mode: null, title: '', label: '', value: '', confirmText: '确定', targetId: null }), []);
 
+  const saveDraft = useCallback((id: string, content: string) => { safeWrite(draftKey(id), content); safeWrite(recoveryKey(id), { content, updatedAt: Date.now() }); }, []);
+  const loadDraft = useCallback((id: string) => safeRead<string>(draftKey(id), ''), []);
+  const clearDraft = useCallback((id: string) => { try { window.localStorage.removeItem(draftKey(id)); window.localStorage.removeItem(recoveryKey(id)); } catch {} }, []);
+  const loadVersions = useCallback((id: string) => safeRead<NoteVersion[]>(versionsKey(id), []), []);
+  const restoreVersion = useCallback((id: string, versionId: string) => {
+    const versions = loadVersions(id);
+    const target = versions.find((item) => item.id === versionId);
+    if (!target) return false;
+    updateNote(id, { content: target.content, title: target.title });
+    saveDraft(id, target.content);
+    showToast('success', '已恢复历史版本');
+    return true;
+  }, [loadVersions, saveDraft, showToast, updateNote]);
+  const saveCursor = useCallback((id: string, range: { start: number; end: number }) => safeWrite(cursorKey(id), range), []);
+  const loadCursor = useCallback((id: string) => safeRead<{ start: number; end: number } | null>(cursorKey(id), null), []);
+  const loadRecovery = useCallback((id: string) => safeRead<{ content: string; updatedAt: number } | null>(recoveryKey(id), null), []);
+
   const tags = Array.from(new Set(notes.flatMap((n) => n.meta.tags)));
   const totalCount = notes.length;
   const favoriteCount = notes.filter((n) => n.meta.isFavorite).length;
   const searchResultCount = searchQuery ? filteredNotes.length : null;
 
-  return { notes, filteredNotes, currentNote, currentNoteId, notebooks, activeNotebook, currentFilter, searchQuery, sortBy, activeTags, isPreviewVisible, isGraphOpen, isPropertiesOpen, toasts, contextMenu, settingsOpen, isLoading, entityModal, totalCount, favoriteCount, searchResultCount, tags, setActiveNotebook, setCurrentFilter, setSearchQuery, setSortBy, setActiveTags, setIsPreviewVisible, setIsGraphOpen, setIsPropertiesOpen, setContextMenu, setSettingsOpen, openEntityModal, closeEntityModal, selectNote, createNote, updateNote, deleteNote, duplicateNote, toggleFavorite, togglePin, createNotebook, renameNotebook, deleteNotebook, refreshNotes, refreshNotebooks, showToast, setCurrentNoteId };
+  return { notes, filteredNotes, currentNote, currentNoteId, notebooks, activeNotebook, currentFilter, searchQuery, sortBy, activeTags, isPreviewVisible, isGraphOpen, isPropertiesOpen, toasts, contextMenu, settingsOpen, isLoading, entityModal, totalCount, favoriteCount, searchResultCount, tags, setActiveNotebook, setCurrentFilter, setSearchQuery, setSortBy, setActiveTags, setIsPreviewVisible, setIsGraphOpen, setIsPropertiesOpen, setContextMenu, setSettingsOpen, openEntityModal, closeEntityModal, selectNote, createNote, updateNote, deleteNote, duplicateNote, toggleFavorite, togglePin, createNotebook, renameNotebook, deleteNotebook, refreshNotes, refreshNotebooks, showToast, setCurrentNoteId, saveDraft, loadDraft, clearDraft, loadVersions, restoreVersion, saveCursor, loadCursor, loadRecovery };
 }
 
 export const NoteContext = createContext<NoteStore | null>(null);

@@ -1,6 +1,6 @@
 // NoteForge — Markdown 渲染引擎（离线可用）
 
-export function renderMarkdown(md: string): string {
+export function renderMarkdown(md: string, highlightQuery = ''): string {
   const lines = md.split('\n');
   const out: string[] = [];
   let inTable = false;
@@ -14,88 +14,35 @@ export function renderMarkdown(md: string): string {
 
   for (const raw of lines) {
     const line = raw;
-
-    // Code block
     if (line.startsWith('```')) {
       if (!inCode) { inCode = true; continue; }
-      else {
-        inCode = false;
-        out.push(`<pre><code>${escapeHtml(codeBuf.join('\n'))}</code></pre>`);
-        codeBuf.length = 0;
-        continue;
-      }
+      inCode = false;
+      out.push(`<pre><code>${escapeHtml(codeBuf.join('\n'))}</code></pre>`);
+      codeBuf.length = 0;
+      continue;
     }
     if (inCode) { codeBuf.push(line); continue; }
-
-    // Empty line
     if (!line.trim()) { flushList(); out.push('<p class="empty-line"></p>'); continue; }
-
-    // Headings
     const hMatch = line.match(/^(#{1,6})\s(.+)/);
-    if (hMatch) {
-      flushList(); if (inTable) { out.push('</table>'); inTable = false; }
-      out.push(`<h${hMatch[1].length}>${inlineMd(hMatch[2])}</h${hMatch[1].length}>`);
-      continue;
-    }
-
-    // Horizontal rule
+    if (hMatch) { flushList(); if (inTable) { out.push('</table>'); inTable = false; } out.push(`<h${hMatch[1].length}>${inlineMd(hMatch[2], highlightQuery)}</h${hMatch[1].length}>`); continue; }
     if (/^(-{3,}|\*{3,})\s*$/.test(line)) { flushList(); out.push('<hr>'); continue; }
-
-    // Blockquote
-    if (line.startsWith('> ')) {
-      flushList();
-      out.push(`<blockquote>${inlineMd(line.slice(2))}</blockquote>`);
-      continue;
-    }
-
-    // Task list
-    if (/^- \[[ xX]\] /.test(line)) {
-      const done = line[3] === 'x' || line[3] === 'X';
-      if (listType !== 'ul') { flushList(); listType = 'ul'; out.push('<ul class="task-list">'); }
-      out.push(`<li class="${done ? 'task-done' : ''}">${done ? '✅' : '⬜'} ${inlineMd(line.slice(6))}</li>`);
-      continue;
-    }
-
-    // Unordered list
-    if (/^[-*+]\s/.test(line)) {
-      if (listType !== 'ul') { flushList(); listType = 'ul'; out.push('<ul>'); }
-      out.push(`<li>${inlineMd(line.replace(/^[-*+]\s/, ''))}</li>`);
-      continue;
-    }
-
-    // Ordered list
+    if (line.startsWith('> ')) { flushList(); out.push(`<blockquote>${inlineMd(line.slice(2), highlightQuery)}</blockquote>`); continue; }
+    if (/^- \[[ xX]\] /.test(line)) { const done = line[3] === 'x' || line[3] === 'X'; if (listType !== 'ul') { flushList(); listType = 'ul'; out.push('<ul class="task-list">'); } out.push(`<li class="${done ? 'task-done' : ''}">${done ? '✅' : '⬜'} ${inlineMd(line.slice(6), highlightQuery)}</li>`); continue; }
+    if (/^[-*+]\s/.test(line)) { if (listType !== 'ul') { flushList(); listType = 'ul'; out.push('<ul>'); } out.push(`<li>${inlineMd(line.replace(/^[-*+]\s/, ''), highlightQuery)}</li>`); continue; }
     const olMatch = line.match(/^(\d+)\.\s(.+)/);
-    if (olMatch) {
-      if (listType !== 'ol') { flushList(); listType = 'ol'; out.push('<ol>'); }
-      out.push(`<li>${inlineMd(olMatch[2])}</li>`);
-      continue;
-    }
-
-    // Table
-    if (line.startsWith('|')) {
-      flushList();
-      const cells = line.split('|').filter(c => c.trim()).map(c => inlineMd(c.trim()));
-      const isSep = /^[\s:|:-]+$/.test(line);
-      if (!inTable && !isSep) { inTable = true; out.push('<table>'); }
-      if (!isSep) { out.push(`<tr>${cells.map(c => `<td>${c}</td>`).join('')}</tr>`); }
-      continue;
-    } else {
-      if (inTable) { out.push('</table>'); inTable = false; }
-    }
-
-    // Regular paragraph
+    if (olMatch) { if (listType !== 'ol') { flushList(); listType = 'ol'; out.push('<ol>'); } out.push(`<li>${inlineMd(olMatch[2], highlightQuery)}</li>`); continue; }
+    if (line.startsWith('|')) { flushList(); const cells = line.split('|').filter(c => c.trim()).map(c => inlineMd(c.trim(), highlightQuery)); const isSep = /^[\s:|:-]+$/.test(line); if (!inTable && !isSep) { inTable = true; out.push('<table>'); } if (!isSep) { out.push(`<tr>${cells.map(c => `<td>${c}</td>`).join('')}</tr>`); } continue; }
+    if (inTable) { out.push('</table>'); inTable = false; }
     flushList();
-    out.push(`<p>${inlineMd(line)}</p>`);
+    out.push(`<p>${inlineMd(line, highlightQuery)}</p>`);
   }
-
   flushList();
   if (inCode) out.push(`<pre><code>${escapeHtml(codeBuf.join('\n'))}</code></pre>`);
   if (inTable) out.push('</table>');
-
   return out.join('\n');
 }
 
-function inlineMd(text: string): string {
+function inlineMd(text: string, highlightQuery = ''): string {
   let r = escapeHtml(text);
   r = r.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
   r = r.replace(/\*(.+?)\*/g, '<em>$1</em>');
@@ -103,17 +50,20 @@ function inlineMd(text: string): string {
   r = r.replace(/`([^`]+)`/g, '<code>$1</code>');
   r = r.replace(/\[\[([^\]]+)\]\]/g, '<a class="wiki-link">$1</a>');
   r = r.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+  if (highlightQuery.trim()) {
+    const escaped = escapeRegExp(highlightQuery.trim());
+    if (escaped) {
+      const regex = new RegExp(`(${escaped})`, 'gi');
+      r = r.replace(regex, '<mark class="search-highlight">$1</mark>');
+    }
+  }
   r = r.replace(/(?<!\w)(#[\w\u4e00-\u9fff\-/]+)/gu, '<span class="tag">$1</span>');
   r = r.replace(/\n/g, '<br>');
   return r;
 }
 
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-}
+function escapeHtml(text: string): string { return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+function escapeRegExp(text: string): string { return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 
 export function countWords(text: string): number {
   let count = 0;
@@ -125,25 +75,11 @@ export function countWords(text: string): number {
 }
 
 export function extractPlainText(md: string): string {
-  return md
-    .replace(/```[\s\S]*?```/g, '')
-    .replace(/#{1,6}\s/g, '')
-    .replace(/[*~`\[\]]/g, '')
-    .replace(/\n+/g, ' ');
+  return md.replace(/```[\s\S]*?```/g, '').replace(/#{1,6}\s/g, '').replace(/[*~`\[\]]/g, '').replace(/\n+/g, ' ');
 }
 
-export function generateId(): string {
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-}
-
-export function formatTime(ts: number): string {
-  const diff = Date.now() - ts;
-  if (diff < 60000) return '刚刚';
-  if (diff < 3600000) return `${Math.floor(diff / 60000)} 分钟前`;
-  if (diff < 86400000) return `${Math.floor(diff / 3600000)} 小时前`;
-  if (diff < 604800000) return `${Math.floor(diff / 86400000)} 天前`;
-  return new Date(ts).toLocaleDateString('zh-CN');
-}
+export function generateId(): string { return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`; }
+export function formatTime(ts: number): string { const diff = Date.now() - ts; if (diff < 60000) return '刚刚'; if (diff < 3600000) return `${Math.floor(diff / 60000)} 分钟前`; if (diff < 86400000) return `${Math.floor(diff / 3600000)} 小时前`; if (diff < 604800000) return `${Math.floor(diff / 86400000)} 天前`; return new Date(ts).toLocaleDateString('zh-CN'); }
 
 export function getTemplateContent(tmpl: string): string {
   const templates: Record<string, string> = {
