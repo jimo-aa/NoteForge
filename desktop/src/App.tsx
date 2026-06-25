@@ -33,19 +33,24 @@ export default function App() {
   }, [store]);
 
   useEffect(() => {
-    const sync = async () => {
-      const { listen } = await import('@tauri-apps/api/event');
-      const unlisten = await listen<{ noteId: string; line: number }>('noteforge:open-search-hit', async (event) => {
-        const payload = event.payload;
-        if (payload?.noteId) {
-          store.selectNote(payload.noteId);
-          const note = await invoke<{ meta: { id: string }; content: string }>('get_note', { id: payload.noteId });
-          if (note) store.showToast('success', `已跳转到第 ${payload.line} 行`);
-        }
-      });
-      return unlisten;
-    };
-    void sync();
+    let unlisten: (() => void) | undefined;
+    void (async () => {
+      try {
+        const eventApi = await import('@tauri-apps/api/event');
+        if (!eventApi.listen) return;
+        unlisten = await eventApi.listen<{ noteId: string; line: number }>('noteforge:open-search-hit', async (event) => {
+          const payload = event.payload;
+          if (payload?.noteId) {
+            store.selectNote(payload.noteId);
+            const note = await invoke<{ meta: { id: string }; content: string }>('get_note', { id: payload.noteId });
+            if (note) store.showToast('success', `已跳转到第 ${payload.line} 行`);
+          }
+        });
+      } catch {
+        // ignore event API errors in environments without permissions
+      }
+    })();
+    return () => { void unlisten?.(); };
   }, [store]);
 
   return (

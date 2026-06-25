@@ -89,6 +89,7 @@ pub fn create_note(state: State<'_, AppState>, request: CreateNoteRequest) -> Re
     Ok(Note { meta: to_meta(note.meta), content: note.content })
 }
 
+
 #[tauri::command]
 pub fn update_note(state: State<'_, AppState>, id: String, title: Option<String>, content: Option<String>, tags: Option<Vec<String>>, is_pinned: Option<bool>, is_favorite: Option<bool>) -> Result<Note, String> {
     let mut core = state.core.lock().map_err(|e| e.to_string())?;

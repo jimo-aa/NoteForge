@@ -17,12 +17,10 @@ async function tauriInvoke<T>(cmd: string, args?: Record<string, unknown>): Prom
 const ALL_NOTEBOOK = { id: 'all', name: '全部笔记', icon: '📋', noteCount: 0 };
 const STORAGE_PREFIX = 'noteforge';
 const draftKey = (id: string) => `${STORAGE_PREFIX}:draft:${id}`;
-const versionsKey = (id: string) => `${STORAGE_PREFIX}:versions:${id}`;
 const cursorKey = (id: string) => `${STORAGE_PREFIX}:cursor:${id}`;
-const recoveryKey = (id: string) => `${STORAGE_PREFIX}:recovery:${id}`;
-const versionInterval = 30 * 1000;
+const autosaveKey = (id: string) => `${STORAGE_PREFIX}:autosave:${id}`;
 
-type NoteVersion = { id: string; content: string; title: string; updatedAt: number };
+type NoteVersion = { id: string; content: string; title: string; updatedAt: number; summary?: string; source?: 'git' | 'local' };
 
 const safeRead = <T,>(key: string, fallback: T): T => {
   try {
@@ -56,7 +54,7 @@ export function useNoteStore() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [entityModal, setEntityModal] = useState<EntityModalState>({ open: false, mode: null, title: '', label: '', value: '', confirmText: '确定', targetId: null });
   const toastIdRef = useRef(0);
-  const versionWriteRef = useRef<Record<string, number>>({});
+  const autosaveTimerRef = useRef<Record<string, number | null>>({});
 
   const refreshNotebooks = useCallback(async () => {
     const backendNotebooks = await tauriInvoke<Notebook[]>('list_notebooks');
@@ -74,6 +72,14 @@ export function useNoteStore() {
   useEffect(() => { void (async () => { await Promise.all([refreshNotes(), refreshNotebooks()]); setIsLoading(false); })(); }, [refreshNotes, refreshNotebooks]);
   useEffect(() => { void tauriInvoke('set_last_note', { id: currentNoteId }); }, [currentNoteId]);
   useEffect(() => { void refreshNotebooks(); }, [notes, refreshNotebooks]);
+
+  useEffect(() => {
+    return () => {
+      Object.values(autosaveTimerRef.current).forEach((timer) => {
+        if (timer) window.clearTimeout(timer);
+      });
+    };
+  }, []);
 
   const sortNotes = useCallback((notesToSort: Note[]) => {
     const copy = [...notesToSort];
@@ -105,27 +111,23 @@ export function useNoteStore() {
   const selectNote = useCallback((id: string) => setCurrentNoteId(id), []);
 
   const createNote = useCallback(async (title: string, content: string, notebookId: string, tags: string[]) => {
-    const note = await tauriInvoke<Note>('create_note', { request: { title, content, notebook_id: notebookId, tags } });
+    const note = await tauriInvoke<Note>('create_note', { request: { title, content, notebookId, tags } });
     if (note) {
       setNotes((prev) => [note, ...prev.filter((item) => item.meta.id !== note.meta.id)]);
       setCurrentNoteId(note.meta.id);
       safeWrite(draftKey(note.meta.id), content);
-      safeWrite(versionsKey(note.meta.id), [{ id: note.meta.id, content, title, updatedAt: Date.now() } satisfies NoteVersion]);
+      safeWrite(autosaveKey(note.meta.id), { content, title, updatedAt: Date.now() });
       return note;
     }
     return null;
   }, []);
 
-  const appendVersion = useCallback((id: string, title: string, content: string) => {
-    const now = Date.now();
-    if ((versionWriteRef.current[id] ?? 0) + versionInterval > now) return;
-    versionWriteRef.current[id] = now;
-    const versions = safeRead<NoteVersion[]>(versionsKey(id), []);
-    const last = versions[0];
-    if (last && last.content === content) return;
-    const next = [{ id: `${id}:${now}`, content, title, updatedAt: now }, ...versions].slice(0, 20);
-    safeWrite(versionsKey(id), next);
-    safeWrite(recoveryKey(id), { content, title, updatedAt: now });
+  const scheduleAutosave = useCallback((id: string, title: string, content: string) => {
+    if (autosaveTimerRef.current[id]) window.clearTimeout(autosaveTimerRef.current[id]!);
+    autosaveTimerRef.current[id] = window.setTimeout(() => {
+      safeWrite(autosaveKey(id), { content, title, updatedAt: Date.now() });
+      autosaveTimerRef.current[id] = null;
+    }, 5000);
   }, []);
 
   const updateNote = useCallback((id: string, updates: Partial<Note['meta'] & { content: string }>) => {
@@ -136,14 +138,16 @@ export function useNoteStore() {
         meta: { ...n.meta, ...updates, updatedAt: Date.now(), version: n.meta.version + (updates.content !== undefined ? 1 : 0), wordCount: countWords(nextContent) },
         content: nextContent,
       };
-      if (updates.content !== undefined) safeWrite(draftKey(id), nextContent);
-      if (updates.content !== undefined || updates.title !== undefined) appendVersion(id, updates.title ?? n.meta.title, nextContent);
+      if (updates.content !== undefined) {
+        safeWrite(draftKey(id), nextContent);
+        scheduleAutosave(id, updates.title ?? n.meta.title, nextContent);
+      }
       return next;
     }));
     if (updates.title !== undefined || updates.content !== undefined || updates.tags !== undefined || updates.isPinned !== undefined || updates.isFavorite !== undefined) {
       void tauriInvoke('update_note', { id, title: updates.title ?? null, content: updates.content ?? null, tags: updates.tags ?? null, isPinned: updates.isPinned ?? null, isFavorite: updates.isFavorite ?? null });
     }
-  }, [appendVersion]);
+  }, [scheduleAutosave]);
 
   const showToast = useCallback((type: ToastMessage['type'], message: string) => {
     const id = ++toastIdRef.current;
@@ -156,28 +160,45 @@ export function useNoteStore() {
   const toggleFavorite = useCallback((id: string) => { const note = notes.find((n) => n.meta.id === id); if (!note) return; updateNote(id, { isFavorite: !note.meta.isFavorite }); }, [notes, updateNote]);
   const togglePin = useCallback((id: string) => { const note = notes.find((n) => n.meta.id === id); if (!note) return; updateNote(id, { isPinned: !note.meta.isPinned }); }, [notes, updateNote]);
 
-  const createNotebook = useCallback(async (name: string) => { const notebook = await tauriInvoke<Notebook>('create_notebook', { name }); if (notebook) { await refreshNotebooks(); showToast('success', '📒 已创建笔记本'); return notebook; } return null; }, [refreshNotebooks, showToast]);
+  const createNotebook = useCallback(async (name: string) => {
+    const title = name.trim();
+    if (!title) {
+      showToast('error', '笔记本名称不能为空');
+      return null;
+    }
+
+    const notebook = await tauriInvoke<Notebook>('create_notebook', { name: title });
+    if (notebook) {
+      await refreshNotebooks();
+      showToast('success', '📒 已创建笔记本');
+      return notebook;
+    }
+    showToast('error', '创建笔记本失败，请重试');
+    return null;
+  }, [refreshNotebooks, showToast]);
   const renameNotebook = useCallback(async (id: string, name: string) => { const notebook = await tauriInvoke<Notebook>('rename_notebook', { id, name }); if (notebook) { await refreshNotebooks(); showToast('success', '✏️ 已重命名'); } return notebook; }, [refreshNotebooks, showToast]);
   const deleteNotebook = useCallback(async (id: string) => { const ok = await tauriInvoke<boolean>('delete_notebook', { id }); if (ok !== false) { await refreshNotes(); await refreshNotebooks(); if (activeNotebook === id) setActiveNotebook('all'); showToast('success', '🗑 已删除笔记本'); return true; } return false; }, [activeNotebook, refreshNotes, refreshNotebooks, showToast]);
   const openEntityModal = useCallback((next: EntityModalState) => setEntityModal(next), []);
   const closeEntityModal = useCallback(() => setEntityModal({ open: false, mode: null, title: '', label: '', value: '', confirmText: '确定', targetId: null }), []);
 
-  const saveDraft = useCallback((id: string, content: string) => { safeWrite(draftKey(id), content); safeWrite(recoveryKey(id), { content, updatedAt: Date.now() }); }, []);
+  const saveDraft = useCallback((id: string, content: string) => { safeWrite(draftKey(id), content); }, []);
   const loadDraft = useCallback((id: string) => safeRead<string>(draftKey(id), ''), []);
-  const clearDraft = useCallback((id: string) => { try { window.localStorage.removeItem(draftKey(id)); window.localStorage.removeItem(recoveryKey(id)); } catch {} }, []);
-  const loadVersions = useCallback((id: string) => safeRead<NoteVersion[]>(versionsKey(id), []), []);
-  const restoreVersion = useCallback((id: string, versionId: string) => {
-    const versions = loadVersions(id);
-    const target = versions.find((item) => item.id === versionId);
-    if (!target) return false;
-    updateNote(id, { content: target.content, title: target.title });
-    saveDraft(id, target.content);
+  const clearDraft = useCallback((id: string) => { try { window.localStorage.removeItem(draftKey(id)); window.localStorage.removeItem(autosaveKey(id)); } catch {} }, []);
+  const loadVersions = useCallback(async (id: string) => {
+    const backend = await tauriInvoke<Array<{ id: string; title: string; updatedAt: number; summary?: string }>>('list_note_versions', { noteId: id });
+    return backend || [];
+  }, []);
+  const restoreVersion = useCallback(async (id: string, versionId: string) => {
+    const content = await tauriInvoke<string>('checkout_note_version', { noteId: id, commitId: versionId });
+    if (!content) return false;
+    updateNote(id, { content });
+    saveDraft(id, content);
     showToast('success', '已恢复历史版本');
     return true;
-  }, [loadVersions, saveDraft, showToast, updateNote]);
+  }, [saveDraft, showToast, updateNote]);
   const saveCursor = useCallback((id: string, range: { start: number; end: number }) => safeWrite(cursorKey(id), range), []);
   const loadCursor = useCallback((id: string) => safeRead<{ start: number; end: number } | null>(cursorKey(id), null), []);
-  const loadRecovery = useCallback((id: string) => safeRead<{ content: string; updatedAt: number } | null>(recoveryKey(id), null), []);
+  const loadRecovery = useCallback((_id: string) => null, []);
 
   const tags = Array.from(new Set(notes.flatMap((n) => n.meta.tags)));
   const totalCount = notes.length;

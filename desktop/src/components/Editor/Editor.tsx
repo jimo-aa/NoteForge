@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import { useStore } from '../../stores/context';
-import { generateId, renderMarkdown } from '@/utils/markdown';
+import { renderMarkdown } from '@/utils/markdown';
 
 const MARKDOWN_ACTIONS = [
   { label: 'B', title: '粗体', before: '**', after: '**', sample: '粗体' },
@@ -37,9 +37,9 @@ export function Editor() {
     restoreVersion,
     saveCursor,
     loadCursor,
-    loadRecovery,
     searchQuery,
   } = useStore();
+
   const note = useMemo(() => currentNote, [currentNote]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const autosaveTimerRef = useRef<number | null>(null);
@@ -60,19 +60,18 @@ export function Editor() {
     if (!note) return;
     const saved = loadCursor(note.meta.id);
     if (saved) restoreCursorRef.current = saved;
-    const recovery = loadRecovery(note.meta.id);
     const draft = loadDraft(note.meta.id);
-    if ((recovery?.content || draft) && draft && draft !== note.content) {
+    if (draft && draft !== note.content) {
       updateNote(note.meta.id, { content: draft });
       showToast('info', '已恢复草稿');
     }
-  }, [loadCursor, loadDraft, loadRecovery, note, showToast, updateNote]);
+  }, [loadCursor, loadDraft, note, showToast, updateNote]);
 
   useEffect(() => {
-    if (note && lastSavedSnapshotRef.current !== note.content) {
-      lastSavedSnapshotRef.current = note.content;
-      saveDraft(note.meta.id, note.content);
-    }
+    if (!note) return;
+    if (lastSavedSnapshotRef.current === note.content) return;
+    lastSavedSnapshotRef.current = note.content;
+    saveDraft(note.meta.id, note.content);
   }, [note, saveDraft]);
 
   useEffect(() => {
@@ -95,6 +94,7 @@ export function Editor() {
       textarea.scrollTop = Math.max(0, (desiredLine - 1) * lineHeight - paddingTop);
       window.setTimeout(() => setJumpLine((current) => (current === targetLine ? null : current)), 1800);
     };
+
     window.addEventListener('noteforge:jump-to-hit', onJump as EventListener);
     return () => window.removeEventListener('noteforge:jump-to-hit', onJump as EventListener);
   }, [note, setIsPreviewVisible]);
@@ -106,35 +106,64 @@ export function Editor() {
   }, [notes]);
 
   const wikiCandidates = useMemo(() => notes.map((item) => item.meta.title).filter(Boolean), [notes]);
-  const versions = note ? loadVersions(note.meta.id) : [];
+  const [versions, setVersions] = useState<Array<{ id: string; title: string; updatedAt: number; summary?: string }>>([]);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
-  if (!note) return <section className="editor-workspace"><div className="empty-state"><div className="icon">📝</div><h2>请选择左侧笔记开始编辑</h2><p>这里会呈现标签、Markdown 编辑、实时预览与属性信息。</p></div></section>;
+  useEffect(() => {
+    let alive = true;
+    if (!note || !versionsOpen) {
+      setVersions([]);
+      return;
+    }
+    void (async () => {
+      const loaded = await loadVersions(note.meta.id);
+      if (alive) setVersions(loaded);
+    })();
+    return () => { alive = false; };
+  }, [loadVersions, note, versionsOpen]);
 
-  const meta = note.meta;
-  const currentTags = meta.tags ?? [];
   const persistCursor = () => {
     const textarea = textareaRef.current;
-    if (!textarea) return;
-    saveCursor(meta.id, { start: textarea.selectionStart, end: textarea.selectionEnd });
+    if (!textarea || !note) return;
+    const selection = { start: textarea.selectionStart, end: textarea.selectionEnd };
+    restoreCursorRef.current = selection;
+    saveCursor(note.meta.id, selection);
   };
+
   const updateContent = (content: string) => {
-    updateNote(meta.id, { content });
+    if (!note) return;
+    updateNote(note.meta.id, { content });
     if (autosaveTimerRef.current) window.clearTimeout(autosaveTimerRef.current);
     autosaveTimerRef.current = window.setTimeout(() => {
-      saveDraft(meta.id, content);
+      const textarea = textareaRef.current;
+      const selection = textarea ? { start: textarea.selectionStart, end: textarea.selectionEnd } : restoreCursorRef.current;
+      if (selection) restoreCursorRef.current = selection;
+      saveDraft(note.meta.id, content);
       lastSavedSnapshotRef.current = content;
-      showToast('success', '已自动保存');
+      if (textarea && selection) {
+        textarea.setSelectionRange(selection.start, selection.end);
+      }
     }, 300);
   };
-  const updateTags = (tags: string[]) => updateNote(meta.id, { tags });
-  const removeTag = (tag: string) => updateTags(currentTags.filter((item) => item !== tag));
-  const addTag = (tag: string) => { const cleanTag = tag.trim().replace(/^#/, ''); if (!cleanTag) return; if (currentTags.includes(cleanTag)) { showToast('info', '标签已存在'); return; } updateTags([...currentTags, cleanTag]); setTagDraft(''); setTagModalOpen(false); };
+
+  useLayoutEffect(() => {
+    const textarea = textareaRef.current;
+    const cursor = restoreCursorRef.current;
+    if (!textarea || !cursor) return;
+    textarea.setSelectionRange(cursor.start, cursor.end);
+    restoreCursorRef.current = null;
+  }, [note?.meta.id]);
+
   const openWikiSuggestions = () => {
+    if (!note) return;
     const textarea = textareaRef.current;
     if (!textarea) return;
     const before = note.content.slice(0, textarea.selectionStart);
     const match = before.match(/\[\[([^[\]]*)$/);
-    if (!match) { setWikiOpen(false); return; }
+    if (!match) {
+      setWikiOpen(false);
+      return;
+    }
     const query = match[1];
     const suggestions = wikiCandidates.filter((title) => title.toLowerCase().includes(query.toLowerCase())).slice(0, 6);
     setWikiQuery(query);
@@ -142,8 +171,11 @@ export function Editor() {
     setWikiActiveIndex(0);
     setWikiOpen(true);
   };
+
   const closeWikiSuggestions = () => setWikiOpen(false);
+
   const commitWikiLink = (title: string) => {
+    if (!note) return;
     const textarea = textareaRef.current;
     if (!textarea) return;
     const before = note.content.slice(0, textarea.selectionStart);
@@ -158,16 +190,54 @@ export function Editor() {
     });
     closeWikiSuggestions();
   };
-  const insertMarkdown = (before: string, after: string, sample: string) => { const textarea = textareaRef.current; if (!textarea) return; const start = textarea.selectionStart; const end = textarea.selectionEnd; const selected = note.content.slice(start, end) || sample; const next = `${note.content.slice(0, start)}${before}${selected}${after}${note.content.slice(end)}`; updateContent(next); window.requestAnimationFrame(() => { textarea.focus(); const cursor = start + before.length + selected.length; textarea.setSelectionRange(cursor, cursor); }); };
-  const startResize = (event: ReactMouseEvent<HTMLDivElement>) => { event.preventDefault(); setIsResizing(true); const container = event.currentTarget.parentElement; if (!container) return; const rect = container.getBoundingClientRect(); const onMove = (moveEvent: MouseEvent) => { const next = ((moveEvent.clientX - rect.left) / rect.width) * 100; setEditorWidth(Math.min(72, Math.max(32, next))); }; const onUp = () => { setIsResizing(false); window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); }; window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp); };
-  const exportedFile = () => { const blob = new Blob([note.content], { type: 'text/markdown;charset=utf-8' }); const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = `${meta.title || 'note'}.md`; link.click(); URL.revokeObjectURL(url); showToast('success', '已下载 Markdown 文件'); };
-  const restoreCursor = () => {
+
+  const insertMarkdown = (before: string, after: string, sample: string) => {
+    if (!note) return;
     const textarea = textareaRef.current;
-    const cursor = restoreCursorRef.current;
-    if (!textarea || !cursor) return;
-    textarea.setSelectionRange(cursor.start, cursor.end);
-    restoreCursorRef.current = null;
+    if (!textarea) return;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selected = note.content.slice(start, end) || sample;
+    const next = `${note.content.slice(0, start)}${before}${selected}${after}${note.content.slice(end)}`;
+    updateContent(next);
+    window.requestAnimationFrame(() => {
+      textarea.focus();
+      const cursor = start + before.length + selected.length;
+      textarea.setSelectionRange(cursor, cursor);
+    });
   };
+
+  const startResize = (event: ReactMouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setIsResizing(true);
+    const container = event.currentTarget.parentElement;
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    const onMove = (moveEvent: MouseEvent) => {
+      const next = ((moveEvent.clientX - rect.left) / rect.width) * 100;
+      setEditorWidth(Math.min(72, Math.max(32, next)));
+    };
+    const onUp = () => {
+      setIsResizing(false);
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  };
+
+  const exportedFile = () => {
+    if (!note) return;
+    const blob = new Blob([note.content], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${note.meta.title || 'note'}.md`;
+    link.click();
+    URL.revokeObjectURL(url);
+    showToast('success', '已下载 Markdown 文件');
+  };
+
   const handlePaste = async (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
     const items = Array.from(event.clipboardData.items);
     const imageItem = items.find((item) => item.type.startsWith('image/'));
@@ -183,7 +253,9 @@ export function Editor() {
     };
     reader.readAsDataURL(file);
   };
+
   const insertTextAtCursor = (text: string) => {
+    if (!note) return;
     const textarea = textareaRef.current;
     if (!textarea) return;
     const start = textarea.selectionStart;
@@ -196,6 +268,7 @@ export function Editor() {
       textarea.setSelectionRange(cursor, cursor);
     });
   };
+
   const handleEditorKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (wikiOpen) {
       if (event.key === 'Escape') { event.preventDefault(); closeWikiSuggestions(); return; }
@@ -205,10 +278,17 @@ export function Editor() {
         if (wikiSuggestions.length) {
           event.preventDefault();
           commitWikiLink(wikiSuggestions[wikiActiveIndex] || wikiSuggestions[0]);
+          return;
         }
       }
     }
+    if (note && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+      event.preventDefault();
+      saveDraft(note.meta.id, note.content);
+      showToast('success', '已手动保存');
+    }
   };
+
   const handleDrop = async (event: React.DragEvent<HTMLTextAreaElement>) => {
     const image = Array.from(event.dataTransfer.files).find((file) => file.type.startsWith('image/'));
     if (!image) return;
@@ -222,10 +302,29 @@ export function Editor() {
     reader.readAsDataURL(image);
   };
 
+  if (!note) {
+    return (
+      <section className="editor-workspace">
+        <div className="empty-state">
+          <div className="icon">📝</div>
+          <h2>请选择左侧笔记开始编辑</h2>
+          <p>这里会呈现标签、Markdown 编辑、实时预览与属性信息。</p>
+        </div>
+      </section>
+    );
+  }
+
+  const meta = note.meta;
+  const currentTags = meta.tags ?? [];
+
   return (
     <section className={isResizing ? 'editor-workspace is-resizing' : 'editor-workspace'}>
       <div className="editor-tabs">
-        {currentTags.map((tag) => (<button key={tag} className="editor-tab" onClick={() => removeTag(tag)} title="点击移除标签"><span>{tag}</span><span>×</span></button>))}
+        {currentTags.map((tag) => (
+          <button key={tag} className="editor-tab" onClick={() => updateNote(meta.id, { tags: currentTags.filter((item) => item !== tag) })} title="点击移除标签">
+            <span>{tag}</span><span>×</span>
+          </button>
+        ))}
         <button className="editor-tab add" onClick={() => setTagModalOpen(true)}>＋ 添加标签</button>
         <button className="editor-tab add" onClick={() => setVersionsOpen((v) => !v)}>⏱ 历史版本 {versions.length ? `(${versions.length})` : ''}</button>
       </div>
@@ -236,19 +335,61 @@ export function Editor() {
           <button className={meta.isPinned ? 'state-button active' : 'state-button'} onClick={() => togglePin(meta.id)} title={meta.isPinned ? '取消固定' : '固定'}><span>📌</span></button>
           <span className="document-divider" />
           <button className="plain-action" onClick={() => setIsPropertiesOpen(true)} title="属性">i</button>
+          <button className="plain-action" onClick={() => { clearDraft(meta.id); showToast('success', '草稿已清除'); }} title="清除草稿">↺</button>
           <button className="plain-action" onClick={exportedFile} title="下载">⬇</button>
         </div>
       </header>
       <div className="markdown-toolbar">
-        <div className="markdown-buttons">{MARKDOWN_ACTIONS.map((action) => (<button key={action.title} className="markdown-button" title={action.title} onClick={() => insertMarkdown(action.before, action.after, action.sample)}>{action.label}</button>))}</div>
+        <div className="markdown-buttons">
+          {MARKDOWN_ACTIONS.map((action) => (
+            <button key={action.title} className="markdown-button" title={action.title} onClick={() => insertMarkdown(action.before, action.after, action.sample)}>
+              {action.label}
+            </button>
+          ))}
+        </div>
         <button className={isPreviewVisible ? 'preview-toggle active' : 'preview-toggle'} onClick={() => setIsPreviewVisible(!isPreviewVisible)}>👁 预览</button>
       </div>
       <div className={isPreviewVisible ? 'split-editor' : 'split-editor no-preview'}>
         <div className="markdown-editor-pane" style={{ flexBasis: isPreviewVisible ? `${editorWidth}%` : '100%' }}>
-          <textarea ref={(el) => { textareaRef.current = el; if (el && restoreCursorRef.current) window.requestAnimationFrame(restoreCursor); }} value={note.content ?? ''} onChange={(event) => { updateContent(event.target.value); openWikiSuggestions(); }} onKeyDown={handleEditorKeyDown} spellCheck={false} className={jumpLine ? 'editor-textarea jump-line' : 'editor-textarea'} onBlur={persistCursor} onSelect={() => { persistCursor(); openWikiSuggestions(); }} onPaste={handlePaste} onDrop={handleDrop} onDragOver={(event) => event.preventDefault()} />
-          {wikiOpen && (<div className="wiki-autocomplete"><div className="wiki-autocomplete-header">Wiki Link {wikiQuery ? `：${wikiQuery}` : ''}</div>{wikiSuggestions.length ? wikiSuggestions.map((title, index) => (<button key={title} className={index === wikiActiveIndex ? 'wiki-autocomplete-item active' : 'wiki-autocomplete-item'} onMouseDown={(event) => { event.preventDefault(); commitWikiLink(title); }}>{title}</button>)) : <div className="wiki-autocomplete-empty">没有匹配结果</div>}</div>)}
+          <textarea
+            ref={(el) => {
+              textareaRef.current = el;
+            }}
+            value={note.content ?? ''}
+            onChange={(event) => {
+              updateContent(event.target.value);
+              if (wikiOpen) openWikiSuggestions();
+            }}
+            onKeyDown={handleEditorKeyDown}
+            spellCheck={false}
+            className={jumpLine ? 'editor-textarea jump-line' : 'editor-textarea'}
+            onBlur={persistCursor}
+            onSelect={() => {
+              persistCursor();
+              if (wikiOpen) openWikiSuggestions();
+            }}
+            onPaste={handlePaste}
+            onDrop={handleDrop}
+            onDragOver={(event) => event.preventDefault()}
+          />
+          {wikiOpen && (
+            <div className="wiki-autocomplete">
+              <div className="wiki-autocomplete-header">Wiki Link {wikiQuery ? `：${wikiQuery}` : ''}</div>
+              {wikiSuggestions.length ? wikiSuggestions.map((title, index) => (
+                <button key={title} className={index === wikiActiveIndex ? 'wiki-autocomplete-item active' : 'wiki-autocomplete-item'} onMouseDown={(event) => { event.preventDefault(); commitWikiLink(title); }}>
+                  {title}
+                </button>
+              )) : <div className="wiki-autocomplete-empty">没有匹配结果</div>}
+              <div className="wiki-autocomplete-empty">提示：输入 [[标题 触发补全，Esc 关闭</div>
+            </div>
+          )}
         </div>
-        {isPreviewVisible && (<><div className="editor-resizer" onMouseDown={startResize} role="separator" aria-orientation="vertical"><span /></div><article className="markdown-preview-pane" style={{ flexBasis: `${100 - editorWidth}%` }} dangerouslySetInnerHTML={{ __html: renderMarkdown(note.content ?? '', searchQuery) }} /></>)}
+        {isPreviewVisible && (
+          <>
+            <div className="editor-resizer" onMouseDown={startResize} role="separator" aria-orientation="vertical"><span /></div>
+            <article className="markdown-preview-pane" style={{ flexBasis: `${100 - editorWidth}%` }} dangerouslySetInnerHTML={{ __html: renderMarkdown(note.content ?? '', searchQuery) }} />
+          </>
+        )}
       </div>
       <footer className="document-statusbar">
         <span>字数 {meta.wordCount}</span>
@@ -256,7 +397,23 @@ export function Editor() {
         <span className="status-saved">● 已保存{jumpLine ? ` · 跳转到第 ${jumpLine} 行` : ''}</span>
         <span>最后编辑：{new Date(meta.updatedAt).toLocaleString('zh-CN')}</span>
       </footer>
-      {versionsOpen && (<aside className="note-properties-drawer"><div className="properties-header"><h3>历史版本</h3><button onClick={() => setVersionsOpen(false)}>×</button></div><div className="properties-content">{versions.length ? versions.map((version) => (<button key={version.id} className="property-row" onClick={() => restoreVersion(meta.id, version.id)}><div><div>{version.title}</div><small>{new Date(version.updatedAt).toLocaleString('zh-CN')}</small></div></button>)) : <p>暂无历史版本</p>}</div></aside>)}
+      {versionsOpen && (
+        <aside className="note-properties-drawer">
+          <div className="properties-header"><h3>历史版本</h3><button onClick={() => setVersionsOpen(false)}>×</button></div>
+          <div className="properties-content">
+            {versions.length ? versions.map((version) => (
+              <button key={version.id} className="property-row version-row" onClick={() => { void restoreVersion(meta.id, version.id); }}>
+                <div>
+                  <div className="version-row__title">{version.title}</div>
+                  <small>{new Date(version.updatedAt).toLocaleString('zh-CN')}</small>
+                  {version.summary ? <p className="version-row__summary">{version.summary}</p> : null}
+                </div>
+                <span className="version-row__arrow">↩</span>
+              </button>
+            )) : <p className="drawer-empty">暂无历史版本</p>}
+          </div>
+        </aside>
+      )}
       {isPropertiesOpen && (
         <aside className="note-properties-drawer">
           <div className="properties-header">
@@ -274,7 +431,28 @@ export function Editor() {
           </div>
         </aside>
       )}
-      {tagModalOpen && (<div className="tag-modal-backdrop" onClick={() => setTagModalOpen(false)}><div className="tag-modal" onClick={(event) => event.stopPropagation()}><div className="tag-modal-header"><h3>添加标签</h3><button onClick={() => setTagModalOpen(false)}>×</button></div><input value={tagDraft} onChange={(event) => setTagDraft(event.target.value)} placeholder="输入新标签名称" autoFocus /><div className="tag-modal-actions"><button className="ghost-btn" onClick={() => setTagModalOpen(false)}>取消</button><button className="primary-btn" onClick={() => addTag(tagDraft)}>添加</button></div></div></div>)}
+      {tagModalOpen && (
+        <div className="tag-modal-backdrop" onClick={() => setTagModalOpen(false)}>
+          <div className="tag-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="tag-modal-header"><h3>添加标签</h3><button onClick={() => setTagModalOpen(false)}>×</button></div>
+            <input value={tagDraft} onChange={(event) => setTagDraft(event.target.value)} placeholder="输入新标签名称" autoFocus />
+            <div className="tag-modal-actions">
+              <button className="ghost-btn" onClick={() => setTagModalOpen(false)}>取消</button>
+              <button className="primary-btn" onClick={() => {
+                const cleanTag = tagDraft.trim().replace(/^#/, '');
+                if (!cleanTag) return;
+                if (currentTags.includes(cleanTag)) {
+                  showToast('info', '标签已存在');
+                  return;
+                }
+                updateNote(meta.id, { tags: [...currentTags, cleanTag] });
+                setTagDraft('');
+                setTagModalOpen(false);
+              }}>添加</button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
