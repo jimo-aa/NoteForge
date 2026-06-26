@@ -98,6 +98,7 @@ export function useNoteStore() {
   }, [sortBy]);
 
   const filteredNotes = sortNotes(notes.filter((n) => {
+    // 搜索过滤
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       const inTitle = n.meta.title.toLowerCase().includes(q);
@@ -105,7 +106,15 @@ export function useNoteStore() {
       const inContent = n.content.toLowerCase().includes(q);
       if (!inTitle && !inTags && !inContent) return false;
     }
-    if (activeNotebook !== 'all' && n.meta.notebookId !== activeNotebook) return false;
+
+    // 笔记本过滤 - 修复：处理 notebookId 为 null 的情况
+    if (activeNotebook !== 'all') {
+      // 获取笔记的笔记本 ID，如果为 null 则使用 'default'
+      const noteNotebookId = n.meta.notebookId || 'default';
+      if (noteNotebookId !== activeNotebook) return false;
+    }
+
+    // 其他过滤条件
     if (currentFilter === 'favorites' && !n.meta.isFavorite) return false;
     if (currentFilter === 'pinned' && !n.meta.isPinned) return false;
     if (activeTags.length > 0 && !activeTags.every((tag) => n.meta.tags.includes(tag))) return false;
@@ -282,12 +291,21 @@ export function useNoteStore() {
   const loadCursor = useCallback((id: string) => safeRead<{ start: number; end: number } | null>(cursorKey(id), null), []);
   const loadRecovery = useCallback((_id: string) => null, []);
 
+  // 计算每个笔记本的笔记数
+  const notebooksWithCounts = notebooks.map((notebook) => {
+    if (notebook.id === 'all') {
+      return { ...notebook, noteCount: notes.length };
+    }
+    const count = notes.filter((n) => (n.meta.notebookId || 'default') === notebook.id).length;
+    return { ...notebook, noteCount: count };
+  });
+
   const tags = Array.from(new Set(notes.flatMap((n) => n.meta.tags)));
   const totalCount = notes.length;
   const favoriteCount = notes.filter((n) => n.meta.isFavorite).length;
   const searchResultCount = searchQuery ? filteredNotes.length : null;
 
-  return { notes, filteredNotes, currentNote, currentNoteId, notebooks, activeNotebook, currentFilter, searchQuery, sortBy, activeTags, isPreviewVisible, isGraphOpen, isPropertiesOpen, toasts, contextMenu, settingsOpen, isLoading, entityModal, totalCount, favoriteCount, searchResultCount, tags, setActiveNotebook, setCurrentFilter, setSearchQuery, setSortBy, setActiveTags, setIsPreviewVisible, setIsGraphOpen, setIsPropertiesOpen, setContextMenu, setSettingsOpen, openEntityModal, closeEntityModal, selectNote, createNote, updateNote, deleteNote, duplicateNote, toggleFavorite, togglePin, createNotebook, renameNotebook, deleteNotebook, refreshNotes, refreshNotebooks, showToast, setCurrentNoteId, saveDraft, loadDraft, clearDraft, loadVersions, restoreVersion, checkoutBranch, createBranch, createVersion, saveCursor, loadCursor, loadRecovery };
+  return { notes, filteredNotes, currentNote, currentNoteId, notebooks: notebooksWithCounts, activeNotebook, currentFilter, searchQuery, sortBy, activeTags, isPreviewVisible, isGraphOpen, isPropertiesOpen, toasts, contextMenu, settingsOpen, isLoading, entityModal, totalCount, favoriteCount, searchResultCount, tags, setActiveNotebook, setCurrentFilter, setSearchQuery, setSortBy, setActiveTags, setIsPreviewVisible, setIsGraphOpen, setIsPropertiesOpen, setContextMenu, setSettingsOpen, openEntityModal, closeEntityModal, selectNote, createNote, updateNote, deleteNote, duplicateNote, toggleFavorite, togglePin, createNotebook, renameNotebook, deleteNotebook, refreshNotes, refreshNotebooks, showToast, setCurrentNoteId, saveDraft, loadDraft, clearDraft, loadVersions, restoreVersion, checkoutBranch, createBranch, createVersion, saveCursor, loadCursor, loadRecovery };
 }
 
 export const NoteContext = createContext<NoteStore | null>(null);
