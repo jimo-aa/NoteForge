@@ -196,6 +196,22 @@ export function useNoteStore() {
     showToast('success', '已恢复历史版本');
     return true;
   }, [saveDraft, showToast, updateNote]);
+  const checkoutBranch = useCallback(async (id: string, branch: string) => {
+    const content = await tauriInvoke<string>('checkout_note_branch', { noteId: id, branch });
+    if (!content) return false;
+    updateNote(id, { content });
+    saveDraft(id, content);
+    showToast('success', `已切换到分支: ${branch}`);
+    return true;
+  }, [saveDraft, showToast, updateNote]);
+  const createBranch = useCallback(async (id: string, branch: string, fromCommit?: string) => {
+    const ok = await tauriInvoke<void>('create_note_branch', { noteId: id, branch, fromCommit });
+    if (ok === undefined) {
+      showToast('success', `已创建分支: ${branch}`);
+      return true;
+    }
+    return false;
+  }, [showToast]);
   const saveCursor = useCallback((id: string, range: { start: number; end: number }) => safeWrite(cursorKey(id), range), []);
   const loadCursor = useCallback((id: string) => safeRead<{ start: number; end: number } | null>(cursorKey(id), null), []);
   const loadRecovery = useCallback((_id: string) => null, []);
@@ -205,7 +221,7 @@ export function useNoteStore() {
   const favoriteCount = notes.filter((n) => n.meta.isFavorite).length;
   const searchResultCount = searchQuery ? filteredNotes.length : null;
 
-  return { notes, filteredNotes, currentNote, currentNoteId, notebooks, activeNotebook, currentFilter, searchQuery, sortBy, activeTags, isPreviewVisible, isGraphOpen, isPropertiesOpen, toasts, contextMenu, settingsOpen, isLoading, entityModal, totalCount, favoriteCount, searchResultCount, tags, setActiveNotebook, setCurrentFilter, setSearchQuery, setSortBy, setActiveTags, setIsPreviewVisible, setIsGraphOpen, setIsPropertiesOpen, setContextMenu, setSettingsOpen, openEntityModal, closeEntityModal, selectNote, createNote, updateNote, deleteNote, duplicateNote, toggleFavorite, togglePin, createNotebook, renameNotebook, deleteNotebook, refreshNotes, refreshNotebooks, showToast, setCurrentNoteId, saveDraft, loadDraft, clearDraft, loadVersions, restoreVersion, saveCursor, loadCursor, loadRecovery };
+  return { notes, filteredNotes, currentNote, currentNoteId, notebooks, activeNotebook, currentFilter, searchQuery, sortBy, activeTags, isPreviewVisible, isGraphOpen, isPropertiesOpen, toasts, contextMenu, settingsOpen, isLoading, entityModal, totalCount, favoriteCount, searchResultCount, tags, setActiveNotebook, setCurrentFilter, setSearchQuery, setSortBy, setActiveTags, setIsPreviewVisible, setIsGraphOpen, setIsPropertiesOpen, setContextMenu, setSettingsOpen, openEntityModal, closeEntityModal, selectNote, createNote, updateNote, deleteNote, duplicateNote, toggleFavorite, togglePin, createNotebook, renameNotebook, deleteNotebook, refreshNotes, refreshNotebooks, showToast, setCurrentNoteId, saveDraft, loadDraft, clearDraft, loadVersions, restoreVersion, checkoutBranch, createBranch, saveCursor, loadCursor, loadRecovery };
 }
 
 export const NoteContext = createContext<NoteStore | null>(null);

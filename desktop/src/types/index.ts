@@ -28,7 +28,6 @@ export interface Notebook {
 
 export type NoteFilter = 'all' | 'favorites' | 'pinned' | 'recent' | 'tag';
 export type SortOption = 'updated' | 'created' | 'title' | 'words';
-
 export type ThemeMode = 'light' | 'dark' | 'system';
 
 export interface ContextMenuState {
@@ -41,16 +40,9 @@ export interface ContextMenuState {
 }
 
 export type ToastType = 'success' | 'error' | 'info';
+export interface ToastMessage { id: number; type: ToastType; message: string; }
+export interface CreateNoteRequest { title: string; content: string; notebookId: string; tags: string[]; }
 
-export interface ToastMessage {
-  id: number;
-  type: ToastType;
-  message: string;
-}
-
-export interface CreateNoteRequest {
-  title: string;
-  content: string;
-  notebookId: string;
-  tags: string[];
-}
+export interface GitVersionEntry { id: string; title: string; updatedAt: number; summary?: string; branch: string; parentCount: number; }
+export interface GitBranchEntry { name: string; head: string | null; isCurrent: boolean; }
+export interface SearchResult { note_id: string; title: string; snippet: string; score: number; updated_at: number; }

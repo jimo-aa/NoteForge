@@ -1,6 +1,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import { useStore } from '../../stores/context';
 import { renderMarkdown } from '@/utils/markdown';
+import { VersionControlModal } from '@/components/Modals/VersionControlModal';
+
 
 const MARKDOWN_ACTIONS = [
   { label: 'B', title: '粗体', before: '**', after: '**', sample: '粗体' },
@@ -33,8 +35,9 @@ export function Editor() {
     saveDraft,
     loadDraft,
     clearDraft,
-    loadVersions,
     restoreVersion,
+    checkoutBranch,
+    createBranch,
     saveCursor,
     loadCursor,
     searchQuery,
@@ -50,7 +53,7 @@ export function Editor() {
   const [editorWidth, setEditorWidth] = useState(52);
   const [isResizing, setIsResizing] = useState(false);
   const [jumpLine, setJumpLine] = useState<number | null>(null);
-  const [versionsOpen, setVersionsOpen] = useState(false);
+  const [versionControlOpen, setVersionControlOpen] = useState(false);
   const [wikiQuery, setWikiQuery] = useState('');
   const [wikiSuggestions, setWikiSuggestions] = useState<string[]>([]);
   const [wikiOpen, setWikiOpen] = useState(false);
@@ -106,21 +109,6 @@ export function Editor() {
   }, [notes]);
 
   const wikiCandidates = useMemo(() => notes.map((item) => item.meta.title).filter(Boolean), [notes]);
-  const [versions, setVersions] = useState<Array<{ id: string; title: string; updatedAt: number; summary?: string }>>([]);
-  const [historyOpen, setHistoryOpen] = useState(false);
-
-  useEffect(() => {
-    let alive = true;
-    if (!note || !versionsOpen) {
-      setVersions([]);
-      return;
-    }
-    void (async () => {
-      const loaded = await loadVersions(note.meta.id);
-      if (alive) setVersions(loaded);
-    })();
-    return () => { alive = false; };
-  }, [loadVersions, note, versionsOpen]);
 
   const persistCursor = () => {
     const textarea = textareaRef.current;
@@ -151,7 +139,6 @@ export function Editor() {
     const cursor = restoreCursorRef.current;
     if (!textarea || !cursor) return;
     textarea.setSelectionRange(cursor.start, cursor.end);
-    restoreCursorRef.current = null;
   }, [note?.meta.id]);
 
   const openWikiSuggestions = () => {
@@ -326,7 +313,7 @@ export function Editor() {
           </button>
         ))}
         <button className="editor-tab add" onClick={() => setTagModalOpen(true)}>＋ 添加标签</button>
-        <button className="editor-tab add" onClick={() => setVersionsOpen((v) => !v)}>⏱ 历史版本 {versions.length ? `(${versions.length})` : ''}</button>
+        <button className="editor-tab add" onClick={() => setVersionControlOpen(true)}>⏱ 版本控制</button>
       </div>
       <header className="document-header">
         <input className="document-title" value={meta.title} onChange={(event) => updateNote(meta.id, { title: event.target.value })} />
@@ -352,9 +339,7 @@ export function Editor() {
       <div className={isPreviewVisible ? 'split-editor' : 'split-editor no-preview'}>
         <div className="markdown-editor-pane" style={{ flexBasis: isPreviewVisible ? `${editorWidth}%` : '100%' }}>
           <textarea
-            ref={(el) => {
-              textareaRef.current = el;
-            }}
+            ref={textareaRef}
             value={note.content ?? ''}
             onChange={(event) => {
               updateContent(event.target.value);
@@ -397,23 +382,15 @@ export function Editor() {
         <span className="status-saved">● 已保存{jumpLine ? ` · 跳转到第 ${jumpLine} 行` : ''}</span>
         <span>最后编辑：{new Date(meta.updatedAt).toLocaleString('zh-CN')}</span>
       </footer>
-      {versionsOpen && (
-        <aside className="note-properties-drawer">
-          <div className="properties-header"><h3>历史版本</h3><button onClick={() => setVersionsOpen(false)}>×</button></div>
-          <div className="properties-content">
-            {versions.length ? versions.map((version) => (
-              <button key={version.id} className="property-row version-row" onClick={() => { void restoreVersion(meta.id, version.id); }}>
-                <div>
-                  <div className="version-row__title">{version.title}</div>
-                  <small>{new Date(version.updatedAt).toLocaleString('zh-CN')}</small>
-                  {version.summary ? <p className="version-row__summary">{version.summary}</p> : null}
-                </div>
-                <span className="version-row__arrow">↩</span>
-              </button>
-            )) : <p className="drawer-empty">暂无历史版本</p>}
-          </div>
-        </aside>
-      )}
+      <VersionControlModal
+        open={versionControlOpen}
+        noteId={meta.id}
+        onClose={() => setVersionControlOpen(false)}
+        onCheckoutVersion={(commitId) => restoreVersion(meta.id, commitId)}
+        onCheckoutBranch={(branch) => checkoutBranch(meta.id, branch)}
+        onCreateBranch={(branch, fromCommit) => createBranch(meta.id, branch, fromCommit)}
+        onRestore={() => { /* note will be updated via store */ }}
+      />
       {isPropertiesOpen && (
         <aside className="note-properties-drawer">
           <div className="properties-header">
