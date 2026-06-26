@@ -43,7 +43,7 @@ impl LocalStorage {
 
              CREATE TABLE IF NOT EXISTS notes (
                  id             TEXT PRIMARY KEY,
-                 notebook_id    TEXT REFERENCES notebooks(id) ON DELETE SET NULL,
+                 notebook_id    TEXT NOT NULL DEFAULT 'default' REFERENCES notebooks(id) ON DELETE SET NULL,
                  title          TEXT NOT NULL DEFAULT '',
                  content        TEXT NOT NULL DEFAULT '',
                  content_plain  TEXT NOT NULL DEFAULT '',
@@ -104,6 +104,30 @@ impl LocalStorage {
         if !existing.iter().any(|c| c == "version") {
             self.conn.execute("ALTER TABLE notes ADD COLUMN version INTEGER NOT NULL DEFAULT 1", [])?;
         }
+        
+        // Ensure notebooks table has required columns
+        let mut stmt = self.conn.prepare("PRAGMA table_info(notebooks)")?;
+        let notebook_cols = stmt
+            .query_map([], |row| row.get::<_, String>(1))?
+            .collect::<Result<Vec<_>, _>>()?;
+        
+        if !notebook_cols.iter().any(|c| c == "color") {
+            self.conn.execute("ALTER TABLE notebooks ADD COLUMN color TEXT NOT NULL DEFAULT '#6366f1'", [])?;
+        }
+        if !notebook_cols.iter().any(|c| c == "created_at") {
+            self.conn.execute("ALTER TABLE notebooks ADD COLUMN created_at INTEGER NOT NULL DEFAULT 0", [])?;
+        }
+        if !notebook_cols.iter().any(|c| c == "updated_at") {
+            self.conn.execute("ALTER TABLE notebooks ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0", [])?;
+        }
+        
+        // Ensure default notebook exists
+        self.conn.execute(
+            "INSERT OR IGNORE INTO notebooks (id, name, icon, created_at, updated_at) 
+             VALUES ('default', '未分类', '📋', 0, 0)",
+            []
+        )?;
+        
         Ok(())
     }
 
@@ -123,8 +147,7 @@ impl LocalStorage {
 
     pub fn get_notebook(&self, id: &str) -> Result<Notebook, Box<dyn std::error::Error>> {
         self.conn.query_row(
-            "SELECT n.id, n.name, n.icon, n.color, n.parent_id, n.sort_order,
-                    COUNT(nt.id) as note_count, n.created_at, n.updated_at
+            "SELECT n.id, n.name, n.icon, n.color, COUNT(nt.id) as note_count, n.created_at, n.updated_at
              FROM notebooks n
              LEFT JOIN notes nt ON nt.notebook_id = n.id AND nt.is_deleted = 0
              WHERE n.id = ?1
@@ -135,12 +158,12 @@ impl LocalStorage {
                     id: row.get(0)?,
                     name: row.get(1)?,
                     icon: row.get(2)?,
-                    color: row.get(3)?,
-                    parent_id: row.get(4)?,
-                    sort_order: row.get(5)?,
-                    note_count: row.get::<_, i64>(6)? as u32,
-                    created_at: row.get::<_, i64>(7)? as u64,
-                    updated_at: row.get::<_, i64>(8)? as u64,
+                    color: row.get::<_, String>(3)?,
+                    parent_id: None,
+                    sort_order: 0,
+                    note_count: row.get::<_, i64>(4)? as u32,
+                    created_at: row.get::<_, i64>(5)? as u64,
+                    updated_at: row.get::<_, i64>(6)? as u64,
                 })
             },
         ).map_err(|e| e.into())
@@ -148,12 +171,11 @@ impl LocalStorage {
 
     pub fn list_notebooks(&self) -> Result<Vec<Notebook>, Box<dyn std::error::Error>> {
         let mut stmt = self.conn.prepare(
-            "SELECT n.id, n.name, n.icon, n.color, n.parent_id, n.sort_order,
-                    COUNT(nt.id) as note_count, n.created_at, n.updated_at
+            "SELECT n.id, n.name, n.icon, n.color, COUNT(nt.id) as note_count, n.created_at, n.updated_at
              FROM notebooks n
              LEFT JOIN notes nt ON nt.notebook_id = n.id AND nt.is_deleted = 0
              GROUP BY n.id
-             ORDER BY n.sort_order ASC, n.created_at ASC"
+             ORDER BY n.created_at ASC"
         )?;
 
         let notebooks = stmt.query_map([], |row| {
@@ -161,16 +183,33 @@ impl LocalStorage {
                 id: row.get(0)?,
                 name: row.get(1)?,
                 icon: row.get(2)?,
-                color: row.get(3)?,
-                parent_id: row.get(4)?,
-                sort_order: row.get(5)?,
-                note_count: row.get::<_, i64>(6)? as u32,
-                created_at: row.get::<_, i64>(7)? as u64,
-                updated_at: row.get::<_, i64>(8)? as u64,
+                color: row.get::<_, String>(3)?,
+                parent_id: None,
+                sort_order: 0,
+                note_count: row.get::<_, i64>(4)? as u32,
+                created_at: row.get::<_, i64>(5)? as u64,
+                updated_at: row.get::<_, i64>(6)? as u64,
             })
         })?.collect::<Result<Vec<_>, _>>()?;
 
         Ok(notebooks)
+    }
+
+    pub fn rename_notebook(&self, id: &str, name: &str) -> Result<Notebook, Box<dyn std::error::Error>> {
+        let now = types::now_ms();
+        self.conn.execute(
+            "UPDATE notebooks SET name = ?1, updated_at = ?2 WHERE id = ?3",
+            params![name, now, id],
+        )?;
+        self.get_notebook(id)
+    }
+
+    pub fn delete_notebook(&self, id: &str) -> Result<(), Box<dyn std::error::Error>> {
+        self.conn.execute(
+            "DELETE FROM notebooks WHERE id = ?1",
+            params![id],
+        )?;
+        Ok(())
     }
 
     // ============================================================
@@ -183,11 +222,14 @@ impl LocalStorage {
         let plain = crate::md_engine::MarkdownEngine::extract_plain_text(&req.content);
         let wc = crate::md_engine::MarkdownEngine::count_words(&req.content);
 
+        // 处理 notebook_id：如果为空则使用 'default'
+        let notebook_id = req.notebook_id.as_deref().unwrap_or("default");
+
         self.conn.execute(
             "INSERT INTO notes (id, notebook_id, title, content, content_plain,
                                 word_count, created_at, updated_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-            params![id, req.notebook_id, req.title, req.content, plain, wc, now, now],
+            params![id, notebook_id, req.title, req.content, plain, wc, now, now],
         )?;
 
         // 处理标签

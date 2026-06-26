@@ -1,5 +1,6 @@
 import { useStore } from '@/stores/context';
 import { formatTime } from '@/utils/markdown';
+import { Icon } from '@/components/Common/Icon';
 
 export function NoteList() {
   const store = useStore();
@@ -39,7 +40,7 @@ export function NoteList() {
         >
           <div className="note-card__title">
             <strong>{highlight(note.meta.title, store.searchQuery)}</strong>
-            <div>{note.meta.isPinned ? '📌' : note.meta.isFavorite ? '⭐' : ''}</div>
+            <div>{note.meta.isPinned ? <Icon type="gudin" /> : note.meta.isFavorite ? <Icon type="shoucang" /> : ''}</div>
           </div>
           <div className="preview">{note.content.slice(0, 120)}</div>
           <div className="note-card__meta">

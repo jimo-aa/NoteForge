@@ -1,7 +1,8 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '@/stores/context';
+import { Icon } from '@/components/Common/Icon';
 
-type MenuAction = { label: string; action: () => void | Promise<void>; danger?: boolean } | null;
+type MenuAction = { label: string | React.ReactNode; action: () => void | Promise<void>; danger?: boolean } | null;
 
 export function ContextMenu() {
   const store = useStore();
@@ -17,11 +18,11 @@ export function ContextMenu() {
       const note = store.notes.find((n) => n.meta.id === noteId);
       if (!note) return [];
       return [
-        { label: '✏️ 重命名', action: () => run(() => store.openEntityModal({ open: true, mode: 'rename-note', title: '重命名文档', label: '文档标题', value: note.meta.title, confirmText: '保存', targetId: noteId })) },
-        { label: note.meta.isPinned ? '📌 取消固定' : '📌 固定', action: () => run(() => { store.updateNote(noteId, { isPinned: !note.meta.isPinned }); store.showToast('info', note.meta.isPinned ? '已取消固定' : '已固定'); }) },
-        { label: note.meta.isFavorite ? '⭐ 取消收藏' : '⭐ 收藏', action: () => run(() => { store.updateNote(noteId, { isFavorite: !note.meta.isFavorite }); store.showToast('success', note.meta.isFavorite ? '已取消收藏' : '⭐ 已收藏'); }) },
+        { label: <><Icon type="rename" /> 重命名</>, action: () => run(() => store.openEntityModal({ open: true, mode: 'rename-note', title: '重命名文档', label: '文档标题', value: note.meta.title, confirmText: '保存', targetId: noteId })) },
+        { label: note.meta.isPinned ? <><Icon type="gudin" /> 取消固定</> : <><Icon type="gudin" /> 固定</>, action: () => run(() => { store.updateNote(noteId, { isPinned: !note.meta.isPinned }); store.showToast('info', note.meta.isPinned ? '已取消固定' : '已固定'); }) },
+        { label: note.meta.isFavorite ? <><Icon type="shoucang" /> 取消收藏</> : <><Icon type="shoucang" /> 收藏</>, action: () => run(() => { store.updateNote(noteId, { isFavorite: !note.meta.isFavorite }); store.showToast('success', note.meta.isFavorite ? '已取消收藏' : '已收藏'); }) },
         null,
-        { label: '🗑 删除文档', action: () => run(() => store.deleteNote(noteId)), danger: true },
+        { label: <><Icon type="delete" /> 删除文档</>, action: () => run(() => store.deleteNote(noteId)), danger: true },
       ];
     }
 
@@ -29,9 +30,9 @@ export function ContextMenu() {
       const notebook = store.notebooks.find((n) => n.id === notebookId);
       if (!notebook) return [];
       return [
-        { label: '✏️ 重命名', action: () => run(() => store.openEntityModal({ open: true, mode: 'rename-notebook', title: '重命名笔记本', label: '笔记本名称', value: notebook.name, confirmText: '保存', targetId: notebookId })) },
+        { label: <><Icon type="rename" /> 重命名</>, action: () => run(() => store.openEntityModal({ open: true, mode: 'rename-notebook', title: '重命名笔记本', label: '笔记本名称', value: notebook.name, confirmText: '保存', targetId: notebookId })) },
         null,
-        { label: '🗑 删除笔记本', action: () => run(() => void store.deleteNotebook(notebookId)), danger: true },
+        { label: <><Icon type="delete" /> 删除笔记本</>, action: () => run(() => void store.deleteNotebook(notebookId)), danger: true },
       ];
     }
 

@@ -208,8 +208,18 @@ pub fn list_notes(state: State<'_, AppState>) -> Result<Vec<Note>, String> {
 #[tauri::command] pub fn search_notes(state: State<'_, AppState>, query: String) -> Result<Vec<SearchResult>, String> { state.core.lock().map_err(|e| e.to_string())?.search.search(&query, 50).map_err(|e| e.to_string()) }
 #[tauri::command] pub fn list_notebooks(state: State<'_, AppState>) -> Result<Vec<Notebook>, String> { state.core.lock().map_err(|e| e.to_string())?.storage.list_notebooks().map_err(|e| e.to_string()) }
 #[tauri::command] pub fn create_notebook(state: State<'_, AppState>, name: String) -> Result<Notebook, String> { state.core.lock().map_err(|e| e.to_string())?.storage.create_notebook(&name).map_err(|e| e.to_string()) }
-#[tauri::command] pub fn rename_notebook(_state: State<'_, AppState>, _id: String, _name: String) -> Result<Notebook, String> { Err("storage missing rename_notebook".to_string()) }
-#[tauri::command] pub fn delete_notebook(_state: State<'_, AppState>, _id: String) -> Result<bool, String> { Err("storage missing delete_notebook".to_string()) }
+#[tauri::command]
+pub fn rename_notebook(state: State<'_, AppState>, id: String, name: String) -> Result<Notebook, String> {
+    let core = state.core.lock().map_err(|e| e.to_string())?;
+    core.storage.rename_notebook(&id, &name).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn delete_notebook(state: State<'_, AppState>, id: String) -> Result<bool, String> {
+    let core = state.core.lock().map_err(|e| e.to_string())?;
+    core.storage.delete_notebook(&id).map_err(|e| e.to_string())?;
+    Ok(true)
+}
 #[tauri::command] pub fn list_tags(state: State<'_, AppState>) -> Result<Vec<String>, String> { Ok(state.core.lock().map_err(|e| e.to_string())?.storage.list_tags().map_err(|e| e.to_string())?.into_iter().map(|t| t.name).collect()) }
 
 #[tauri::command] pub fn list_note_versions(state: State<'_, AppState>, note_id: String) -> Result<Vec<GitVersionEntry>, String> {

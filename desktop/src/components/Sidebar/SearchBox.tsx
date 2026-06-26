@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useStore } from '@/stores/context';
+import { Icon } from '@/components/Common/Icon';
 
 type SearchResultItem = {
   id: string;
@@ -77,7 +78,7 @@ export function SearchBox() {
     <div className="search-modal-backdrop" onMouseDown={close}>
       <div className="search-modal" onMouseDown={(e) => e.stopPropagation()}>
         <div className="search-modal__header">
-          <span className="search-modal__icon">🔍</span>
+          <span className="search-modal__icon"><Icon type="search" /></span>
           <input
             ref={inputRef}
             autoFocus
@@ -140,7 +141,7 @@ export function SearchBox() {
   return (
     <>
       <button className="search-trigger" type="button" onClick={openSearch}>
-        <span className="icon">🔍</span>
+        <span className="icon"><Icon type="search" /></span>
         <span className="search-trigger__text">搜索笔记...</span>
         <span className="search-shortcut">⌘K</span>
       </button>

@@ -12,13 +12,19 @@ use serde::{Deserialize, Serialize};
 pub struct NoteMeta {
     pub id: String,
     pub title: String,
+    #[serde(rename = "notebookId")]
     pub notebook_id: Option<String>,
     pub tags: Vec<String>,
+    #[serde(rename = "isPinned")]
     pub is_pinned: bool,
+    #[serde(rename = "isFavorite")]
     pub is_favorite: bool,
+    #[serde(rename = "wordCount")]
     pub word_count: u32,
     pub version: u32,
+    #[serde(rename = "createdAt")]
     pub created_at: u64,
+    #[serde(rename = "updatedAt")]
     pub updated_at: u64,
 }
 
@@ -35,6 +41,7 @@ pub struct Note {
 pub struct CreateNoteRequest {
     pub title: String,
     pub content: String,
+    #[serde(alias = "notebookId")]
     pub notebook_id: Option<String>,
     pub tags: Vec<String>,
 }
@@ -44,9 +51,12 @@ pub struct CreateNoteRequest {
 pub struct UpdateNoteRequest {
     pub title: Option<String>,
     pub content: Option<String>,
+    #[serde(alias = "notebookId")]
     pub notebook_id: Option<String>,
     pub tags: Option<Vec<String>>,
+    #[serde(alias = "isPinned")]
     pub is_pinned: Option<bool>,
+    #[serde(alias = "isFavorite")]
     pub is_favorite: Option<bool>,
 }
 
@@ -60,10 +70,15 @@ pub struct Notebook {
     pub name: String,
     pub icon: String,
     pub color: String,
+    #[serde(rename = "parentId")]
     pub parent_id: Option<String>,
+    #[serde(rename = "noteCount")]
     pub note_count: u32,
+    #[serde(rename = "sortOrder")]
     pub sort_order: i32,
+    #[serde(rename = "createdAt")]
     pub created_at: u64,
+    #[serde(rename = "updatedAt")]
     pub updated_at: u64,
 }
 

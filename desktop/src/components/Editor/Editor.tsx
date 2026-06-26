@@ -3,6 +3,7 @@ import { useStore } from '../../stores/context';
 import { renderMarkdown } from '@/utils/markdown';
 import { VersionControlModal } from '@/components/Modals/VersionControlModal';
 import { AdvancedFeaturesToolbar } from '@/components/Modals/AdvancedFeaturesToolbar';
+import { Icon } from '@/components/Common/Icon';
 
 
 const MARKDOWN_ACTIONS = [
@@ -294,7 +295,6 @@ export function Editor() {
     return (
       <section className="editor-workspace">
         <div className="empty-state">
-          <div className="icon">📝</div>
           <h2>请选择左侧笔记开始编辑</h2>
           <p>这里会呈现标签、Markdown 编辑、实时预览与属性信息。</p>
         </div>
@@ -319,8 +319,8 @@ export function Editor() {
       <header className="document-header">
         <input className="document-title" value={meta.title} onChange={(event) => updateNote(meta.id, { title: event.target.value })} />
         <div className="document-actions">
-          <button className={meta.isFavorite ? 'state-button active' : 'state-button'} onClick={() => toggleFavorite(meta.id)} title={meta.isFavorite ? '取消收藏' : '收藏'}><span>☆</span></button>
-          <button className={meta.isPinned ? 'state-button active' : 'state-button'} onClick={() => togglePin(meta.id)} title={meta.isPinned ? '取消固定' : '固定'}><span>📌</span></button>
+          <button className={meta.isFavorite ? 'state-button active' : 'state-button'} onClick={() => toggleFavorite(meta.id)} title={meta.isFavorite ? '取消收藏' : '收藏'}><Icon type="shoucang" /></button>
+          <button className={meta.isPinned ? 'state-button active' : 'state-button'} onClick={() => togglePin(meta.id)} title={meta.isPinned ? '取消固定' : '固定'}><Icon type="gudin" /></button>
           <span className="document-divider" />
           <button className="plain-action" onClick={() => setIsPropertiesOpen(true)} title="属性">i</button>
           <button className="plain-action" onClick={() => { clearDraft(meta.id); showToast('success', '草稿已清除'); }} title="清除草稿">↺</button>

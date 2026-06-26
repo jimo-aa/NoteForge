@@ -5,11 +5,13 @@ import { Sidebar } from '@/components/Sidebar/Sidebar';
 import { NoteList } from '@/components/Sidebar/NoteList';
 import { Editor } from '@/components/Editor/Editor';
 import { NewNoteModal } from '@/components/Modals/NewNoteModal';
+import { NotebookModal } from '@/components/Modals/NotebookModal';
 import { ContextMenu } from '@/components/Common/ContextMenu';
 import { Toast } from '@/components/Common/Toast';
 import { GraphView } from '@/components/Common/GraphView';
 import { EntityModal } from '@/components/Modals/EntityModal';
 import { AdvancedVersioningPanel } from '@/components/Features/AdvancedVersioningPanel';
+import type { NotebookModalState } from '@/components/Modals/NotebookModal';
 
 async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T | null> {
   try {
@@ -24,6 +26,12 @@ export default function App() {
   const store = useStore();
   const [newNoteOpen, setNewNoteOpen] = useState(false);
   const [advancedVersioningOpen, setAdvancedVersioningOpen] = useState(false);
+  const [notebookModal, setNotebookModal] = useState<NotebookModalState>({
+    open: false,
+    mode: null,
+    title: '',
+    value: '',
+  });
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -60,22 +68,60 @@ export default function App() {
     return () => { void unlisten?.(); };
   }, [store]);
 
+  const handleOpenNotebookModal = () => {
+    setNotebookModal({
+      open: true,
+      mode: 'create',
+      title: '新建笔记本',
+      value: '',
+    });
+  };
+
+  const handleConfirmNotebook = async (name: string, icon?: string) => {
+    if (notebookModal.mode === 'create') {
+      const result = await store.createNotebook(name);
+      if (result) {
+        setNotebookModal({ open: false, mode: null, title: '', value: '' });
+      }
+    } else if (notebookModal.mode === 'rename' && notebookModal.notebookId) {
+      const result = await store.renameNotebook(notebookModal.notebookId, name);
+      if (result) {
+        setNotebookModal({ open: false, mode: null, title: '', value: '' });
+      }
+    }
+  };
+
   return (
     <div className="app-shell">
-      <Sidebar onNewNote={() => setNewNoteOpen(true)} />
+      <Sidebar onNewNote={() => setNewNoteOpen(true)} onNewNotebook={handleOpenNotebookModal} />
       <main className="main-panel"><div className="main-surface"><div className="content-layout"><section className="note-list-column"><NoteList /></section><section className="preview-column"><Editor /></section></div></div></main>
-      <NewNoteModal open={newNoteOpen} notebooks={store.notebooks} onClose={() => setNewNoteOpen(false)} onCreate={({ title, content, notebookId, tags }) => { store.createNote(title, content, notebookId, tags); setNewNoteOpen(false); }} />
+      <NewNoteModal open={newNoteOpen} notebooks={store.notebooks} onClose={() => setNewNoteOpen(false)} onCreate={async ({ title, content, notebookId, tags }) => { const result = await store.createNote(title, content, notebookId, tags); if (result) { store.showToast('success', '✓ 已创建笔记'); setNewNoteOpen(false); } else { store.showToast('error', '创建笔记失败，请重试'); } }} />
+      <NotebookModal state={notebookModal} onClose={() => setNotebookModal({ open: false, mode: null, title: '', value: '' })} onConfirm={handleConfirmNotebook} />
       <EntityModal state={store.entityModal} onClose={store.closeEntityModal} onConfirm={async (value) => {
-        if (!value) return;
+        if (!value) {
+          store.showToast('error', '输入内容不能为空');
+          return;
+        }
         const targetId = store.entityModal.targetId;
-        if (store.entityModal.mode === 'create-notebook') await store.createNotebook(value);
-        if (store.entityModal.mode === 'rename-notebook' && targetId) await store.renameNotebook(targetId, value);
-        if (store.entityModal.mode === 'rename-note' && targetId) store.updateNote(targetId, { title: value });
+        if (store.entityModal.mode === 'create-notebook') {
+          const result = await store.createNotebook(value);
+          if (!result) {
+            store.showToast('error', '创建笔记本失败，请检查后端服务');
+          }
+        } else if (store.entityModal.mode === 'rename-notebook' && targetId) {
+          const result = await store.renameNotebook(targetId, value);
+          if (!result) {
+            store.showToast('error', '重命名笔记本失败');
+          }
+        } else if (store.entityModal.mode === 'rename-note' && targetId) {
+          store.updateNote(targetId, { title: value });
+          store.showToast('success', '✏️ 已重命名笔记');
+        }
         store.closeEntityModal();
       }} />
-      {advancedVersioningOpen && store.selectedNoteId && (
+      {advancedVersioningOpen && store.currentNoteId && (
         <AdvancedVersioningPanel 
-          noteId={store.selectedNoteId} 
+          noteId={store.currentNoteId} 
           onClose={() => setAdvancedVersioningOpen(false)}
         />
       )}

@@ -9,7 +9,8 @@ async function tauriInvoke<T>(cmd: string, args?: Record<string, unknown>): Prom
   try {
     const { invoke } = await import('@tauri-apps/api/core');
     return await invoke<T>(cmd, args);
-  } catch {
+  } catch (error) {
+    console.error(`[Tauri API Error] ${cmd}:`, error);
     return null;
   }
 }
@@ -58,7 +59,12 @@ export function useNoteStore() {
 
   const refreshNotebooks = useCallback(async () => {
     const backendNotebooks = await tauriInvoke<Notebook[]>('list_notebooks');
-    if (backendNotebooks) setNotebooks([ALL_NOTEBOOK, ...backendNotebooks]);
+    if (backendNotebooks) {
+      setNotebooks([ALL_NOTEBOOK, ...backendNotebooks]);
+    } else {
+      console.warn('[refreshNotebooks] Failed to fetch notebooks from backend');
+      setNotebooks([ALL_NOTEBOOK]);
+    }
   }, []);
 
   const refreshNotes = useCallback(async () => {
@@ -70,7 +76,6 @@ export function useNoteStore() {
   }, []);
 
   useEffect(() => { void (async () => { await Promise.all([refreshNotes(), refreshNotebooks()]); setIsLoading(false); })(); }, [refreshNotes, refreshNotebooks]);
-  useEffect(() => { void tauriInvoke('set_last_note', { id: currentNoteId }); }, [currentNoteId]);
   useEffect(() => { void refreshNotebooks(); }, [notes, refreshNotebooks]);
 
   useEffect(() => {
@@ -111,15 +116,27 @@ export function useNoteStore() {
   const selectNote = useCallback((id: string) => setCurrentNoteId(id), []);
 
   const createNote = useCallback(async (title: string, content: string, notebookId: string, tags: string[]) => {
-    const note = await tauriInvoke<Note>('create_note', { request: { title, content, notebookId, tags } });
-    if (note) {
-      setNotes((prev) => [note, ...prev.filter((item) => item.meta.id !== note.meta.id)]);
-      setCurrentNoteId(note.meta.id);
-      safeWrite(draftKey(note.meta.id), content);
-      safeWrite(autosaveKey(note.meta.id), { content, title, updatedAt: Date.now() });
-      return note;
+    try {
+      // 确保 notebookId 总是有值，默认使用 'default'
+      const finalNotebookId = notebookId && notebookId !== 'all' ? notebookId : 'default';
+      
+      const note = await tauriInvoke<Note>('create_note', { 
+        request: { title, content, notebook_id: finalNotebookId, tags } 
+      });
+      
+      if (note) {
+        setNotes((prev) => [note, ...prev.filter((item) => item.meta.id !== note.meta.id)]);
+        setCurrentNoteId(note.meta.id);
+        safeWrite(draftKey(note.meta.id), content);
+        safeWrite(autosaveKey(note.meta.id), { content, title, updatedAt: Date.now() });
+        return note;
+      }
+      console.warn('[createNote] Backend returned null for note creation');
+      return null;
+    } catch (error) {
+      console.error('[createNote] Error:', error);
+      return null;
     }
-    return null;
   }, []);
 
   const scheduleAutosave = useCallback((id: string, title: string, content: string) => {
@@ -167,17 +184,58 @@ export function useNoteStore() {
       return null;
     }
 
-    const notebook = await tauriInvoke<Notebook>('create_notebook', { name: title });
-    if (notebook) {
-      await refreshNotebooks();
-      showToast('success', '📒 已创建笔记本');
-      return notebook;
+    try {
+      const notebook = await tauriInvoke<Notebook>('create_notebook', { name: title });
+      if (notebook) {
+        await refreshNotebooks();
+        showToast('success', '📒 已创建笔记本');
+        return notebook;
+      }
+      console.warn('[createNotebook] Backend returned null');
+      showToast('error', '创建笔记本失败：后端未响应');
+      return null;
+    } catch (error) {
+      console.error('[createNotebook] Error:', error);
+      showToast('error', `创建笔记本失败：${error instanceof Error ? error.message : '未知错误'}`);
+      return null;
     }
-    showToast('error', '创建笔记本失败，请重试');
-    return null;
   }, [refreshNotebooks, showToast]);
-  const renameNotebook = useCallback(async (id: string, name: string) => { const notebook = await tauriInvoke<Notebook>('rename_notebook', { id, name }); if (notebook) { await refreshNotebooks(); showToast('success', '✏️ 已重命名'); } return notebook; }, [refreshNotebooks, showToast]);
-  const deleteNotebook = useCallback(async (id: string) => { const ok = await tauriInvoke<boolean>('delete_notebook', { id }); if (ok !== false) { await refreshNotes(); await refreshNotebooks(); if (activeNotebook === id) setActiveNotebook('all'); showToast('success', '🗑 已删除笔记本'); return true; } return false; }, [activeNotebook, refreshNotes, refreshNotebooks, showToast]);
+
+  const renameNotebook = useCallback(async (id: string, name: string) => {
+    try {
+      const notebook = await tauriInvoke<Notebook>('rename_notebook', { id, name });
+      if (notebook) {
+        await refreshNotebooks();
+        showToast('success', '✏️ 已重命名笔记本');
+        return notebook;
+      }
+      showToast('error', '重命名笔记本失败');
+      return null;
+    } catch (error) {
+      console.error('[renameNotebook] Error:', error);
+      showToast('error', `重命名失败：${error instanceof Error ? error.message : '未知错误'}`);
+      return null;
+    }
+  }, [refreshNotebooks, showToast]);
+
+  const deleteNotebook = useCallback(async (id: string) => {
+    try {
+      const ok = await tauriInvoke<boolean>('delete_notebook', { id });
+      if (ok) {
+        await refreshNotes();
+        await refreshNotebooks();
+        if (activeNotebook === id) setActiveNotebook('all');
+        showToast('success', '🗑️ 已删除笔记本');
+        return true;
+      }
+      showToast('error', '删除笔记本失败');
+      return false;
+    } catch (error) {
+      console.error('[deleteNotebook] Error:', error);
+      showToast('error', `删除失败：${error instanceof Error ? error.message : '未知错误'}`);
+      return false;
+    }
+  }, [activeNotebook, refreshNotes, refreshNotebooks, showToast]);
   const openEntityModal = useCallback((next: EntityModalState) => setEntityModal(next), []);
   const closeEntityModal = useCallback(() => setEntityModal({ open: false, mode: null, title: '', label: '', value: '', confirmText: '确定', targetId: null }), []);
 
