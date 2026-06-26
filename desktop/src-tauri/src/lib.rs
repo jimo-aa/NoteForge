@@ -48,9 +48,14 @@ pub fn run() {
             commands::list_tags,
             commands::list_note_versions,
             commands::list_note_branches,
+            commands::create_note_version,
             commands::checkout_note_version,
             commands::checkout_note_branch,
             commands::create_note_branch,
+            commands::delete_note_branch,
+            commands::get_note_version_content,
+            commands::compare_note_versions,
+            commands::delete_note_version,
         ])
         .run(tauri::generate_context!())
         .expect("启动 NoteForge 失败");

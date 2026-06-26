@@ -68,20 +68,75 @@ impl GitHistory {
 
     fn commit_from_head(&self, note_id: &str, branch: &str, title: &str, content: &str) -> Result<String, git2::Error> {
         let file_path = self.ensure_note_path(note_id)?;
-        fs::write(&file_path, content).map_err(|e| git2::Error::from_str(&e.to_string()))?;
+        
+        fs::write(&file_path, content)
+            .map_err(|e| git2::Error::from_str(&e.to_string()))?;
+        
         let mut index = self.repo.index()?;
-        index.add_path(Path::new(&format!("notes/{}.md", note_id)))?;
+        let note_file = format!("notes/{}.md", note_id);
+        
+        index.add_path(Path::new(&note_file))?;
         index.write()?;
+        
         let tree_id = index.write_tree()?;
         let tree = self.repo.find_tree(tree_id)?;
         let sig = self.signature()?;
         let branch_ref = self.branch_ref(note_id, branch);
-        let parent = self.repo.find_reference(&branch_ref).ok().and_then(|r| r.target()).and_then(|oid| self.repo.find_commit(oid).ok());
+        
+        let parent = self.repo.find_reference(&branch_ref)
+            .ok()
+            .and_then(|r| r.target())
+            .and_then(|oid| self.repo.find_commit(oid).ok());
+        
         let message = format!("note: {} [{}]", title, branch);
+        
         let oid = match parent {
-            Some(parent_commit) => self.repo.commit(Some(&branch_ref), &sig, &sig, &message, &tree, &[&parent_commit])?,
-            None => self.repo.commit(Some(&branch_ref), &sig, &sig, &message, &tree, &[])?
+            Some(parent_commit) => {
+                let parent_tree = parent_commit.tree()?;
+                
+                if tree_id == parent_tree.id() {
+                    let mut index = self.repo.index()?;
+                    index.clear()?;
+                    index.write()?;
+                    
+                    fs::write(&file_path, format!("{}\n", content))
+                        .map_err(|e| git2::Error::from_str(&e.to_string()))?;
+                    
+                    index.add_path(Path::new(&note_file))?;
+                    index.write()?;
+                    
+                    let new_tree_id = index.write_tree()?;
+                    let new_tree = self.repo.find_tree(new_tree_id)?;
+                    
+                    self.repo.commit(
+                        Some(&branch_ref),
+                        &sig,
+                        &sig,
+                        &message,
+                        &new_tree,
+                        &[&parent_commit]
+                    )?
+                } else {
+                    self.repo.commit(
+                        Some(&branch_ref),
+                        &sig,
+                        &sig,
+                        &message,
+                        &tree,
+                        &[&parent_commit]
+                    )?
+                }
+            },
+            None => self.repo.commit(
+                Some(&branch_ref),
+                &sig,
+                &sig,
+                &message,
+                &tree,
+                &[]
+            )?
         };
+        
         self.set_current_branch(note_id, branch)?;
         Ok(oid.to_string())
     }
@@ -163,5 +218,61 @@ impl GitHistory {
         let entry = tree.get_path(path)?;
         let blob = self.repo.find_blob(entry.id())?;
         Ok(String::from_utf8_lossy(blob.content()).to_string())
+    }
+
+    pub fn delete_branch(&self, note_id: &str, branch: &str) -> Result<(), git2::Error> {
+        let branch_ref = self.branch_ref(note_id, branch);
+        self.repo.find_branch(&branch_ref, BranchType::Local)?.delete()?;
+        Ok(())
+    }
+
+    pub fn get_branch_commits(&self, note_id: &str, branch: &str) -> Result<Vec<GitVersionEntry>, git2::Error> {
+        let refname = self.branch_ref(note_id, branch);
+        let mut revwalk = self.repo.revwalk()?;
+        if let Ok(reference) = self.repo.find_reference(&refname) {
+            if let Some(oid) = reference.target() { revwalk.push(oid)?; }
+        }
+        let mut entries = Vec::new();
+        for oid in revwalk.flatten() {
+            let commit = self.repo.find_commit(oid)?;
+            entries.push(GitVersionEntry {
+                id: oid.to_string(),
+                title: commit.summary().unwrap_or("version").to_string(),
+                updated_at: commit.time().seconds().max(0) as u64 * 1000,
+                summary: commit.message().unwrap_or("").to_string(),
+                branch: branch.to_string(),
+                parent_count: commit.parent_count() as u32,
+            });
+        }
+        Ok(entries)
+    }
+
+    pub fn delete_version(&self, note_id: &str, commit_id: &str) -> Result<bool, git2::Error> {
+        let oid = Oid::from_str(commit_id).map_err(|_| git2::Error::from_str("invalid commit id"))?;
+        let _commit = self.repo.find_commit(oid)?;
+        
+        let tag_name = format!("notes/{}/deleted/{}", note_id, commit_id);
+        self.repo.tag_lightweight(&tag_name, &self.repo.find_object(oid, None)?, false)?;
+        
+        Ok(true)
+    }
+
+    pub fn list_deleted_versions(&self, note_id: &str) -> Result<Vec<String>, git2::Error> {
+        let prefix = format!("notes/{}/deleted/", note_id);
+        let mut deleted = Vec::new();
+        
+        for name in self.repo.tag_names(None)?.iter().flatten() {
+            if name.starts_with(&prefix) {
+                let commit_id = name.trim_start_matches(&prefix).to_string();
+                deleted.push(commit_id);
+            }
+        }
+        
+        Ok(deleted)
+    }
+
+    pub fn is_version_deleted(&self, note_id: &str, commit_id: &str) -> Result<bool, git2::Error> {
+        let tag_name = format!("notes/{}/deleted/{}", note_id, commit_id);
+        Ok(self.repo.find_reference(&format!("refs/tags/{}", tag_name)).is_ok())
     }
 }

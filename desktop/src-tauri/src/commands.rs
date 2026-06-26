@@ -51,7 +51,6 @@ pub fn create_note(state: State<'_, AppState>, request: CreateNoteRequest) -> Re
     let note = core.storage.create_note(&request).map_err(|e| e.to_string())?;
     let _ = core.search.add_note(&note.meta.id, &note.meta.title, &note.content, &note.meta.tags, note.meta.updated_at);
     drop(core);
-    if let Ok(git) = state.git.lock() { if let Some(history) = git.as_ref() { let _ = history.commit_note(&note.meta.id, &note.meta.title, &note.content); } }
     Ok(note)
 }
 
@@ -72,7 +71,6 @@ pub fn update_note(state: State<'_, AppState>, id: String, title: Option<String>
     let note = core.storage.update_note(&id, &next).map_err(|e| e.to_string())?;
     if note.content != current.content || note.meta.title != current.meta.title { let _ = core.search.add_note(&note.meta.id, &note.meta.title, &note.content, &note.meta.tags, note.meta.updated_at); }
     drop(core);
-    if let Ok(git) = state.git.lock() { if let Some(history) = git.as_ref() { let _ = history.commit_note(&note.meta.id, &note.meta.title, &note.content); } }
     Ok(Some(note))
 }
 
@@ -100,8 +98,40 @@ pub fn list_notes(state: State<'_, AppState>) -> Result<Vec<Note>, String> {
 #[tauri::command] pub fn delete_notebook(_state: State<'_, AppState>, _id: String) -> Result<bool, String> { Err("storage missing delete_notebook".to_string()) }
 #[tauri::command] pub fn list_tags(state: State<'_, AppState>) -> Result<Vec<String>, String> { Ok(state.core.lock().map_err(|e| e.to_string())?.storage.list_tags().map_err(|e| e.to_string())?.into_iter().map(|t| t.name).collect()) }
 
-#[tauri::command] pub fn list_note_versions(state: State<'_, AppState>, note_id: String) -> Result<Vec<GitVersionEntry>, String> { with_git(state, |git| git.list_versions(&note_id).map_err(|e| e.to_string())) }
+#[tauri::command] pub fn list_note_versions(state: State<'_, AppState>, note_id: String) -> Result<Vec<GitVersionEntry>, String> {
+    with_git(state, |git| {
+        let mut versions = git.list_versions(&note_id).map_err(|e| e.to_string())?;
+        let deleted = git.list_deleted_versions(&note_id).map_err(|e| e.to_string())?;
+        versions.retain(|v| !deleted.contains(&v.id));
+        Ok(versions)
+    })
+}
 #[tauri::command] pub fn list_note_branches(state: State<'_, AppState>, note_id: String) -> Result<Vec<GitBranchEntry>, String> { with_git(state, |git| git.list_branches(&note_id).map_err(|e| e.to_string())) }
+#[tauri::command] pub fn create_note_version(state: State<'_, AppState>, note_id: String, title: String, description: Option<String>) -> Result<String, String> {
+    let core_state = state.core.lock().map_err(|e| e.to_string())?;
+    let note = match core_state.storage.get_note(&note_id) { Ok(n) => n, Err(_) => return Err("note not found".to_string()) };
+    drop(core_state);
+    let msg = match description { Some(d) => format!("{}\n\n{}", title, d), None => title };
+    with_git(state, |git| git.commit_note(&note_id, &msg, &note.content).map_err(|e| e.to_string()))
+}
 #[tauri::command] pub fn checkout_note_version(state: State<'_, AppState>, note_id: String, commit_id: String) -> Result<String, String> { with_git(state, |git| git.checkout_version(&commit_id, &note_id).map_err(|e| e.to_string())) }
 #[tauri::command] pub fn checkout_note_branch(state: State<'_, AppState>, note_id: String, branch: String) -> Result<String, String> { with_git(state, |git| git.checkout_branch(&note_id, &branch).map_err(|e| e.to_string())) }
 #[tauri::command] pub fn create_note_branch(state: State<'_, AppState>, note_id: String, branch: String, from_commit: Option<String>) -> Result<(), String> { with_git(state, |git| git.create_branch(&note_id, &branch, from_commit.as_deref()).map_err(|e| e.to_string())) }
+#[tauri::command] pub fn delete_note_branch(state: State<'_, AppState>, note_id: String, branch: String) -> Result<bool, String> { with_git(state, |git| git.delete_branch(&note_id, &branch).map_err(|e| e.to_string()).map(|_| true)) }
+#[tauri::command] pub fn get_note_version_content(state: State<'_, AppState>, note_id: String, commit_id: String) -> Result<String, String> { with_git(state, |git| git.checkout_version(&commit_id, &note_id).map_err(|e| e.to_string())) }
+#[tauri::command] pub fn compare_note_versions(state: State<'_, AppState>, note_id: String, from_commit: String, to_commit: String) -> Result<serde_json::Value, String> {
+    with_git(state, |git| {
+        let from = git.checkout_version(&from_commit, &note_id).map_err(|e| e.to_string())?;
+        let to = git.checkout_version(&to_commit, &note_id).map_err(|e| e.to_string())?;
+        Ok(serde_json::json!({
+            "from": from,
+            "to": to,
+            "changed": from != to
+        }))
+    })
+}
+#[tauri::command] pub fn delete_note_version(state: State<'_, AppState>, note_id: String, commit_id: String) -> Result<bool, String> {
+    with_git(state, |git| {
+        git.delete_version(&note_id, &commit_id).map_err(|e| e.to_string())
+    })
+}
