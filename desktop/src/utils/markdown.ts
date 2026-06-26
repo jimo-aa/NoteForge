@@ -17,7 +17,8 @@ export function renderMarkdown(md: string, highlightQuery = ''): string {
     if (line.startsWith('```')) {
       if (!inCode) { inCode = true; continue; }
       inCode = false;
-      out.push(`<pre><code>${escapeHtml(codeBuf.join('\n'))}</code></pre>`);
+      const code = escapeHtml(codeBuf.join('\n'));
+      out.push(`<pre class="code-block"><code>${code}</code></pre>`);
       codeBuf.length = 0;
       continue;
     }
@@ -26,7 +27,7 @@ export function renderMarkdown(md: string, highlightQuery = ''): string {
     const hMatch = line.match(/^(#{1,6})\s(.+)/);
     if (hMatch) { flushList(); if (inTable) { out.push('</table>'); inTable = false; } out.push(`<h${hMatch[1].length}>${inlineMd(hMatch[2], highlightQuery)}</h${hMatch[1].length}>`); continue; }
     if (/^(-{3,}|\*{3,})\s*$/.test(line)) { flushList(); out.push('<hr>'); continue; }
-    if (line.startsWith('> ')) { flushList(); out.push(`<blockquote>${inlineMd(line.slice(2), highlightQuery)}</blockquote>`); continue; }
+    if (line.startsWith('> ')) { flushList(); out.push(`<blockquote class="quote-block">${inlineMd(line.slice(2), highlightQuery)}</blockquote>`); continue; }
     if (/^- \[[ xX]\] /.test(line)) { const done = line[3] === 'x' || line[3] === 'X'; if (listType !== 'ul') { flushList(); listType = 'ul'; out.push('<ul class="task-list">'); } out.push(`<li class="${done ? 'task-done' : ''}">${done ? '✅' : '⬜'} ${inlineMd(line.slice(6), highlightQuery)}</li>`); continue; }
     if (/^[-*+]\s/.test(line)) { if (listType !== 'ul') { flushList(); listType = 'ul'; out.push('<ul>'); } out.push(`<li>${inlineMd(line.replace(/^[-*+]\s/, ''), highlightQuery)}</li>`); continue; }
     const olMatch = line.match(/^(\d+)\.\s(.+)/);

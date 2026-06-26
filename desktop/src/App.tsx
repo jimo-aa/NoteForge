@@ -9,6 +9,7 @@ import { ContextMenu } from '@/components/Common/ContextMenu';
 import { Toast } from '@/components/Common/Toast';
 import { GraphView } from '@/components/Common/GraphView';
 import { EntityModal } from '@/components/Modals/EntityModal';
+import { AdvancedVersioningPanel } from '@/components/Features/AdvancedVersioningPanel';
 
 async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T | null> {
   try {
@@ -22,11 +23,17 @@ async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T
 export default function App() {
   const store = useStore();
   const [newNoteOpen, setNewNoteOpen] = useState(false);
+  const [advancedVersioningOpen, setAdvancedVersioningOpen] = useState(false);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key.toLowerCase() === 'n' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); setNewNoteOpen(true); }
       if (e.key.toLowerCase() === 'f' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); store.setSettingsOpen(false); }
+      // Ctrl+Shift+V 打开高级版本控制
+      if (e.key.toLowerCase() === 'v' && (e.metaKey || e.ctrlKey) && e.shiftKey) { 
+        e.preventDefault(); 
+        setAdvancedVersioningOpen(true); 
+      }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
@@ -66,6 +73,12 @@ export default function App() {
         if (store.entityModal.mode === 'rename-note' && targetId) store.updateNote(targetId, { title: value });
         store.closeEntityModal();
       }} />
+      {advancedVersioningOpen && store.selectedNoteId && (
+        <AdvancedVersioningPanel 
+          noteId={store.selectedNoteId} 
+          onClose={() => setAdvancedVersioningOpen(false)}
+        />
+      )}
       <ContextMenu />
       <GraphView />
       {store.toasts.map((t) => (<Toast key={t.id} message={t.message} />))}

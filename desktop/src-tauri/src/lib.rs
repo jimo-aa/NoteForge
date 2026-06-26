@@ -56,6 +56,32 @@ pub fn run() {
             commands::get_note_version_content,
             commands::compare_note_versions,
             commands::delete_note_version,
+            // Feature 1: Version Diff
+            commands::get_version_diff,
+            commands::compare_versions_with_context,
+            commands::get_version_diff_stat,
+            // Feature 2: Offline Search
+            commands::search_versions,
+            commands::search_notes_with_versions,
+            commands::get_version_metadata,
+            // Feature 3: Milestone Management
+            commands::create_milestone,
+            commands::list_milestones,
+            commands::get_milestone,
+            commands::update_milestone,
+            commands::delete_milestone,
+            commands::checkout_milestone,
+            // Feature 4: Export & Backup
+            commands::export_note,
+            commands::export_notebook,
+            commands::backup_note,
+            commands::restore_note,
+            // Feature 5: Performance Optimization
+            commands::list_note_versions_cached,
+            commands::get_version_diff_cached,
+            commands::search_versions_cached,
+            commands::clear_cache,
+            commands::get_cache_stats,
         ])
         .run(tauri::generate_context!())
         .expect("启动 NoteForge 失败");

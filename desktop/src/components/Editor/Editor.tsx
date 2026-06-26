@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent 
 import { useStore } from '../../stores/context';
 import { renderMarkdown } from '@/utils/markdown';
 import { VersionControlModal } from '@/components/Modals/VersionControlModal';
+import { AdvancedFeaturesToolbar } from '@/components/Modals/AdvancedFeaturesToolbar';
 
 
 const MARKDOWN_ACTIONS = [
@@ -16,7 +17,7 @@ const MARKDOWN_ACTIONS = [
   { label: '“', title: '引用', before: '> ', after: '', sample: '引用内容' },
   { label: '</>', title: '代码块', before: '```\n', after: '\n```', sample: '代码' },
   { label: '🔗', title: '链接', before: '[', after: '](https://)', sample: '链接文本' },
-  { label: '▦', title: '表格', before: '\n| 层级 | 技术 | 说明 |\n|---|---|---|\n| 桌面端 | Tauri + React | 高性能原生 |\n', after: '', sample: '' },
+  { label: '▦', title: '表格', before: '\n| 列1 | 列2 | 列3 |\n|---|---|---|\n| | | |\n', after: '', sample: '' },
   { label: '—', title: '分割线', before: '\n---\n', after: '', sample: '' },
 ];
 

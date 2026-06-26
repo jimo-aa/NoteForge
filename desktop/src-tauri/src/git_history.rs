@@ -275,4 +275,122 @@ impl GitHistory {
         let tag_name = format!("notes/{}/deleted/{}", note_id, commit_id);
         Ok(self.repo.find_reference(&format!("refs/tags/{}", tag_name)).is_ok())
     }
+
+    // ============================================================
+    // 里程碑管理 (Milestone Management)
+    // ============================================================
+
+    pub fn get_current_branch(&self, note_id: &str) -> Result<String, git2::Error> {
+        Ok(self.current_branch(note_id))
+    }
+
+    pub fn get_branch_head(&self, note_id: &str, branch: &str) -> Result<String, git2::Error> {
+        let refname = self.branch_ref(note_id, branch);
+        let reference = self.repo.find_reference(&refname)?;
+        Ok(reference.target()
+            .ok_or_else(|| git2::Error::from_str("missing head"))?
+            .to_string())
+    }
+
+    pub fn create_milestone(&self, note_id: &str, milestone: &super::commands::Milestone) -> Result<(), git2::Error> {
+        let tag_name = format!("notes/{}/milestone/{}", note_id, milestone.id);
+        let oid = Oid::from_str(&milestone.commit_id)
+            .map_err(|_| git2::Error::from_str("invalid commit id"))?;
+        
+        let obj = self.repo.find_object(oid, None)?;
+        self.repo.tag_lightweight(&tag_name, &obj, false)?;
+        
+        let metadata = serde_json::json!({
+            "id": milestone.id,
+            "name": milestone.name,
+            "description": milestone.description,
+            "version_number": milestone.version_number,
+            "created_at": milestone.created_at,
+            "tags": milestone.tags,
+        });
+        
+        let metadata_file = self.worktree.join("milestones").join(format!("{}.json", milestone.id));
+        fs::create_dir_all(metadata_file.parent().unwrap()).ok();
+        fs::write(&metadata_file, metadata.to_string())
+            .map_err(|e| git2::Error::from_str(&e.to_string()))?;
+        
+        Ok(())
+    }
+
+    pub fn list_milestones(&self, note_id: &str) -> Result<Vec<super::commands::Milestone>, git2::Error> {
+        let milestones_dir = self.worktree.join("milestones");
+        if !milestones_dir.exists() {
+            return Ok(Vec::new());
+        }
+        
+        let mut milestones = Vec::new();
+        for entry in fs::read_dir(&milestones_dir).map_err(|e| git2::Error::from_str(&e.to_string()))? {
+            let entry = entry.map_err(|e| git2::Error::from_str(&e.to_string()))?;
+            let path = entry.path();
+            
+            if path.extension().map_or(false, |ext| ext == "json") {
+                if let Ok(content) = fs::read_to_string(&path) {
+                    if let Ok(mut milestone) = serde_json::from_str::<super::commands::Milestone>(&content) {
+                        milestone.note_id = note_id.to_string();
+                        milestones.push(milestone);
+                    }
+                }
+            }
+        }
+        
+        milestones.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        Ok(milestones)
+    }
+
+    pub fn get_milestone(&self, _note_id: &str, milestone_id: &str) -> Result<Option<super::commands::Milestone>, git2::Error> {
+        let metadata_file = self.worktree.join("milestones").join(format!("{}.json", milestone_id));
+        if !metadata_file.exists() {
+            return Ok(None);
+        }
+        
+        fs::read_to_string(&metadata_file)
+            .ok()
+            .and_then(|content| serde_json::from_str(&content).ok())
+            .map(Ok)
+            .transpose()
+            .map_err(|e: serde_json::Error| git2::Error::from_str(&e.to_string()))
+    }
+
+    pub fn update_milestone(&self, _note_id: &str, milestone_id: &str, name: Option<String>, description: Option<String>, tags: Option<Vec<String>>) -> Result<Option<super::commands::Milestone>, git2::Error> {
+        let metadata_file = self.worktree.join("milestones").join(format!("{}.json", milestone_id));
+        if !metadata_file.exists() {
+            return Ok(None);
+        }
+        
+        let content = fs::read_to_string(&metadata_file)
+            .map_err(|e| git2::Error::from_str(&e.to_string()))?;
+        let mut milestone: super::commands::Milestone = serde_json::from_str(&content)
+            .map_err(|e| git2::Error::from_str(&e.to_string()))?;
+        
+        if let Some(n) = name {
+            milestone.name = n;
+        }
+        if let Some(d) = description {
+            milestone.description = Some(d);
+        }
+        if let Some(t) = tags {
+            milestone.tags = t;
+        }
+        
+        let updated_content = serde_json::to_string(&milestone)
+            .map_err(|e| git2::Error::from_str(&e.to_string()))?;
+        fs::write(&metadata_file, updated_content)
+            .map_err(|e| git2::Error::from_str(&e.to_string()))?;
+        
+        Ok(Some(milestone))
+    }
+
+    pub fn delete_milestone(&self, _note_id: &str, milestone_id: &str) -> Result<bool, git2::Error> {
+        let metadata_file = self.worktree.join("milestones").join(format!("{}.json", milestone_id));
+        if metadata_file.exists() {
+            fs::remove_file(&metadata_file)
+                .map_err(|e| git2::Error::from_str(&e.to_string()))?;
+        }
+        Ok(true)
+    }
 }
