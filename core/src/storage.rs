@@ -148,12 +148,14 @@ impl LocalStorage {
     // 笔记本 CRUD
     // ============================================================
 
-    pub fn create_notebook(&self, name: &str) -> Result<Notebook, Box<dyn std::error::Error>> {
+    pub fn create_notebook(&self, name: &str, icon: Option<&str>, color: Option<&str>) -> Result<Notebook, Box<dyn std::error::Error>> {
         let id = types::generate_id();
         let now = types::now_ms();
+        let icon_val = icon.unwrap_or("📓");
+        let color_val = color.unwrap_or("#6366f1");
         self.conn.execute(
-            "INSERT INTO notebooks (id, name, created_at, updated_at) VALUES (?1, ?2, ?3, ?4)",
-            params![id, name, now, now],
+            "INSERT INTO notebooks (id, name, icon, color, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![id, name, icon_val, color_val, now, now],
         )?;
         self.get_notebook(&id)
     }

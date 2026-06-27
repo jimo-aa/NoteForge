@@ -91,4 +91,10 @@ export interface SearchResult {
   snippet: string;
   score: number;
   updated_at: number;
+  total_hits: number;
+}
+
+export interface SearchPage {
+  results: SearchResult[];
+  total_hits: number;
 }

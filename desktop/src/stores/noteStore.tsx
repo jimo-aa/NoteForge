@@ -98,13 +98,12 @@ export function useNoteStore() {
   }, [sortBy]);
 
   const filteredNotes = sortNotes(notes.filter((n) => {
-    // 搜索过滤
+    // 搜索过滤 — 仅按标题和标签匹配（正文搜索由 Tantivy SearchBox 处理）
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       const inTitle = n.meta.title.toLowerCase().includes(q);
       const inTags = n.meta.tags.some((t) => t.toLowerCase().includes(q));
-      const inContent = n.content.toLowerCase().includes(q);
-      if (!inTitle && !inTags && !inContent) return false;
+      if (!inTitle && !inTags) return false;
     }
 
     // 笔记本过滤 - 修复：处理 notebookId 为 null 的情况
@@ -186,7 +185,7 @@ export function useNoteStore() {
   const toggleFavorite = useCallback((id: string) => { const note = notes.find((n) => n.meta.id === id); if (!note) return; updateNote(id, { isFavorite: !note.meta.isFavorite }); }, [notes, updateNote]);
   const togglePin = useCallback((id: string) => { const note = notes.find((n) => n.meta.id === id); if (!note) return; updateNote(id, { isPinned: !note.meta.isPinned }); }, [notes, updateNote]);
 
-  const createNotebook = useCallback(async (name: string) => {
+  const createNotebook = useCallback(async (name: string, icon?: string, color?: string) => {
     const title = name.trim();
     if (!title) {
       showToast('error', '笔记本名称不能为空');
@@ -194,7 +193,7 @@ export function useNoteStore() {
     }
 
     try {
-      const notebook = await tauriInvoke<Notebook>('create_notebook', { name: title });
+      const notebook = await tauriInvoke<Notebook>('create_notebook', { name: title, icon, color });
       if (notebook) {
         await refreshNotebooks();
         showToast('success', '📒 已创建笔记本');

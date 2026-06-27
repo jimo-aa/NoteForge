@@ -9,6 +9,12 @@ type SearchResult = {
   snippet: string;
   score: number;
   updated_at: number;
+  total_hits: number;
+};
+
+type SearchPage = {
+  results: SearchResult[];
+  total_hits: number;
 };
 
 type SearchResultItem = {
@@ -16,12 +22,8 @@ type SearchResultItem = {
   title: string;
   snippet: string;
   score: number;
-  tag: string;
   updatedAt: string;
-  type: 'note' | 'tag' | 'command';
   noteId?: string;
-  line?: number;
-  column?: number;
 };
 
 async function tauriInvoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T | null> {
@@ -44,10 +46,11 @@ export function SearchBox() {
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(0);
   const [totalResults, setTotalResults] = useState(0);
+  const [fuzzyFallback, setFuzzyFallback] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  const highlightTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const pageSize = 5; // 每页显示5条
+  const pageSize = 5;
 
   const close = () => {
     setOpen(false);
@@ -56,6 +59,9 @@ export function SearchBox() {
   const openSearch = () => {
     setQuery('');
     setActiveIndex(0);
+    setResults([]);
+    setTotalResults(0);
+    setFuzzyFallback(false);
     setOpen(true);
     window.setTimeout(() => inputRef.current?.focus(), 0);
   };
@@ -65,41 +71,54 @@ export function SearchBox() {
       setResults([]);
       setCurrentPage(0);
       setTotalResults(0);
+      setFuzzyFallback(false);
       return;
     }
 
     const t = window.setTimeout(async () => {
       setLoading(true);
+      setFuzzyFallback(false);
       try {
-        // 使用高级搜索 API，获取所有结果用于总数统计
-        const allResults = await tauriInvoke<SearchResult[]>('search_notes', { 
-          query 
+        const page = await tauriInvoke<SearchPage>('search_notes_advanced', {
+          query,
+          limit: pageSize,
+          offset: 0,
         });
 
-        if (allResults && allResults.length > 0) {
-          setTotalResults(allResults.length);
-          
-          // 获取当前页的结果
-          const startIndex = 0;
-          const pageResults = allResults.slice(startIndex, startIndex + pageSize);
-          
+        if (page && page.results.length > 0) {
+          setTotalResults(page.total_hits);
           setResults(
-            pageResults.map((hit: SearchResult) => ({
+            page.results.map((hit: SearchResult) => ({
               id: hit.note_id,
               title: hit.title,
               snippet: hit.snippet || '暂无内容预览',
               score: hit.score,
-              tag: `相关性: ${(hit.score * 100).toFixed(0)}%`,
               updatedAt: new Date(hit.updated_at).toLocaleString(),
-              type: 'note' as const,
               noteId: hit.note_id,
-              line: 1,
-              column: 1,
             }))
           );
+          setCurrentPage(0);
         } else {
-          setResults([]);
-          setTotalResults(0);
+          const fuzzyResults = await tauriInvoke<SearchResult[]>('search_notes_fuzzy', {
+            query,
+          });
+          if (fuzzyResults && fuzzyResults.length > 0) {
+            setTotalResults(fuzzyResults.length);
+            setResults(
+              fuzzyResults.slice(0, pageSize).map((hit: SearchResult) => ({
+                id: hit.note_id,
+                title: hit.title,
+                snippet: hit.snippet || '暂无内容预览',
+                score: hit.score,
+                updatedAt: new Date(hit.updated_at).toLocaleString(),
+                noteId: hit.note_id,
+              }))
+            );
+            setFuzzyFallback(true);
+          } else {
+            setResults([]);
+            setTotalResults(0);
+          }
         }
       } catch (error) {
         console.error('Search error:', error);
@@ -108,14 +127,12 @@ export function SearchBox() {
       } finally {
         setLoading(false);
         setActiveIndex(0);
-        setCurrentPage(0);
       }
     }, 300);
 
     return () => window.clearTimeout(t);
   }, [open, query]);
 
-  // 注册快捷键：Cmd+K (Mac) / Ctrl+K (Windows)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
@@ -123,7 +140,6 @@ export function SearchBox() {
         openSearch();
       }
     };
-
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
@@ -131,16 +147,12 @@ export function SearchBox() {
   useEffect(() => {
     if (!open) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        close();
-      }
+      if (e.key === 'Escape') close();
     };
-
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [open]);
 
-  // 当搜索框关闭时，清空搜索内容和高亮状态
   useEffect(() => {
     if (!open) {
       setQuery('');
@@ -148,11 +160,10 @@ export function SearchBox() {
       setActiveIndex(0);
       setCurrentPage(0);
       setTotalResults(0);
-      // 只在真正关闭时保持高亮状态，用于视觉反馈
+      setFuzzyFallback(false);
     }
   }, [open]);
 
-  // 清理定时器
   useEffect(() => {
     return () => {
       if (highlightTimeoutRef.current) {
@@ -161,33 +172,29 @@ export function SearchBox() {
     };
   }, []);
 
-  // 分页处理
   const loadPage = async (pageNum: number) => {
     if (!query) return;
-    
+
     try {
       setLoading(true);
-      const allResults = await tauriInvoke<SearchResult[]>('search_notes', { query });
-      
-      if (allResults && allResults.length > 0) {
-        const startIndex = pageNum * pageSize;
-        const pageResults = allResults.slice(startIndex, startIndex + pageSize);
-        
+      const page = await tauriInvoke<SearchPage>('search_notes_advanced', {
+        query,
+        limit: pageSize,
+        offset: pageNum * pageSize,
+      });
+
+      if (page && page.results.length > 0) {
         setResults(
-          pageResults.map((hit: SearchResult) => ({
+          page.results.map((hit: SearchResult) => ({
             id: hit.note_id,
             title: hit.title,
             snippet: hit.snippet || '暂无内容预览',
             score: hit.score,
-            tag: `相关性: ${(hit.score * 100).toFixed(0)}%`,
             updatedAt: new Date(hit.updated_at).toLocaleString(),
-            type: 'note' as const,
             noteId: hit.note_id,
-            line: 1,
-            column: 1,
           }))
         );
-        
+        setTotalResults(page.total_hits);
         setCurrentPage(pageNum);
         setActiveIndex(0);
       }
@@ -201,18 +208,12 @@ export function SearchBox() {
   const handleSelect = async (index: number) => {
     const item = results[index];
     if (!item?.noteId) return;
-    
-    // 标记为已高亮
+
     setHighlightedId(item.noteId);
-    
-    // 更新全局状态
     store.selectNote(item.noteId);
     store.setCurrentNoteId(item.noteId);
-    
-    // 关闭搜索框
     close();
-    
-    // 2 秒后清除高亮，只显示一次
+
     if (highlightTimeoutRef.current) {
       clearTimeout(highlightTimeoutRef.current);
     }
@@ -221,7 +222,7 @@ export function SearchBox() {
     }, 2000);
   };
 
-  const totalPages = Math.ceil(totalResults / pageSize);
+  const totalPages = totalResults > 0 ? Math.ceil(totalResults / pageSize) : 0;
   const currentPageNum = currentPage + 1;
 
   const modal = open
@@ -241,7 +242,6 @@ export function SearchBox() {
                   const newValue = e.target.value;
                   setQuery(newValue);
                   setActiveIndex(0);
-                  // 输入新内容时重置高亮状态
                   if (newValue) {
                     setHighlightedId(null);
                   }
@@ -272,9 +272,14 @@ export function SearchBox() {
 
             <div className="search-modal__body">
               <div className="search-modal__section-header">
-                <span>搜索结果 {loading && <span className="loading">搜索中...</span>}</span>
                 <span>
-                  {totalResults > 0 ? `${currentPageNum}/${totalPages} 页 (共 ${totalResults} 条)` : `${results.length} 条`}
+                  搜索结果 {loading && <span className="loading">搜索中...</span>}
+                  {fuzzyFallback && !loading && <span className="loading" style={{color:'var(--warning)'}}> 已启用模糊匹配</span>}
+                </span>
+                <span>
+                  {totalResults > 0
+                    ? `${currentPageNum}/${totalPages} 页 (共 ${totalResults} 条)`
+                    : ''}
                 </span>
               </div>
 
@@ -282,15 +287,15 @@ export function SearchBox() {
                 <div className="search-empty">
                   <div className="search-empty__icon">⌕</div>
                   <strong>输入关键词开始搜索</strong>
-                  <p>支持中文分词，模糊搜索</p>
+                  <p>支持中文分词，自动模糊匹配</p>
                 </div>
-              ) : results.length === 0 ? (
+              ) : results.length === 0 && !loading ? (
                 <div className="search-empty">
                   <div className="search-empty__icon">⌕</div>
                   <strong>没有找到相关内容</strong>
-                  <p>尝试更换关键词，或确认笔记已经完成索引。</p>
+                  <p>尝试更换关键词，搜索会自动启用模糊匹配。</p>
                 </div>
-              ) : (
+              ) : results.length === 0 ? null : (
                 <>
                   <div className="search-results">
                     {results.map((item, index) => (
@@ -307,22 +312,12 @@ export function SearchBox() {
                               笔记
                             </span>
                             <strong>{item.title}</strong>
-                            <span className="search-result__score">
-                              {(item.score * 100).toFixed(0)}%
-                            </span>
                           </div>
                           <span className="search-result__time">{item.updatedAt}</span>
                         </div>
                         <p className="search-result__snippet">{item.snippet}</p>
                         <div className="search-result__footer">
-                          <span>{item.tag}</span>
-                          <span>
-                            {index === activeIndex
-                              ? '回车打开'
-                              : highlightedId === item.noteId
-                              ? '已打开'
-                              : '点击打开'}
-                          </span>
+                          <span>{index === activeIndex ? '回车打开' : '点击打开'}</span>
                         </div>
                       </button>
                     ))}

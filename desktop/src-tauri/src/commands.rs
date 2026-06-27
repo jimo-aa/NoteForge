@@ -1,7 +1,7 @@
 use std::{path::PathBuf, sync::Mutex};
 use tauri::{AppHandle, Manager, State};
 
-use noteforge_core::{md_engine::MarkdownEngine, search::SearchEngine, storage::LocalStorage, types::*};
+use noteforge_core::{md_engine::MarkdownEngine, search::{SearchEngine, SearchPage}, storage::LocalStorage, types::*};
 
 use crate::git_history::{GitBranchEntry, GitHistory, GitVersionEntry};
 
@@ -168,7 +168,9 @@ fn with_git<T>(state: State<'_, AppState>, f: impl FnOnce(&GitHistory) -> Result
 pub fn create_note(state: State<'_, AppState>, request: CreateNoteRequest) -> Result<Note, String> {
     let mut core = state.core.lock().map_err(|e| e.to_string())?;
     let note = core.storage.create_note(&request).map_err(|e| e.to_string())?;
-    let _ = core.search.add_note(&note.meta.id, &note.meta.title, &note.content, &note.meta.tags, note.meta.updated_at);
+    let index_content = if note.content_plain.is_empty() { &note.content } else { &note.content_plain };
+    let _ = core.search.add_note(&note.meta.id, &note.meta.title, index_content, &note.meta.tags, note.meta.updated_at);
+    let _ = core.search.commit();
     drop(core);
     Ok(note)
 }
@@ -188,7 +190,9 @@ pub fn update_note(state: State<'_, AppState>, id: String, title: Option<String>
     let current = match core.storage.get_note(&id) { Ok(note) => note, Err(_) => return Ok(None) };
     let next = UpdateNoteRequest { title, content, notebook_id: None, tags, is_pinned, is_favorite };
     let note = core.storage.update_note(&id, &next).map_err(|e| e.to_string())?;
-    if note.content != current.content || note.meta.title != current.meta.title { let _ = core.search.add_note(&note.meta.id, &note.meta.title, &note.content, &note.meta.tags, note.meta.updated_at); }
+    let index_content = if note.content_plain.is_empty() { &note.content } else { &note.content_plain };
+    let _ = core.search.add_note(&note.meta.id, &note.meta.title, index_content, &note.meta.tags, note.meta.updated_at);
+    let _ = core.search.commit();
     drop(core);
     Ok(Some(note))
 }
@@ -198,6 +202,7 @@ pub fn delete_note(state: State<'_, AppState>, id: String) -> Result<bool, Strin
     let mut core = state.core.lock().map_err(|e| e.to_string())?;
     core.storage.delete_note(&id).map_err(|e| e.to_string())?;
     let _ = core.search.remove_note(&id);
+    let _ = core.search.commit();
     Ok(true)
 }
 
@@ -208,6 +213,13 @@ pub fn list_notes(state: State<'_, AppState>) -> Result<Vec<Note>, String> {
     let mut notes = Vec::new();
     for meta in metas { if let Ok(note) = core.storage.get_note(&meta.id) { notes.push(note); } }
     Ok(notes)
+}
+
+/// 返回笔记元数据列表（不含 content，适用于侧边栏列表）
+#[tauri::command]
+pub fn list_note_metas(state: State<'_, AppState>) -> Result<Vec<NoteMeta>, String> {
+    let core = state.core.lock().map_err(|e| e.to_string())?;
+    core.storage.list_notes(None, 500, 0).map_err(|e| e.to_string())
 }
 
 #[tauri::command] 
@@ -235,9 +247,9 @@ pub fn search_in_note(state: State<'_, AppState>, note_id: String, query: String
         .map_err(|e| e.to_string())
 }
 
-/// 高级搜索 - 支持自定义 limit 和 offset
+/// 高级搜索 - 支持自定义 limit/offset，返回分页结果（含总命中数）
 #[tauri::command]
-pub fn search_notes_advanced(state: State<'_, AppState>, query: String, limit: usize, offset: usize) -> Result<Vec<SearchResult>, String> {
+pub fn search_notes_advanced(state: State<'_, AppState>, query: String, limit: usize, offset: usize) -> Result<SearchPage, String> {
     let core = state.core.lock().map_err(|e| e.to_string())?;
     let options = noteforge_core::search::SearchOptions { limit, offset };
     core.search.search_paginated(&query, options).map_err(|e| e.to_string())
@@ -282,7 +294,7 @@ pub fn disable_encryption(state: State<'_, AppState>) -> Result<(), String> {
     Ok(())
 }
 #[tauri::command] pub fn list_notebooks(state: State<'_, AppState>) -> Result<Vec<Notebook>, String> { state.core.lock().map_err(|e| e.to_string())?.storage.list_notebooks().map_err(|e| e.to_string()) }
-#[tauri::command] pub fn create_notebook(state: State<'_, AppState>, name: String) -> Result<Notebook, String> { state.core.lock().map_err(|e| e.to_string())?.storage.create_notebook(&name).map_err(|e| e.to_string()) }
+#[tauri::command] pub fn create_notebook(state: State<'_, AppState>, name: String, icon: Option<String>, color: Option<String>) -> Result<Notebook, String> { state.core.lock().map_err(|e| e.to_string())?.storage.create_notebook(&name, icon.as_deref(), color.as_deref()).map_err(|e| e.to_string()) }
 #[tauri::command]
 pub fn rename_notebook(state: State<'_, AppState>, id: String, name: String) -> Result<Notebook, String> {
     let core = state.core.lock().map_err(|e| e.to_string())?;
@@ -526,30 +538,29 @@ pub fn search_notes_with_versions(state: State<'_, AppState>, query: String) -> 
     drop(core);
     
     with_git(state, |git| {
-        let mut result_with_versions = serde_json::json!([]);
+        use std::collections::HashMap;
+        let mut version_cache: HashMap<String, Vec<GitVersionEntry>> = HashMap::new();
         
-        if let serde_json::Value::Array(ref mut arr) = result_with_versions {
-            for search_result in search_results {
-                let versions = git.list_versions(&search_result.note_id)
-                    .unwrap_or_default();
-                
-                arr.push(serde_json::json!({
-                    "note_id": search_result.note_id,
-                    "title": search_result.title,
-                    "snippet": search_result.snippet,
-                    "score": search_result.score,
-                    "updated_at": search_result.updated_at,
-                    "version_count": versions.len(),
-                    "latest_version": versions.first().map(|v| {
-                        serde_json::json!({
-                            "id": v.id,
-                            "title": v.title,
-                            "updated_at": v.updated_at,
-                        })
+        let result_with_versions: serde_json::Value = search_results.into_iter().map(|search_result| {
+            let versions = version_cache.entry(search_result.note_id.clone())
+                .or_insert_with(|| git.list_versions(&search_result.note_id).unwrap_or_default());
+            
+            serde_json::json!({
+                "note_id": search_result.note_id,
+                "title": search_result.title,
+                "snippet": search_result.snippet,
+                "score": search_result.score,
+                "updated_at": search_result.updated_at,
+                "version_count": versions.len(),
+                "latest_version": versions.first().map(|v| {
+                    serde_json::json!({
+                        "id": v.id,
+                        "title": v.title,
+                        "updated_at": v.updated_at,
                     })
-                }));
-            }
-        }
+                })
+            })
+        }).collect::<Vec<_>>().into();
         
         Ok(result_with_versions)
     })

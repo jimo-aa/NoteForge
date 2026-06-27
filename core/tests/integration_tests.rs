@@ -48,6 +48,7 @@ mod integration_tests {
             &note.meta.tags,
             note.meta.updated_at,
         ).unwrap();
+        search.commit().unwrap();
 
         // 搜索笔记
         let results = search.search("Rust", 10).unwrap();
@@ -77,6 +78,7 @@ mod integration_tests {
             &["AI".to_string(), "学习".to_string()],
             now_ms(),
         ).unwrap();
+        search.commit().unwrap();
 
         // 搜索中文内容
         let results = search.search("机器学习", 10).unwrap();
@@ -113,6 +115,7 @@ mod integration_tests {
                 now_ms(),
             ).unwrap();
         }
+        search.commit().unwrap();
 
         // 搜索"编程" - 这会搜索到包含"编程"的笔记
         let results = search.search("编程", 20).unwrap();
@@ -184,6 +187,7 @@ mod integration_tests {
             &note.meta.tags,
             note.meta.updated_at,
         ).unwrap();
+        search.commit().unwrap();
 
         // 搜索初始内容
         let results = search.search("Rust", 10).unwrap();
@@ -209,6 +213,7 @@ mod integration_tests {
             &updated.meta.tags,
             updated.meta.updated_at,
         ).unwrap();
+        search.commit().unwrap();
 
         // 验证新搜索
         let results = search.search("Python", 10).unwrap();
@@ -234,6 +239,8 @@ mod integration_tests {
             now_ms(),
         ).unwrap();
 
+        search.commit().unwrap();
+
         search.add_note(
             "2",
             "后端开发",
@@ -242,13 +249,15 @@ mod integration_tests {
             now_ms(),
         ).unwrap();
 
+        search.commit().unwrap();
+
         // 基础搜索 - 中文分词可能返回多个结果
         let results = search.search("开发", 10).unwrap();
         assert!(results.len() >= 1);
 
         // 模糊搜索 - 搜索 JavaScript
         let results = search.search_fuzzy("JavaScript", 10).unwrap();
-        assert!(results.len() >= 1);
+        assert!(!results.is_empty());
 
         // 在特定笔记中搜索
         let results = search.search_in_note("1", "JavaScript", 10).unwrap();

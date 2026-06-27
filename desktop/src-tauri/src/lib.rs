@@ -40,6 +40,7 @@ pub fn run() {
             commands::update_note,
             commands::delete_note,
             commands::list_notes,
+            commands::list_note_metas,
             commands::search_notes,
             commands::search_notes_fuzzy,
             commands::search_in_note,

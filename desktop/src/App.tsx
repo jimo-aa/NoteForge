@@ -77,9 +77,9 @@ export default function App() {
     });
   };
 
-  const handleConfirmNotebook = async (name: string, icon?: string) => {
+  const handleConfirmNotebook = async (name: string, icon?: string, color?: string) => {
     if (notebookModal.mode === 'create') {
-      const result = await store.createNotebook(name);
+      const result = await store.createNotebook(name, icon, color);
       if (result) {
         setNotebookModal({ open: false, mode: null, title: '', value: '' });
       }

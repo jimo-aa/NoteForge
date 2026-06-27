@@ -105,13 +105,8 @@ pub struct SearchResult {
     pub snippet: String,
     pub score: f32,
     pub updated_at: u64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SearchOptions {
-    pub query: String,
-    pub limit: usize,
-    pub offset: usize,
+    #[serde(default)]
+    pub total_hits: usize,
 }
 
 // ============================================================

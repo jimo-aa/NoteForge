@@ -56,9 +56,9 @@ export function NoteList() {
 
 function highlight(text: string, query: string) {
   if (!query) return text;
-  const re = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
-  const parts = text.split(re);
+  const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const parts = text.split(new RegExp(`(${escaped})`, 'gi'));
   return parts.map((p, i) =>
-    re.test(p) ? <mark key={i}>{p}</mark> : p
+    p.toLowerCase() === query.toLowerCase() ? <mark key={i}>{p}</mark> : p
   );
 }
