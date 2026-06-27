@@ -135,12 +135,17 @@ pub struct AppState {
 pub struct NoteForgeDesktopCore {
     pub storage: LocalStorage,
     pub search: SearchEngine,
+    pub encryption: Option<noteforge_core::encryption::EncryptionManager>,
 }
 
 impl NoteForgeDesktopCore {
     pub fn open(data_dir: PathBuf) -> Result<Self, Box<dyn std::error::Error>> {
         std::fs::create_dir_all(&data_dir)?;
-        Ok(Self { storage: LocalStorage::open(data_dir.join("noteforge.db"))?, search: SearchEngine::open(data_dir.join("index"))? })
+        Ok(Self { 
+            storage: LocalStorage::open(data_dir.join("noteforge.db"))?, 
+            search: SearchEngine::open(data_dir.join("index"))?,
+            encryption: None,
+        })
     }
 }
 
@@ -205,7 +210,88 @@ pub fn list_notes(state: State<'_, AppState>) -> Result<Vec<Note>, String> {
     Ok(notes)
 }
 
-#[tauri::command] pub fn search_notes(state: State<'_, AppState>, query: String) -> Result<Vec<SearchResult>, String> { state.core.lock().map_err(|e| e.to_string())?.search.search(&query, 50).map_err(|e| e.to_string()) }
+#[tauri::command] 
+pub fn search_notes(state: State<'_, AppState>, query: String) -> Result<Vec<SearchResult>, String> { 
+    state.core.lock().map_err(|e| e.to_string())?.search.search(&query, 50).map_err(|e| e.to_string()) 
+}
+
+/// 模糊搜索 - 支持部分匹配和容错
+#[tauri::command] 
+pub fn search_notes_fuzzy(state: State<'_, AppState>, query: String) -> Result<Vec<SearchResult>, String> { 
+    state.core.lock()
+        .map_err(|e| e.to_string())?
+        .search
+        .search_fuzzy(&query, 50)
+        .map_err(|e| e.to_string())
+}
+
+/// 在特定笔记中搜索
+#[tauri::command]
+pub fn search_in_note(state: State<'_, AppState>, note_id: String, query: String) -> Result<Vec<SearchResult>, String> {
+    state.core.lock()
+        .map_err(|e| e.to_string())?
+        .search
+        .search_in_note(&note_id, &query, 50)
+        .map_err(|e| e.to_string())
+}
+
+/// 高级搜索 - 支持自定义 limit 和 offset
+#[tauri::command]
+pub fn search_notes_advanced(state: State<'_, AppState>, query: String, limit: usize, offset: usize) -> Result<Vec<SearchResult>, String> {
+    let mut results = state.core.lock()
+        .map_err(|e| e.to_string())?
+        .search
+        .search(&query, limit + offset)
+        .map_err(|e| e.to_string())?;
+    
+    // 简单的分页处理
+    if offset < results.len() {
+        results = results[offset..].to_vec();
+    } else {
+        results.clear();
+    }
+    
+    Ok(results.into_iter().take(limit).collect())
+}
+
+// ============================================================
+// 加密与安全 (Encryption)
+// ============================================================
+
+/// 初始化加密 - 从密码派生密钥
+#[tauri::command]
+pub fn init_encryption(state: State<'_, AppState>, password: String) -> Result<String, String> {
+    use noteforge_core::encryption::EncryptionManager;
+    
+    let salt = EncryptionManager::generate_salt();
+    let key = EncryptionManager::derive_key_from_password(&password, &salt)
+        .map_err(|e| format!("密钥派生失败: {}", e))?;
+    
+    let mut core = state.core.lock().map_err(|e| e.to_string())?;
+    let mut em = EncryptionManager::new();
+    em.initialize(key);
+    core.encryption = Some(em);
+    
+    // 为存储层设置加密
+    core.storage.set_encryption(EncryptionManager::new());
+    
+    Ok(salt)
+}
+
+/// 验证加密状态
+#[tauri::command]
+pub fn is_encryption_enabled(state: State<'_, AppState>) -> Result<bool, String> {
+    let core = state.core.lock().map_err(|e| e.to_string())?;
+    Ok(core.encryption.is_some() && core.storage.has_encryption())
+}
+
+/// 禁用加密
+#[tauri::command]
+pub fn disable_encryption(state: State<'_, AppState>) -> Result<(), String> {
+    let mut core = state.core.lock().map_err(|e| e.to_string())?;
+    core.encryption = None;
+    Ok(())
+}
 #[tauri::command] pub fn list_notebooks(state: State<'_, AppState>) -> Result<Vec<Notebook>, String> { state.core.lock().map_err(|e| e.to_string())?.storage.list_notebooks().map_err(|e| e.to_string()) }
 #[tauri::command] pub fn create_notebook(state: State<'_, AppState>, name: String) -> Result<Notebook, String> { state.core.lock().map_err(|e| e.to_string())?.storage.create_notebook(&name).map_err(|e| e.to_string()) }
 #[tauri::command]

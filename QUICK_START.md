@@ -1,317 +1,320 @@
-# NoteForge 功能实现 - 快速开始
+# NoteForge 快速参考
 
-## 编译状态总结
+## 🎯 快速开始
 
-✅ **全部编译成功** - 无报错，可正常运行
+### 后端初始化
 
-```bash
-# 编译核心库
-cd core && cargo build
-# 编译Tauri桌面应用
-cd desktop/src-tauri && cargo build
+```rust
+// 1. 创建存储和搜索
+let mut storage = LocalStorage::open("noteforge.db")?;
+let mut search = SearchEngine::open("index")?;
+
+// 2. 初始化加密（可选）
+let salt = EncryptionManager::generate_salt();
+let key = EncryptionManager::derive_key_from_password("password", &salt)?;
+let mut em = EncryptionManager::new();
+em.initialize(key);
+storage.set_encryption(em);
+
+// 3. 保存 salt 供后续使用
+// store_salt(salt);
 ```
 
----
-
-## 5个核心功能实现
-
-### 1️⃣ 版本对比与Diff功能
-
-**场景**：查看笔记两个版本之间的改动
-
-```javascript
-// 获取详细的Diff信息
-const diff = await invoke('get_version_diff', {
-  note_id: 'note-123',
-  from_commit: 'v1',
-  to_commit: 'v2'
-});
-
-// diff 包含：
-// - operations: 添加/删除/修改的行
-// - similarity: 相似度(0-1)
-// - change_summary: 统计信息(行数、字数变化)
-```
-
-**特性**：
-- ✅ 行级精确Diff计算
-- ✅ 相似度评分
-- ✅ 变更统计摘要
-- ✅ 上下文提取（5行前后）
-
----
-
-### 2️⃣ 离线搜索与版本信息检索
-
-**场景**：快速搜索笔记历史版本
-
-```javascript
-// 在版本历史中搜索
-const results = await invoke('search_versions', {
-  note_id: 'note-123',
-  query: 'bugfix'
-});
-
-// 获取包含版本信息的搜索结果
-const fullResults = await invoke('search_notes_with_versions', {
-  query: 'performance'
-});
-```
-
-**特性**：
-- ✅ 离线全文搜索（无网络依赖）
-- ✅ 版本标题和摘要搜索
-- ✅ 返回版本计数和最新版本信息
-- ✅ 快速元数据查询
-
----
-
-### 3️⃣ 里程碑管理
-
-**场景**：标记关键版本（v1.0, v2.0等）
-
-```javascript
-// 创建里程碑
-const milestone = await invoke('create_milestone', {
-  note_id: 'note-123',
-  name: 'v1.0-Release',
-  description: 'First stable release',
-  version_number: 1
-});
-
-// 列出所有里程碑
-const milestones = await invoke('list_milestones', {
-  note_id: 'note-123'
-});
-
-// 快速回到某个里程碑版本
-await invoke('checkout_milestone', {
-  note_id: 'note-123',
-  milestone_id: milestone.id
-});
-```
-
-**特性**：
-- ✅ 替代时间线版本管理
-- ✅ 清晰的版本号和名称
-- ✅ 可选的详细描述和标签
-- ✅ 一键切换到历史版本
-
----
-
-### 4️⃣ 导出与备份
-
-**场景**：导出笔记或创建备份
-
-```javascript
-// 导出为多种格式
-const markdown = await invoke('export_note', {
-  note_id: 'note-123',
-  format: 'markdown'  // 'markdown' | 'html' | 'json'
-});
-
-// 备份笔记
-await invoke('backup_note', {
-  note_id: 'note-123',
-  backup_path: '/backups/note-123.json'
-});
-
-// 从备份恢复
-const restored = await invoke('restore_note', {
-  backup_path: '/backups/note-123.json'
-});
-```
-
-**特性**：
-- ✅ 多格式导出（Markdown/HTML/JSON）
-- ✅ 笔记本级导出
-- ✅ 一键备份
-- ✅ 智能恢复（自动检测创建或更新）
-
----
-
-### 5️⃣ 性能优化
-
-**场景**：加快重复查询的响应速度
-
-```javascript
-// 使用缓存版本（比普通查询快10-15倍）
-const versions = await invoke('list_note_versions_cached', {
-  note_id: 'note-123'
-});
-
-// 缓存的Diff计算
-const diff = await invoke('get_version_diff_cached', {
-  note_id: 'note-123',
-  from_commit: 'v1',
-  to_commit: 'v2'
-});
-
-// 查看缓存统计
-const stats = await invoke('get_cache_stats');
-console.log(`缓存项目数: ${stats.total_entries}`);
-
-// 清空缓存（内存管理）
-await invoke('clear_cache');
-```
-
-**特性**：
-- ✅ 自动缓存（5分钟过期）
-- ✅ 智能TTL管理
-- ✅ 并发安全（Mutex）
-- ✅ 可观测的缓存统计
-
----
-
-## 集成指南
-
-### 前端调用示例
+### 前端集成
 
 ```typescript
-// 在React中使用
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from '@tauri-apps/api/tauri';
 
-export function VersionComparison() {
-  const [diff, setDiff] = useState(null);
-  
-  async function comparVersions() {
-    try {
-      const result = await invoke('get_version_diff_cached', {
-        note_id: currentNote.id,
-        from_commit: version1,
-        to_commit: version2
-      });
-      setDiff(result);
-    } catch (error) {
-      console.error('Failed:', error);
-    }
-  }
-  
-  return (
-    <div>
-      <button onClick={comparVersions}>对比版本</button>
-      {diff && (
-        <div>
-          <p>相似度: {(diff.similarity * 100).toFixed(1)}%</p>
-          <p>+{diff.change_summary.lines_added} -{diff.change_summary.lines_removed}</p>
-          <ul>
-            {diff.operations.map((op, i) => (
-              <li key={i}>{op.op_type}: {op.context}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-    </div>
-  );
+// 搜索
+const results = await invoke('search_notes', { query: 'keyword' });
+
+// 初始化加密
+const salt = await invoke('init_encryption', { password: 'pwd' });
+```
+
+---
+
+## 🔍 搜索 API
+
+### 搜索方法
+
+| 方法 | 用途 | 返回 |
+|------|------|------|
+| `search(query, limit)` | 基础搜索 | `Vec<SearchResult>` |
+| `search_fuzzy(query, limit)` | 模糊搜索 | `Vec<SearchResult>` |
+| `search_in_note(id, query, limit)` | 笔记内搜索 | `Vec<SearchResult>` |
+
+### 搜索结果
+
+```rust
+SearchResult {
+    note_id: String,        // 笔记 ID
+    title: String,          // 标题
+    snippet: String,        // 摘要
+    score: f32,             // 相关性
+    updated_at: u64,        // 更新时间
 }
 ```
 
 ---
 
-## 数据流架构
+## 🔐 加密 API
 
-```
-前端 (React/Vue) 
-  ↓ invoke()
-Tauri Command Handler (lib.rs)
-  ↓
-Rust Commands (commands.rs)
-  ↓
-核心引擎
-  ├── Git History (git_history.rs) → 版本管理、里程碑
-  ├── Storage (storage.rs) → SQLite 笔记数据
-  ├── Search (search.rs) → 全文搜索引擎
-  └── Cache Layer → 性能优化
-```
+### EncryptionManager
 
----
+```rust
+// 创建实例
+let mut em = EncryptionManager::new();
 
-## 性能基准
+// 初始化
+em.initialize(key);
 
-### 缓存效能
+// 加密
+let encrypted = em.encrypt("content")?;
 
-| 操作 | 无缓存 | 有缓存 | 加速 |
-|------|------|------|------|
-| 列表版本 | 150ms | 10ms | **15x** |
-| Diff计算 | 300ms | 20ms | **15x** |
-| 搜索版本 | 200ms | 15ms | **13x** |
+// 解密
+let plain = em.decrypt(&encrypted)?;
 
-### 内存使用
-
-- 缓存条目：~1-2 MB per 100 entries
-- 自动过期：5分钟（可配置）
-- 峰值管理：提供 `clear_cache()` 手动清理
-
----
-
-## 故障排查
-
-### 常见问题
-
-**Q: 导出失败，提示"Note not found"**
-```
-A: 检查note_id是否正确。使用 invoke('list_notes') 获取有效ID
+// 批量操作
+let encrypted_batch = em.encrypt_batch(vec!["text1", "text2"])?;
+let decrypted_batch = em.decrypt_batch(encrypted_batch)?;
 ```
 
-**Q: Diff为空**
-```
-A: 检查两个commit ID是否存在。使用 invoke('list_note_versions_cached', {note_id})查询
-```
+### 密钥派生
 
-**Q: 缓存不生效**
-```
-A: 确保调用的是 *_cached 版本（如 list_note_versions_cached 而非 list_note_versions）
-```
+```rust
+// 生成盐值
+let salt = EncryptionManager::generate_salt();
 
-**Q: 里程碑操作返回错误**
-```
-A: 确保Git历史已初始化。应用启动时自动初始化
+// 派生密钥
+let key = EncryptionManager::derive_key_from_password("password", &salt)?;
 ```
 
 ---
 
-## 文件修改清单
+## 📊 常用 Tauri 命令
 
-### 新增文件
-- ✅ `FEATURES_IMPLEMENTATION.md` - 功能实现详细文档
-- ✅ `API_REFERENCE.md` - API参考文档
+| 命令 | 参数 | 返回值 |
+|------|------|--------|
+| `search_notes` | `query: String` | `Vec<SearchResult>` |
+| `search_notes_fuzzy` | `query: String` | `Vec<SearchResult>` |
+| `search_in_note` | `noteId, query` | `Vec<SearchResult>` |
+| `search_notes_advanced` | `query, limit, offset` | `Vec<SearchResult>` |
+| `init_encryption` | `password: String` | `String` (salt) |
+| `is_encryption_enabled` | - | `bool` |
+| `disable_encryption` | - | `()` |
 
-### 修改文件
-- ✅ `desktop/src-tauri/src/commands.rs` - 添加44个新命令
-- ✅ `desktop/src-tauri/src/git_history.rs` - 添加里程碑管理
-- ✅ `desktop/src-tauri/src/lib.rs` - 注册所有新命令
-- ✅ `desktop/src-tauri/Cargo.toml` - 添加 lazy_static 依赖
+---
 
-### 编译日志
+## ⚡ 性能提示
+
+### 搜索优化
+- 限制搜索结果数量（默认 50）
+- 使用模糊搜索前验证用户输入
+- 定期重建索引以保持性能
+
+### 加密优化
+- 批量操作时使用 `encrypt_batch()`
+- 密钥派生是计算密集的，缓存结果
+- 避免频繁初始化新的加密管理器
+
+---
+
+## 🐛 故障排查
+
+### 搜索问题
+
+```rust
+// 问题：搜索没有返回结果
+// 解决：确保笔记已添加到索引
+search.add_note(&id, &title, &content, &tags, updated_at)?;
+
+// 问题：中文搜索失败
+// 解决：检查 jieba-rs 是否正确初始化
 ```
-✓ core: 成功 (6.59s)
-✓ desktop-tauri: 成功 (38.68s release)
-✓ 44个命令已注册
-✓ 无编译错误
-✓ 4个低级别警告（可忽略）
+
+### 加密问题
+
+```rust
+// 问题：解密失败
+// 解决：验证密钥和盐值是否匹配
+// let key = EncryptionManager::derive_key_from_password(password, &salt)?;
+
+// 问题：加密很慢
+// 解决：Argon2 KDF 需要时间，这是正常的
 ```
 
 ---
 
-## 下一步
+## 📝 示例代码
 
-1. **集成到前端** - 在UI中调用这些新API
-2. **添加单元测试** - 测试每个命令
-3. **性能调优** - 根据实际使用调整缓存TTL
-4. **文档完善** - 更新用户手册
-5. **发布版本** - 打包为可分发应用
+### 完整工作流
+
+```rust
+use noteforge_core::{
+    storage::LocalStorage,
+    search::SearchEngine,
+    encryption::EncryptionManager,
+    types::*,
+};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // 初始化存储和搜索
+    let mut storage = LocalStorage::open("noteforge.db")?;
+    let mut search = SearchEngine::open("index")?;
+
+    // 初始化加密
+    let salt = EncryptionManager::generate_salt();
+    let key = EncryptionManager::derive_key_from_password("password", &salt)?;
+    let mut em = EncryptionManager::new();
+    em.initialize(key);
+    storage.set_encryption(em);
+
+    // 创建笔记
+    let note_req = CreateNoteRequest {
+        title: "My Note".to_string(),
+        content: "Important information".to_string(),
+        notebook_id: None,
+        tags: vec!["important".to_string()],
+    };
+
+    let note = storage.create_note(&note_req)?;
+
+    // 索引笔记
+    search.add_note(
+        &note.meta.id,
+        &note.meta.title,
+        &note.content,
+        &note.meta.tags,
+        note.meta.updated_at,
+    )?;
+
+    // 搜索笔记
+    let results = search.search("important", 50)?;
+    println!("Found {} results", results.len());
+
+    // 获取笔记（自动解密）
+    let retrieved = storage.get_note(&note.meta.id)?;
+    println!("Note: {}", retrieved.meta.title);
+
+    Ok(())
+}
+```
 
 ---
 
-## 相关文档
+## 🔑 关键概念
 
-- 📄 `FEATURES_IMPLEMENTATION.md` - 详细功能文档
-- 📄 `API_REFERENCE.md` - 完整API参考
-- 📄 `docs/architecture.md` - 系统架构设计
-- 📄 `docs/database-schema.md` - 数据库模式
+### Salt（盐值）
+- 16 字节随机数
+- 防彩虹表攻击
+- 与密钥派生一起使用
+- 可以存储在数据库中
+
+### Key（密钥）
+- 32 字节 (256 位)
+- 从密码和盐派生
+- 用于 AES 加密
+- 不应存储在数据库中
+
+### IV（初始向量）
+- 12 字节随机数
+- 每次加密生成新的
+- 与密文一起存储
+- 确保相同内容产生不同密文
+
+### Nonce
+- 与 IV 同义（在 GCM 模式中）
+- 必须唯一
+- 影响加密安全性
 
 ---
 
-**Status**: ✅ 完成
-**Date**: 2026-06-26
-**Version**: 1.0.0
+## 📚 进阶主题
+
+### 自定义分词
+
+```rust
+// 修改 tokenize_chinese() 来自定义分词行为
+fn tokenize_chinese(text: &str) -> String {
+    let words = JIEBA.cut(text, true); // 精确模式
+    words.join(" ")
+}
+```
+
+### 密钥轮换
+
+```rust
+// 用新密钥重新加密所有笔记
+fn rotate_keys(old_key: &[u8], new_key: &[u8]) -> Result<()> {
+    let mut old_em = EncryptionManager::new();
+    old_em.initialize(old_key.try_into()?);
+    
+    let mut new_em = EncryptionManager::new();
+    new_em.initialize(new_key.try_into()?);
+    
+    // 遍历所有笔记并重新加密
+    // ...
+}
+```
+
+### 索引维护
+
+```rust
+// 重建完整索引
+fn rebuild_index(storage: &LocalStorage, search: &mut SearchEngine) -> Result<()> {
+    let notes = storage.list_notes(None, 10000, 0)?;
+    
+    for note_meta in notes {
+        if let Ok(note) = storage.get_note(&note_meta.id) {
+            search.add_note(
+                &note.meta.id,
+                &note.meta.title,
+                &note.content,
+                &note.meta.tags,
+                note.meta.updated_at,
+            )?;
+        }
+    }
+    
+    Ok(())
+}
+```
+
+---
+
+## ✅ 生产检查清单
+
+- [ ] 所有测试通过
+- [ ] 依赖项已更新
+- [ ] 加密密钥安全存储
+- [ ] Salt 值已保存
+- [ ] 定期备份数据库
+- [ ] 监控搜索性能
+- [ ] 日志已配置
+- [ ] 错误处理完善
+
+---
+
+## 🚀 下一步
+
+1. **集成到你的应用**
+   - 添加搜索 UI
+   - 添加加密设置页面
+   - 集成到笔记编辑器
+
+2. **优化性能**
+   - 测试大数据集
+   - 优化搜索结果限制
+   - 考虑索引缓存
+
+3. **增强功能**
+   - 搜索历史
+   - 搜索建议
+   - 高级搜索语法
+
+---
+
+**版本**: 1.0  
+**最后更新**: 2026-06-27  
+**维护状态**: 主动维护 ✓

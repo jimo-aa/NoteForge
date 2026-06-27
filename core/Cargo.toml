@@ -11,6 +11,13 @@ pulldown-cmark = "0.11"
 tantivy = "0.22"
 jieba-rs = "0.7"
 unicode-segmentation = "1.12"
+lazy_static = "1.4"
+
+# Encryption (AES-256-GCM)
+aes-gcm = "0.10"
+rand = "0.8"
+argon2 = "0.5"
+hex = "0.4"
 
 # Serialization
 serde = { version = "1", features = ["derive"] }

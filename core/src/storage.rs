@@ -8,20 +8,33 @@ use std::path::Path;
 use tracing::info;
 
 use crate::types::{self, Note, NoteMeta, Notebook, Tag, CreateNoteRequest, UpdateNoteRequest};
+use crate::encryption::EncryptionManager;
 
 /// 本地存储引擎
 pub struct LocalStorage {
     conn: Connection,
+    encryption: Option<EncryptionManager>,
 }
 
 impl LocalStorage {
     /// 打开（或创建）SQLite 数据库
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self, Box<dyn std::error::Error>> {
         let conn = Connection::open(&path)?;
-        let storage = Self { conn };
+        let storage = Self { conn, encryption: None };
         storage.initialize_tables()?;
         info!("🗄️  本地存储已打开: {:?}", path.as_ref());
         Ok(storage)
+    }
+
+    /// 初始化加密管理器
+    pub fn set_encryption(&mut self, encryption: EncryptionManager) {
+        self.encryption = Some(encryption);
+        info!("🔐 存储层已启用加密");
+    }
+
+    /// 检查是否启用了加密
+    pub fn has_encryption(&self) -> bool {
+        self.encryption.is_some()
     }
 
     /// 初始化数据库表
@@ -213,6 +226,26 @@ impl LocalStorage {
     }
 
     // ============================================================
+    // 加密辅助函数
+    // ============================================================
+
+    fn encrypt_content(&self, content: &str) -> Result<String, Box<dyn std::error::Error>> {
+        if let Some(ref em) = self.encryption {
+            em.encrypt(content).map_err(|e| format!("加密失败: {}", e).into())
+        } else {
+            Ok(content.to_string())
+        }
+    }
+
+    fn decrypt_content(&self, encrypted: &str) -> Result<String, Box<dyn std::error::Error>> {
+        if let Some(ref em) = self.encryption {
+            em.decrypt(encrypted).map_err(|e| format!("解密失败: {}", e).into())
+        } else {
+            Ok(encrypted.to_string())
+        }
+    }
+
+    // ============================================================
     // 笔记 CRUD
     // ============================================================
 
@@ -225,11 +258,14 @@ impl LocalStorage {
         // 处理 notebook_id：如果为空则使用 'default'
         let notebook_id = req.notebook_id.as_deref().unwrap_or("default");
 
+        // 加密笔记内容
+        let encrypted_content = self.encrypt_content(&req.content)?;
+
         self.conn.execute(
             "INSERT INTO notes (id, notebook_id, title, content, content_plain,
                                 word_count, created_at, updated_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-            params![id, notebook_id, req.title, req.content, plain, wc, now, now],
+            params![id, notebook_id, req.title, encrypted_content, plain, wc, now, now],
         )?;
 
         // 处理标签
@@ -281,7 +317,14 @@ impl LocalStorage {
             },
         )?;
 
-        Ok(note)
+        // 解密内容
+        let decrypted_content = self.decrypt_content(&note.content)?;
+
+        Ok(Note {
+            meta: note.meta,
+            content: decrypted_content,
+            content_plain: note.content_plain,
+        })
     }
 
     pub fn update_note(
@@ -302,7 +345,11 @@ impl LocalStorage {
             fields.push("word_count = ?");
             let plain = crate::md_engine::MarkdownEngine::extract_plain_text(content);
             let wc = crate::md_engine::MarkdownEngine::count_words(content);
-            values.push(Box::new(content.clone()));
+            
+            // 加密内容
+            let encrypted = self.encrypt_content(content)?;
+            
+            values.push(Box::new(encrypted));
             values.push(Box::new(plain));
             values.push(Box::new(wc as i32));
         }

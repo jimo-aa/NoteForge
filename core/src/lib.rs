@@ -11,6 +11,7 @@ pub mod md_engine;
 pub mod storage;
 pub mod search;
 pub mod types;
+pub mod encryption;
 
 use std::path::Path;
 use tracing::info;
