@@ -948,6 +948,46 @@ button { cursor: pointer; }
 .search-result__type--note { background: rgba(106, 99, 255, 0.14); color: #c8c3ff; }
 .search-result__type--tag { background: rgba(33, 211, 146, 0.12); color: #7ee8bf; }
 .search-result__type--command { background: rgba(102, 216, 255, 0.12); color: #89def4; }
+
+.search-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 12px;
+  border-top: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.01);
+}
+
+.search-pagination__btn {
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-soft);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.search-pagination__btn:hover:not(:disabled) {
+  background: rgba(106, 99, 255, 0.12);
+  border-color: rgba(106, 99, 255, 0.28);
+  color: var(--text);
+}
+
+.search-pagination__btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.search-pagination__info {
+  font-size: 12px;
+  color: var(--text-muted);
+  min-width: 40px;
+  text-align: center;
+}
+
 .search-empty {
   min-height: 260px;
   display: grid;

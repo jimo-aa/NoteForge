@@ -42,8 +42,12 @@ export function SearchBox() {
   const [results, setResults] = useState<SearchResultItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(0);
+  const [totalResults, setTotalResults] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const highlightTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const pageSize = 5; // 每页显示5条
 
   const close = () => {
     setOpen(false);
@@ -59,20 +63,28 @@ export function SearchBox() {
   useEffect(() => {
     if (!open || !query) {
       setResults([]);
+      setCurrentPage(0);
+      setTotalResults(0);
       return;
     }
 
     const t = window.setTimeout(async () => {
       setLoading(true);
       try {
-        // 使用新的搜索 API
-        const searchResults = await tauriInvoke<SearchResult[]>('search_notes', { 
+        // 使用高级搜索 API，获取所有结果用于总数统计
+        const allResults = await tauriInvoke<SearchResult[]>('search_notes', { 
           query 
         });
 
-        if (searchResults && searchResults.length > 0) {
+        if (allResults && allResults.length > 0) {
+          setTotalResults(allResults.length);
+          
+          // 获取当前页的结果
+          const startIndex = 0;
+          const pageResults = allResults.slice(startIndex, startIndex + pageSize);
+          
           setResults(
-            searchResults.map((hit: SearchResult) => ({
+            pageResults.map((hit: SearchResult) => ({
               id: hit.note_id,
               title: hit.title,
               snippet: hit.snippet || '暂无内容预览',
@@ -87,13 +99,16 @@ export function SearchBox() {
           );
         } else {
           setResults([]);
+          setTotalResults(0);
         }
       } catch (error) {
         console.error('Search error:', error);
         setResults([]);
+        setTotalResults(0);
       } finally {
         setLoading(false);
         setActiveIndex(0);
+        setCurrentPage(0);
       }
     }, 300);
 
@@ -131,6 +146,8 @@ export function SearchBox() {
       setQuery('');
       setResults([]);
       setActiveIndex(0);
+      setCurrentPage(0);
+      setTotalResults(0);
       // 只在真正关闭时保持高亮状态，用于视觉反馈
     }
   }, [open]);
@@ -143,6 +160,43 @@ export function SearchBox() {
       }
     };
   }, []);
+
+  // 分页处理
+  const loadPage = async (pageNum: number) => {
+    if (!query) return;
+    
+    try {
+      setLoading(true);
+      const allResults = await tauriInvoke<SearchResult[]>('search_notes', { query });
+      
+      if (allResults && allResults.length > 0) {
+        const startIndex = pageNum * pageSize;
+        const pageResults = allResults.slice(startIndex, startIndex + pageSize);
+        
+        setResults(
+          pageResults.map((hit: SearchResult) => ({
+            id: hit.note_id,
+            title: hit.title,
+            snippet: hit.snippet || '暂无内容预览',
+            score: hit.score,
+            tag: `相关性: ${(hit.score * 100).toFixed(0)}%`,
+            updatedAt: new Date(hit.updated_at).toLocaleString(),
+            type: 'note' as const,
+            noteId: hit.note_id,
+            line: 1,
+            column: 1,
+          }))
+        );
+        
+        setCurrentPage(pageNum);
+        setActiveIndex(0);
+      }
+    } catch (error) {
+      console.error('Page load error:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSelect = async (index: number) => {
     const item = results[index];
@@ -166,6 +220,9 @@ export function SearchBox() {
       setHighlightedId(null);
     }, 2000);
   };
+
+  const totalPages = Math.ceil(totalResults / pageSize);
+  const currentPageNum = currentPage + 1;
 
   const modal = open
     ? createPortal(
@@ -217,7 +274,7 @@ export function SearchBox() {
               <div className="search-modal__section-header">
                 <span>搜索结果 {loading && <span className="loading">搜索中...</span>}</span>
                 <span>
-                  {results.length} 条
+                  {totalResults > 0 ? `${currentPageNum}/${totalPages} 页 (共 ${totalResults} 条)` : `${results.length} 条`}
                 </span>
               </div>
 
@@ -234,41 +291,66 @@ export function SearchBox() {
                   <p>尝试更换关键词，或确认笔记已经完成索引。</p>
                 </div>
               ) : (
-                <div className="search-results">
-                  {results.map((item, index) => (
-                    <button
-                      key={item.id}
-                      type="button"
-                      className={`search-result${index === activeIndex ? ' active' : ''}${highlightedId === item.noteId ? ' highlighted' : ''}`}
-                      onMouseEnter={() => setActiveIndex(index)}
-                      onClick={() => void handleSelect(index)}
-                    >
-                      <div className="search-result__top">
-                        <div className="search-result__title-row">
-                          <span className="search-result__type search-result__type--note">
-                            笔记
-                          </span>
-                          <strong>{item.title}</strong>
-                          <span className="search-result__score">
-                            {(item.score * 100).toFixed(0)}%
+                <>
+                  <div className="search-results">
+                    {results.map((item, index) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        className={`search-result${index === activeIndex ? ' active' : ''}${highlightedId === item.noteId ? ' highlighted' : ''}`}
+                        onMouseEnter={() => setActiveIndex(index)}
+                        onClick={() => void handleSelect(index)}
+                      >
+                        <div className="search-result__top">
+                          <div className="search-result__title-row">
+                            <span className="search-result__type search-result__type--note">
+                              笔记
+                            </span>
+                            <strong>{item.title}</strong>
+                            <span className="search-result__score">
+                              {(item.score * 100).toFixed(0)}%
+                            </span>
+                          </div>
+                          <span className="search-result__time">{item.updatedAt}</span>
+                        </div>
+                        <p className="search-result__snippet">{item.snippet}</p>
+                        <div className="search-result__footer">
+                          <span>{item.tag}</span>
+                          <span>
+                            {index === activeIndex
+                              ? '回车打开'
+                              : highlightedId === item.noteId
+                              ? '已打开'
+                              : '点击打开'}
                           </span>
                         </div>
-                        <span className="search-result__time">{item.updatedAt}</span>
-                      </div>
-                      <p className="search-result__snippet">{item.snippet}</p>
-                      <div className="search-result__footer">
-                        <span>{item.tag}</span>
-                        <span>
-                          {index === activeIndex
-                            ? '回车打开'
-                            : highlightedId === item.noteId
-                            ? '已打开'
-                            : '点击打开'}
-                        </span>
-                      </div>
-                    </button>
-                  ))}
-                </div>
+                      </button>
+                    ))}
+                  </div>
+                  {totalPages > 1 && (
+                    <div className="search-pagination">
+                      <button
+                        type="button"
+                        className="search-pagination__btn"
+                        onClick={() => void loadPage(currentPage - 1)}
+                        disabled={currentPage === 0 || loading}
+                      >
+                        ← 上一页
+                      </button>
+                      <span className="search-pagination__info">
+                        {currentPageNum} / {totalPages}
+                      </span>
+                      <button
+                        type="button"
+                        className="search-pagination__btn"
+                        onClick={() => void loadPage(currentPage + 1)}
+                        disabled={currentPage >= totalPages - 1 || loading}
+                      >
+                        下一页 →
+                      </button>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>

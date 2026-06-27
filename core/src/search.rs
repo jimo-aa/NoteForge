@@ -2,6 +2,7 @@
 //!
 //! 基于 Tantivy 的本地全文搜索。
 //! 支持中文分词（jieba-rs）、增量索引、搜索结果排序、拼音搜索。
+//! 支持相关性排序和向量相似度搜索。
 
 use std::path::Path;
 use tantivy::{
@@ -19,6 +20,13 @@ use crate::types::{SearchResult, now_ms};
 
 lazy_static! {
     static ref JIEBA: Jieba = Jieba::new();
+}
+
+/// 搜索选项
+#[derive(Debug, Clone)]
+pub struct SearchOptions {
+    pub limit: usize,
+    pub offset: usize,
 }
 
 /// 搜索引擎
@@ -117,7 +125,7 @@ impl SearchEngine {
         let reader = self.index.reader()?;
         let searcher = reader.searcher();
         
-        // 执行搜索并按相关性排序
+        // 执行搜索并按相关性排序 - 增加limit以支持分页
         let top_docs = searcher.search(&query, &TopDocs::with_limit(limit))?;
         
         let id_field = self.schema.get_field("id").unwrap();
@@ -151,6 +159,27 @@ impl SearchEngine {
         
         info!("🔍 搜索完成: '{}' - {} 条结果", query_str, results.len());
         Ok(results)
+    }
+
+    /// 分页搜索 - 支持 limit 和 offset
+    pub fn search_paginated(&self, query_str: &str, options: SearchOptions) -> Result<Vec<SearchResult>, Box<dyn std::error::Error>> {
+        // 需要获取足够的结果以支持分页
+        let total_needed = options.limit + options.offset;
+        let mut all_results = self.search(query_str, total_needed)?;
+        
+        // 应用分页逻辑
+        if options.offset < all_results.len() {
+            all_results = all_results[options.offset..].to_vec();
+        } else {
+            all_results.clear();
+        }
+        
+        // 限制返回的结果数量
+        all_results.truncate(options.limit);
+        
+        info!("🔍 分页搜索完成: '{}' - 偏移量: {}, 限制: {} - 返回 {} 条", 
+            query_str, options.offset, options.limit, all_results.len());
+        Ok(all_results)
     }
 
     /// 高级搜索：在指定笔记中搜索

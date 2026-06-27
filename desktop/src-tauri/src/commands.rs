@@ -212,7 +212,7 @@ pub fn list_notes(state: State<'_, AppState>) -> Result<Vec<Note>, String> {
 
 #[tauri::command] 
 pub fn search_notes(state: State<'_, AppState>, query: String) -> Result<Vec<SearchResult>, String> { 
-    state.core.lock().map_err(|e| e.to_string())?.search.search(&query, 50).map_err(|e| e.to_string()) 
+    state.core.lock().map_err(|e| e.to_string())?.search.search(&query, 1000).map_err(|e| e.to_string()) 
 }
 
 /// 模糊搜索 - 支持部分匹配和容错
@@ -221,7 +221,7 @@ pub fn search_notes_fuzzy(state: State<'_, AppState>, query: String) -> Result<V
     state.core.lock()
         .map_err(|e| e.to_string())?
         .search
-        .search_fuzzy(&query, 50)
+        .search_fuzzy(&query, 1000)
         .map_err(|e| e.to_string())
 }
 
@@ -231,27 +231,16 @@ pub fn search_in_note(state: State<'_, AppState>, note_id: String, query: String
     state.core.lock()
         .map_err(|e| e.to_string())?
         .search
-        .search_in_note(&note_id, &query, 50)
+        .search_in_note(&note_id, &query, 1000)
         .map_err(|e| e.to_string())
 }
 
 /// 高级搜索 - 支持自定义 limit 和 offset
 #[tauri::command]
 pub fn search_notes_advanced(state: State<'_, AppState>, query: String, limit: usize, offset: usize) -> Result<Vec<SearchResult>, String> {
-    let mut results = state.core.lock()
-        .map_err(|e| e.to_string())?
-        .search
-        .search(&query, limit + offset)
-        .map_err(|e| e.to_string())?;
-    
-    // 简单的分页处理
-    if offset < results.len() {
-        results = results[offset..].to_vec();
-    } else {
-        results.clear();
-    }
-    
-    Ok(results.into_iter().take(limit).collect())
+    let core = state.core.lock().map_err(|e| e.to_string())?;
+    let options = noteforge_core::search::SearchOptions { limit, offset };
+    core.search.search_paginated(&query, options).map_err(|e| e.to_string())
 }
 
 // ============================================================
