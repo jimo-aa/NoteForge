@@ -1,14 +1,5 @@
 import { useState, useCallback } from 'react';
-
-async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T | null> {
-  try {
-    const { invoke } = await import('@tauri-apps/api/core');
-    return await invoke<T>(cmd, args);
-  } catch (error) {
-    console.error(`Command ${cmd} failed:`, error);
-    return null;
-  }
-}
+import { tauriInvoke as invoke } from '@/utils/invoke';
 
 export function useAdvancedVersioning(noteId: string) {
   const [isLoading, setIsLoading] = useState(false);

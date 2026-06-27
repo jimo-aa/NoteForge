@@ -3,22 +3,13 @@ import { DiffViewerModal } from './DiffViewerModal';
 import { MilestoneModal } from './MilestoneModal';
 import { VersionSearchModal } from './VersionSearchModal';
 import { ExportBackupModal } from './ExportBackupModal';
+import { tauriInvoke as invoke } from '@/utils/invoke';
 
 interface GitVersionEntry {
   id: string;
   title: string;
   updatedAt: number;
   summary?: string;
-}
-
-async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T | null> {
-  try {
-    const { invoke } = await import('@tauri-apps/api/core');
-    return await invoke<T>(cmd, args);
-  } catch (error) {
-    console.error(`invoke ${cmd} failed:`, error);
-    return null;
-  }
 }
 
 export function AdvancedFeaturesToolbar({ 

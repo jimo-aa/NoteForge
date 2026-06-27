@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useStore } from '@/stores/context';
+import { tauriInvoke } from '@/utils/invoke';
 
 import { Sidebar } from '@/components/Sidebar/Sidebar';
 import { NoteList } from '@/components/Sidebar/NoteList';
@@ -11,19 +12,13 @@ import { Toast } from '@/components/Common/Toast';
 import { GraphView } from '@/components/Common/GraphView';
 import { EntityModal } from '@/components/Modals/EntityModal';
 import { AdvancedVersioningPanel } from '@/components/Features/AdvancedVersioningPanel';
+import { ErrorBoundary } from '@/components/Common/ErrorBoundary';
 import type { NotebookModalState } from '@/components/Modals/NotebookModal';
-
-async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T | null> {
-  try {
-    const { invoke } = await import('@tauri-apps/api/core');
-    return await invoke<T>(cmd, args);
-  } catch {
-    return null;
-  }
-}
 
 export default function App() {
   const store = useStore();
+  const storeRef = useRef(store);
+  storeRef.current = store;
   const [newNoteOpen, setNewNoteOpen] = useState(false);
   const [advancedVersioningOpen, setAdvancedVersioningOpen] = useState(false);
   const [notebookModal, setNotebookModal] = useState<NotebookModalState>({
@@ -36,16 +31,15 @@ export default function App() {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key.toLowerCase() === 'n' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); setNewNoteOpen(true); }
-      if (e.key.toLowerCase() === 'f' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); store.setSettingsOpen(false); }
-      // Ctrl+Shift+V 打开高级版本控制
-      if (e.key.toLowerCase() === 'v' && (e.metaKey || e.ctrlKey) && e.shiftKey) { 
-        e.preventDefault(); 
-        setAdvancedVersioningOpen(true); 
+      if (e.key.toLowerCase() === 'f' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); storeRef.current.setSettingsOpen(false); }
+      if (e.key.toLowerCase() === 'v' && (e.metaKey || e.ctrlKey) && e.shiftKey) {
+        e.preventDefault();
+        setAdvancedVersioningOpen(true);
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [store]);
+  }, []);
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
@@ -56,9 +50,9 @@ export default function App() {
         unlisten = await eventApi.listen<{ noteId: string; line: number }>('noteforge:open-search-hit', async (event) => {
           const payload = event.payload;
           if (payload?.noteId) {
-            store.selectNote(payload.noteId);
-            const note = await invoke<{ meta: { id: string }; content: string }>('get_note', { id: payload.noteId });
-            if (note) store.showToast('success', `已跳转到第 ${payload.line} 行`);
+            storeRef.current.selectNote(payload.noteId);
+            const note = await tauriInvoke<{ meta: { id: string }; content: string }>('get_note', { id: payload.noteId });
+            if (note) storeRef.current.showToast('success', `已跳转到第 ${payload.line} 行`);
           }
         });
       } catch {
@@ -66,7 +60,7 @@ export default function App() {
       }
     })();
     return () => { void unlisten?.(); };
-  }, [store]);
+  }, []);
 
   const handleOpenNotebookModal = () => {
     setNotebookModal({
@@ -92,42 +86,44 @@ export default function App() {
   };
 
   return (
-    <div className="app-shell">
-      <Sidebar onNewNote={() => setNewNoteOpen(true)} onNewNotebook={handleOpenNotebookModal} />
-      <main className="main-panel"><div className="main-surface"><div className="content-layout"><section className="note-list-column"><NoteList /></section><section className="preview-column"><Editor /></section></div></div></main>
-      <NewNoteModal open={newNoteOpen} notebooks={store.notebooks} onClose={() => setNewNoteOpen(false)} onCreate={async ({ title, content, notebookId, tags }) => { const result = await store.createNote(title, content, notebookId, tags); if (result) { store.showToast('success', '✓ 已创建笔记'); setNewNoteOpen(false); } else { store.showToast('error', '创建笔记失败，请重试'); } }} />
-      <NotebookModal state={notebookModal} onClose={() => setNotebookModal({ open: false, mode: null, title: '', value: '' })} onConfirm={handleConfirmNotebook} />
-      <EntityModal state={store.entityModal} onClose={store.closeEntityModal} onConfirm={async (value) => {
-        if (!value) {
-          store.showToast('error', '输入内容不能为空');
-          return;
-        }
-        const targetId = store.entityModal.targetId;
-        if (store.entityModal.mode === 'create-notebook') {
-          const result = await store.createNotebook(value);
-          if (!result) {
-            store.showToast('error', '创建笔记本失败，请检查后端服务');
+    <ErrorBoundary>
+      <div className="app-shell">
+        <Sidebar onNewNote={() => setNewNoteOpen(true)} onNewNotebook={handleOpenNotebookModal} />
+        <main className="main-panel"><div className="main-surface"><div className="content-layout"><section className="note-list-column"><NoteList /></section><section className="preview-column"><Editor /></section></div></div></main>
+        <NewNoteModal open={newNoteOpen} notebooks={store.notebooks} onClose={() => setNewNoteOpen(false)} onCreate={async ({ title, content, notebookId, tags }) => { const result = await store.createNote(title, content, notebookId, tags); if (result) { store.showToast('success', '✓ 已创建笔记'); setNewNoteOpen(false); } else { store.showToast('error', '创建笔记失败，请重试'); } }} />
+        <NotebookModal state={notebookModal} onClose={() => setNotebookModal({ open: false, mode: null, title: '', value: '' })} onConfirm={handleConfirmNotebook} />
+        <EntityModal state={store.entityModal} onClose={store.closeEntityModal} onConfirm={async (value) => {
+          if (!value) {
+            store.showToast('error', '输入内容不能为空');
+            return;
           }
-        } else if (store.entityModal.mode === 'rename-notebook' && targetId) {
-          const result = await store.renameNotebook(targetId, value);
-          if (!result) {
-            store.showToast('error', '重命名笔记本失败');
+          const targetId = store.entityModal.targetId;
+          if (store.entityModal.mode === 'create-notebook') {
+            const result = await store.createNotebook(value);
+            if (!result) {
+              store.showToast('error', '创建笔记本失败，请检查后端服务');
+            }
+          } else if (store.entityModal.mode === 'rename-notebook' && targetId) {
+            const result = await store.renameNotebook(targetId, value);
+            if (!result) {
+              store.showToast('error', '重命名笔记本失败');
+            }
+          } else if (store.entityModal.mode === 'rename-note' && targetId) {
+            store.updateNote(targetId, { title: value });
+            store.showToast('success', '✏️ 已重命名笔记');
           }
-        } else if (store.entityModal.mode === 'rename-note' && targetId) {
-          store.updateNote(targetId, { title: value });
-          store.showToast('success', '✏️ 已重命名笔记');
-        }
-        store.closeEntityModal();
-      }} />
-      {advancedVersioningOpen && store.currentNoteId && (
-        <AdvancedVersioningPanel 
-          noteId={store.currentNoteId} 
-          onClose={() => setAdvancedVersioningOpen(false)}
-        />
-      )}
-      <ContextMenu />
-      <GraphView />
-      {store.toasts.map((t) => (<Toast key={t.id} message={t.message} />))}
-    </div>
+          store.closeEntityModal();
+        }} />
+        {advancedVersioningOpen && store.currentNoteId && (
+          <AdvancedVersioningPanel 
+            noteId={store.currentNoteId} 
+            onClose={() => setAdvancedVersioningOpen(false)}
+          />
+        )}
+        <ContextMenu />
+        <GraphView />
+        {store.toasts.map((t) => (<Toast key={t.id} message={t.message} />))}
+      </div>
+    </ErrorBoundary>
   );
 }

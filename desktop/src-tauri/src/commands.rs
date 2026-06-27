@@ -5,6 +5,8 @@ use noteforge_core::{md_engine::MarkdownEngine, search::{SearchEngine, SearchPag
 
 use crate::git_history::{GitBranchEntry, GitHistory, GitVersionEntry};
 
+const MAX_NOTES_RETURNED: usize = 10_000;
+
 // 导入必要的生成ID和时间函数
 use noteforge_core::types::{generate_id, now_ms};
 
@@ -209,7 +211,7 @@ pub fn delete_note(state: State<'_, AppState>, id: String) -> Result<bool, Strin
 #[tauri::command]
 pub fn list_notes(state: State<'_, AppState>) -> Result<Vec<Note>, String> {
     let core = state.core.lock().map_err(|e| e.to_string())?;
-    let metas = core.storage.list_notes(None, 500, 0).map_err(|e| e.to_string())?;
+    let metas = core.storage.list_notes(None, MAX_NOTES_RETURNED, 0).map_err(|e| e.to_string())?;
     let mut notes = Vec::new();
     for meta in metas { if let Ok(note) = core.storage.get_note(&meta.id) { notes.push(note); } }
     Ok(notes)
@@ -219,7 +221,7 @@ pub fn list_notes(state: State<'_, AppState>) -> Result<Vec<Note>, String> {
 #[tauri::command]
 pub fn list_note_metas(state: State<'_, AppState>) -> Result<Vec<NoteMeta>, String> {
     let core = state.core.lock().map_err(|e| e.to_string())?;
-    core.storage.list_notes(None, 500, 0).map_err(|e| e.to_string())
+    core.storage.list_notes(None, MAX_NOTES_RETURNED, 0).map_err(|e| e.to_string())
 }
 
 #[tauri::command] 
@@ -271,10 +273,8 @@ pub fn init_encryption(state: State<'_, AppState>, password: String) -> Result<S
     let mut core = state.core.lock().map_err(|e| e.to_string())?;
     let mut em = EncryptionManager::new();
     em.initialize(key);
+    core.storage.set_encryption(em.clone());
     core.encryption = Some(em);
-    
-    // 为存储层设置加密
-    core.storage.set_encryption(EncryptionManager::new());
     
     Ok(salt)
 }

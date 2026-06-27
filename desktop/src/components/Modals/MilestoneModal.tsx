@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import '../../../styles/modals.css';
+import { tauriInvoke as invoke } from '@/utils/invoke';
 
 interface Milestone {
   id: string;
@@ -10,16 +11,6 @@ interface Milestone {
   version_number: number;
   created_at: number;
   tags: string[];
-}
-
-async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T | null> {
-  try {
-    const { invoke } = await import('@tauri-apps/api/core');
-    return await invoke<T>(cmd, args);
-  } catch (error) {
-    console.error(`invoke ${cmd} failed:`, error);
-    return null;
-  }
 }
 
 export function MilestoneModal({ 

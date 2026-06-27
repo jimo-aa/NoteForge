@@ -1,5 +1,7 @@
 // NoteForge — Markdown 渲染引擎（离线可用）
 
+import DOMPurify from 'dompurify';
+
 export function renderMarkdown(md: string, highlightQuery = ''): string {
   const lines = md.split('\n');
   const out: string[] = [];
@@ -40,7 +42,7 @@ export function renderMarkdown(md: string, highlightQuery = ''): string {
   flushList();
   if (inCode) out.push(`<pre><code>${escapeHtml(codeBuf.join('\n'))}</code></pre>`);
   if (inTable) out.push('</table>');
-  return out.join('\n');
+  return DOMPurify.sanitize(out.join('\n'));
 }
 
 function inlineMd(text: string, highlightQuery = ''): string {

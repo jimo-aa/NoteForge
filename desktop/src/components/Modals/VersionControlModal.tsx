@@ -1,19 +1,11 @@
 import { useState, useEffect, useMemo } from 'react';
+import { tauriInvoke as invoke } from '@/utils/invoke';
 import type { GitVersionEntry, GitBranchEntry } from '@/types';
 
 interface BranchNode {
   branch: string;
   commits: GitVersionEntry[];
   isExpanded: boolean;
-}
-
-async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T | null> {
-  try {
-    const { invoke } = await import('@tauri-apps/api/core');
-    return await invoke<T>(cmd, args);
-  } catch {
-    return null;
-  }
 }
 
 export function VersionControlModal({ open, noteId, onClose, onCheckoutVersion, onCheckoutBranch, onCreateBranch, onRestore }: {

@@ -1,17 +1,8 @@
 // 高级功能Hooks - 用于简化组件中的API调用
 
 import { useState, useCallback, useEffect } from 'react';
+import { tauriInvoke as invoke } from '@/utils/invoke';
 import type { DiffResult, Milestone, VersionSearchResult } from '../types/advanced-features';
-
-async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T | null> {
-  try {
-    const { invoke } = await import('@tauri-apps/api/core');
-    return await invoke<T>(cmd, args);
-  } catch (error) {
-    console.error(`invoke ${cmd} failed:`, error);
-    return null;
-  }
-}
 
 // Diff查看器Hook
 export function useDiffViewer(noteId: string, fromVersion: string, toVersion: string) {

@@ -94,6 +94,13 @@ impl LocalStorage {
     }
 
     fn ensure_indexes(&self) -> Result<(), Box<dyn std::error::Error>> {
+        let mut stmt = self.conn.prepare("PRAGMA table_info(notes)")?;
+        let existing = stmt
+            .query_map([], |row| row.get::<_, String>(1))?
+            .collect::<Result<Vec<_>, _>>()?;
+        if !existing.iter().any(|c| c == "is_deleted") {
+            return Ok(());
+        }
         self.conn.execute("CREATE INDEX IF NOT EXISTS idx_notes_notebook ON notes(notebook_id) WHERE is_deleted = 0", [])?;
         self.conn.execute("CREATE INDEX IF NOT EXISTS idx_notes_updated ON notes(updated_at DESC)", [])?;
         Ok(())

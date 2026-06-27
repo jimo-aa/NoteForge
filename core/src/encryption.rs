@@ -33,6 +33,7 @@ pub enum EncryptionError {
 }
 
 /// 加密管理器
+#[derive(Clone)]
 pub struct EncryptionManager {
     /// 主密钥（通常由用户密码派生）
     master_key: Option<[u8; 32]>,

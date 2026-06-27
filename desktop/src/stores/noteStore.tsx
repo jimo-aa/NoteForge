@@ -4,18 +4,9 @@ import { createContext, useContext, useState, useCallback, useRef, useEffect, ty
 import type { Note, NoteFilter, ToastMessage, ContextMenuState, SortOption, Notebook } from '@/types';
 import type { EntityModalState } from '@/components/Modals/EntityModal';
 import { countWords } from '@/utils/markdown';
+import { tauriInvoke } from '@/utils/invoke';
 
-async function tauriInvoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T | null> {
-  try {
-    const { invoke } = await import('@tauri-apps/api/core');
-    return await invoke<T>(cmd, args);
-  } catch (error) {
-    console.error(`[Tauri API Error] ${cmd}:`, error);
-    return null;
-  }
-}
-
-const ALL_NOTEBOOK = { id: 'all', name: '全部笔记', icon: '📋', noteCount: 0 };
+const ALL_NOTEBOOK: Notebook = { id: 'all', name: '全部笔记', icon: '📋', color: '', parentId: null, sortOrder: 0, noteCount: 0, createdAt: 0, updatedAt: 0 };
 const STORAGE_PREFIX = 'noteforge';
 const draftKey = (id: string) => `${STORAGE_PREFIX}:draft:${id}`;
 const cursorKey = (id: string) => `${STORAGE_PREFIX}:cursor:${id}`;
@@ -121,7 +112,15 @@ export function useNoteStore() {
   }));
 
   const currentNote = notes.find((n) => n.meta.id === currentNoteId) || null;
-  const selectNote = useCallback((id: string) => setCurrentNoteId(id), []);
+  const selectNote = useCallback((id: string) => {
+    setCurrentNoteId((prev) => {
+      if (autosaveTimerRef.current[prev]) {
+        window.clearTimeout(autosaveTimerRef.current[prev]!);
+        autosaveTimerRef.current[prev] = null;
+      }
+      return id;
+    });
+  }, []);
 
   const createNote = useCallback(async (title: string, content: string, notebookId: string, tags: string[]) => {
     try {

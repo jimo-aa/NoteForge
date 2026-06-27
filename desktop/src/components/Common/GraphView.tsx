@@ -34,6 +34,10 @@ export function GraphView() {
   const [positions, setPositions] = useState<Record<string, { x: number; y: number }>>({});
   const [activeEdge, setActiveEdge] = useState<GraphEdge | null>(null);
 
+  const graphKey = useMemo(() => {
+    return store.notes.map((n) => `${n.meta.id}:${n.meta.updatedAt}`).join('|');
+  }, [store.notes]);
+
   const graph = useMemo(() => {
     const titleToId = new Map(store.notes.map((note) => [note.meta.title, note.meta.id]));
     const edges: GraphEdge[] = [];
@@ -85,7 +89,7 @@ export function GraphView() {
     });
 
     return { nodes, edges };
-  }, [clusterMode, positions, store.notes]);
+  }, [clusterMode, positions, graphKey]);
 
   const currentId = store.currentNote?.meta.id ?? null;
   const neighborhood = useMemo(() => {

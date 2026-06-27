@@ -1,20 +1,10 @@
 import { useState, useEffect, useMemo } from 'react';
+import { tauriInvoke as invoke } from '@/utils/invoke';
 import type { Note } from '@/types';
 import { DiffViewerModal } from './DiffViewerModal';
 import { MilestoneModal } from './MilestoneModal';
 import { VersionSearchModal } from './VersionSearchModal';
 import { ExportBackupModal } from './ExportBackupModal';
-
-// 辅助函数 - Tauri命令调用
-async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T | null> {
-  try {
-    const { invoke } = await import('@tauri-apps/api/core');
-    return await invoke<T>(cmd, args);
-  } catch (error) {
-    console.error(`invoke ${cmd} failed:`, error);
-    return null;
-  }
-}
 
 /**
  * 完整的编辑器集成示例

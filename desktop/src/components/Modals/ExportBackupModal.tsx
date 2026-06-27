@@ -1,17 +1,8 @@
 import { useState } from 'react';
 import '../../../styles/modals.css';
+import { tauriInvoke as invoke } from '@/utils/invoke';
 
 type ExportFormat = 'markdown' | 'html' | 'json';
-
-async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T | null> {
-  try {
-    const { invoke } = await import('@tauri-apps/api/core');
-    return await invoke<T>(cmd, args);
-  } catch (error) {
-    console.error(`invoke ${cmd} failed:`, error);
-    return null;
-  }
-}
 
 function downloadFile(data: Uint8Array, filename: string, mimeType: string) {
   const blob = new Blob([data], { type: mimeType });

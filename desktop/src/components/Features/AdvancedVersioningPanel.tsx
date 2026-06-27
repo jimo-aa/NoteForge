@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import styles from './AdvancedVersioningPanel.module.css';
+import { tauriInvoke as invoke } from '@/utils/invoke';
 
 interface DiffResult {
   from_version: string;
@@ -38,20 +39,10 @@ interface Milestone {
 interface GitVersionEntry {
   id: string;
   title: string;
-  updated_at: number;
-  summary: string;
+  updatedAt: number;
+  summary?: string;
   branch: string;
-  parent_count: number;
-}
-
-async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T | null> {
-  try {
-    const { invoke } = await import('@tauri-apps/api/core');
-    return await invoke<T>(cmd, args);
-  } catch (error) {
-    console.error(`Command ${cmd} failed:`, error);
-    return null;
-  }
+  parentCount: number;
 }
 
 export function AdvancedVersioningPanel({ noteId, onClose }: { noteId: string; onClose: () => void }) {
@@ -252,7 +243,7 @@ export function AdvancedVersioningPanel({ noteId, onClose }: { noteId: string; o
                 <option value="">选择版本...</option>
                 {versions.map(v => (
                   <option key={v.id} value={v.id}>
-                    {v.title} ({new Date(v.updated_at).toLocaleString()})
+                    {v.title} ({new Date(v.updatedAt).toLocaleString()})
                   </option>
                 ))}
               </select>
@@ -262,7 +253,7 @@ export function AdvancedVersioningPanel({ noteId, onClose }: { noteId: string; o
                 <option value="">选择版本...</option>
                 {versions.map(v => (
                   <option key={v.id} value={v.id}>
-                    {v.title} ({new Date(v.updated_at).toLocaleString()})
+                    {v.title} ({new Date(v.updatedAt).toLocaleString()})
                   </option>
                 ))}
               </select>
@@ -457,8 +448,8 @@ export function AdvancedVersioningPanel({ noteId, onClose }: { noteId: string; o
                   {searchResults.map(result => (
                     <div key={result.id} className={styles.searchResult}>
                       <strong>{result.title}</strong>
-                      <p>{result.summary.substring(0, 100)}...</p>
-                      <small>{new Date(result.updated_at).toLocaleString()}</small>
+                      <p>{(result.summary ?? '').substring(0, 100)}...</p>
+                      <small>{new Date(result.updatedAt).toLocaleString()}</small>
                     </div>
                   ))}
                 </div>
