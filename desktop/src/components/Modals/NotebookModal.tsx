@@ -29,16 +29,16 @@ interface NotebookModalProps {
 
 export function NotebookModal({ state, onClose, onConfirm }: NotebookModalProps) {
   const [name, setName] = useState(state.value);
-  const [selectedIcon, setSelectedIcon] = useState(NOTEBOOK_ICONS[0]);
-  const [selectedColor, setSelectedColor] = useState(NOTEBOOK_COLORS[0].value);
+  const [selectedIcon, setSelectedIcon] = useState(NOTEBOOK_ICONS[0]!);
+  const [selectedColor, setSelectedColor] = useState(NOTEBOOK_COLORS[0]!.value);
   const [isLoading, setIsLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (state.open) {
       setName(state.value);
-      setSelectedIcon(NOTEBOOK_ICONS[0]);
-      setSelectedColor(NOTEBOOK_COLORS[0].value);
+      setSelectedIcon(NOTEBOOK_ICONS[0]!);
+      setSelectedColor(NOTEBOOK_COLORS[0]!.value);
       setIsLoading(false);
       setTimeout(() => inputRef.current?.focus(), 60);
     }
@@ -46,8 +46,9 @@ export function NotebookModal({ state, onClose, onConfirm }: NotebookModalProps)
 
   if (!state.open || !state.mode) return null;
 
+  const trimmedName = name.trim();
+
   const handleConfirm = async () => {
-    const trimmedName = name.trim();
     if (!trimmedName) return;
     setIsLoading(true);
     try {
@@ -86,7 +87,7 @@ export function NotebookModal({ state, onClose, onConfirm }: NotebookModalProps)
             placeholder={isCreate ? '给笔记本起个名字吧' : '输入新名称'}
             disabled={isLoading}
           />
-          {name.trim().length > 0 && name.trim().length < 1 && (
+          {!trimmedName && (
             <span className="nb-field-hint nb-hint-error">名称不能为空</span>
           )}
         </label>

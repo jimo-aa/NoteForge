@@ -2,26 +2,26 @@
 
 // Diff相关类型
 export interface DiffOperation {
-  op_type: 'add' | 'remove' | 'modify';
-  line_num: number;
-  old_text?: string;
-  new_text?: string;
+  opType: 'add' | 'remove' | 'modify';
+  lineNum: number;
+  oldText?: string;
+  newText?: string;
   context: string;
 }
 
 export interface ChangeSummary {
-  lines_added: number;
-  lines_removed: number;
-  lines_modified: number;
-  word_count_delta: number;
+  linesAdded: number;
+  linesRemoved: number;
+  linesModified: number;
+  wordCountDelta: number;
 }
 
 export interface DiffResult {
-  from_version: string;
-  to_version: string;
+  fromVersion: string;
+  toVersion: string;
   operations: DiffOperation[];
   similarity: number;
-  change_summary: ChangeSummary;
+  changeSummary: ChangeSummary;
 }
 
 // 里程碑相关类型
@@ -70,26 +70,10 @@ export type ExportFormat = 'markdown' | 'html' | 'json';
 
 // 备份配置类型
 export interface BackupConfig {
-  auto_backup: boolean;
-  backup_interval_hours: number;
-  max_backups: number;
-  last_backup_at?: number;
-}
-
-// Git相关扩展类型
-export interface GitVersionEntry {
-  id: string;
-  title: string;
-  updatedAt: number;
-  summary?: string;
-  branch: string;
-  parentCount: number;
-}
-
-export interface GitBranchEntry {
-  name: string;
-  head: string | null;
-  isCurrent: boolean;
+  autoBackup: boolean;
+  backupIntervalHours: number;
+  maxBackups: number;
+  lastBackupAt?: number;
 }
 
 // 高级功能状态管理类型

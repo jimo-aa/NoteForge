@@ -1,0 +1,29 @@
+package com.noteforge.user.service;
+
+import com.noteforge.user.dto.UserResponse;
+import com.noteforge.user.entity.UserEntity;
+import com.noteforge.user.repository.UserRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+
+@Service
+@RequiredArgsConstructor
+public class UserService {
+
+    private final UserRepository userRepository;
+
+    public UserResponse getUser(String userId) {
+        UserEntity entity = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+        return UserResponse.fromEntity(entity);
+    }
+
+    public UserResponse updateProfile(String userId, String name, String avatarUrl) {
+        UserEntity entity = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+        if (name != null) entity.setName(name);
+        if (avatarUrl != null) entity.setAvatarUrl(avatarUrl);
+        userRepository.save(entity);
+        return UserResponse.fromEntity(entity);
+    }
+}

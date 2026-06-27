@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useStore } from '@/stores/context';
 import { Icon } from '@/components/Common/Icon';
+import { tauriInvoke } from '@/utils/invoke';
 
 type SearchResult = {
   note_id: string;
@@ -25,16 +26,6 @@ type SearchResultItem = {
   updatedAt: string;
   noteId?: string;
 };
-
-async function tauriInvoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T | null> {
-  try {
-    const { invoke } = await import('@tauri-apps/api/core');
-    return await invoke<T>(cmd, args);
-  } catch (error) {
-    console.error(`[Search API Error] ${cmd}:`, error);
-    return null;
-  }
-}
 
 export function SearchBox() {
   const store = useStore();
@@ -138,31 +129,16 @@ export function SearchBox() {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
         openSearch();
+        return;
+      }
+      if (e.key === 'Escape' && open) {
+        close();
+        return;
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
-
-  useEffect(() => {
-    if (!open) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') close();
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) {
-      setQuery('');
-      setResults([]);
-      setActiveIndex(0);
-      setCurrentPage(0);
-      setTotalResults(0);
-      setFuzzyFallback(false);
-    }
-  }, [open]);
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     return () => {
@@ -211,7 +187,6 @@ export function SearchBox() {
 
     setHighlightedId(item.noteId);
     store.selectNote(item.noteId);
-    store.setCurrentNoteId(item.noteId);
     close();
 
     if (highlightTimeoutRef.current) {

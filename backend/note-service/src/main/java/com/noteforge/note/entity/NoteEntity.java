@@ -3,6 +3,8 @@ package com.noteforge.note.entity;
 import jakarta.persistence.*;
 import lombok.Data;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 @Data
@@ -26,6 +28,11 @@ public class NoteEntity {
 
     @Column(columnDefinition = "TEXT")
     private String contentPlain;
+
+    @ElementCollection
+    @CollectionTable(name = "note_tags", joinColumns = @JoinColumn(name = "note_id"))
+    @Column(name = "tag_name")
+    private List<String> tags = new ArrayList<>();
 
     private boolean isPinned;
     private boolean isFavorite;

@@ -37,6 +37,12 @@ impl LocalStorage {
         self.encryption.is_some()
     }
 
+    /// 禁用加密
+    pub fn clear_encryption(&mut self) {
+        self.encryption = None;
+        info!("🔓 存储层已禁用加密");
+    }
+
     /// 初始化数据库表
     fn initialize_tables(&self) -> Result<(), Box<dyn std::error::Error>> {
         self.conn.execute_batch(
@@ -334,6 +340,56 @@ impl LocalStorage {
             content: decrypted_content,
             content_plain: note.content_plain,
         })
+    }
+
+    pub fn get_notes_batch(&self, ids: &[&str]) -> Result<Vec<Note>, Box<dyn std::error::Error>> {
+        if ids.is_empty() { return Ok(Vec::new()); }
+        let placeholders: Vec<String> = ids.iter().enumerate().map(|(i, _)| format!("?{}", i + 1)).collect();
+        let sql = format!(
+            "SELECT id, notebook_id, title, content, content_plain, is_pinned,
+                    is_favorite, word_count, version, created_at, updated_at
+             FROM notes WHERE id IN ({}) AND is_deleted = 0",
+            placeholders.join(",")
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
+        let params: Vec<String> = ids.iter().map(|id| id.to_string()).collect();
+        let param_refs: Vec<&dyn rusqlite::types::ToSql> = params.iter().map(|s| s as &dyn rusqlite::types::ToSql).collect();
+        let rows = stmt.query_map(param_refs.as_slice(), |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, String>(4)?,
+                row.get::<_, i32>(5)?,
+                row.get::<_, i32>(6)?,
+                row.get::<_, i32>(7)?,
+                row.get::<_, i32>(8)?,
+                row.get::<_, i64>(9)?,
+                row.get::<_, i64>(10)?,
+            ))
+        })?.collect::<Result<Vec<_>, _>>()?;
+        let mut notes = Vec::with_capacity(rows.len());
+        for (id, notebook_id, title, content, content_plain, is_pinned, is_favorite, word_count, version, created_at, updated_at) in rows {
+            let decrypted = self.decrypt_content(&content)?;
+            notes.push(Note {
+                meta: NoteMeta {
+                    id,
+                    title,
+                    notebook_id: Some(notebook_id),
+                    tags: Vec::new(),
+                    is_pinned: is_pinned != 0,
+                    is_favorite: is_favorite != 0,
+                    word_count: word_count as u32,
+                    version: version as u32,
+                    created_at: created_at as u64,
+                    updated_at: updated_at as u64,
+                },
+                content: decrypted,
+                content_plain,
+            });
+        }
+        Ok(notes)
     }
 
     pub fn update_note(

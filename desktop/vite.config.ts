@@ -6,6 +6,29 @@ const host = process.env.TAURI_DEV_HOST;
 
 export default defineConfig(async () => ({
   plugins: [react()],
+  optimizeDeps: {
+    include: [
+      'codemirror',
+      '@codemirror/view',
+      '@codemirror/state',
+      '@codemirror/lang-markdown',
+      '@codemirror/commands',
+      '@codemirror/autocomplete',
+      '@codemirror/search',
+      '@codemirror/language',
+      '@codemirror/language-data',
+    ],
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          codemirror: ['codemirror', '@codemirror/view', '@codemirror/state', '@codemirror/lang-markdown', '@codemirror/commands', '@codemirror/autocomplete', '@codemirror/search', '@codemirror/language', '@codemirror/language-data'],
+          react: ['react', 'react-dom'],
+        },
+      },
+    },
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

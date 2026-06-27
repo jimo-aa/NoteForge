@@ -24,6 +24,14 @@ lazy_static::lazy_static! {
 }
 
 const CACHE_TTL_SECONDS: u64 = 300;  // 5分钟缓存
+const CACHE_MAX_ENTRIES: usize = 200;  // 最大缓存条数
+
+fn evict_cache<K: Clone + std::hash::Hash + Eq, V>(cache: &mut HashMap<K, (V, u64)>) {
+    while cache.len() > CACHE_MAX_ENTRIES {
+        let oldest_key = cache.iter().min_by_key(|(_, &(_, ts))| ts).map(|(k, _)| k.clone());
+        if let Some(k) = oldest_key { cache.remove(&k); } else { break; }
+    }
+}
 
 fn get_current_timestamp() -> u64 {
     SystemTime::now()
@@ -33,15 +41,15 @@ fn get_current_timestamp() -> u64 {
 }
 
 fn is_cache_valid(timestamp: u64) -> bool {
-    get_current_timestamp() - timestamp < CACHE_TTL_SECONDS
+    get_current_timestamp().saturating_sub(timestamp) < CACHE_TTL_SECONDS
 }
 
 fn cache_key_for_versions(note_id: &str) -> String {
     format!("versions:{}", note_id)
 }
 
-fn cache_key_for_diff(from: &str, to: &str) -> String {
-    format!("diff:{}:{}", from, to)
+fn cache_key_for_diff(note_id: &str, from: &str, to: &str) -> String {
+    format!("diff:{}:{}:{}", note_id, from, to)
 }
 
 fn cache_key_for_search(note_id: &str, query: &str) -> String {
@@ -189,7 +197,7 @@ pub fn get_note(state: State<'_, AppState>, id: String) -> Result<Option<Note>, 
 #[tauri::command]
 pub fn update_note(state: State<'_, AppState>, id: String, title: Option<String>, content: Option<String>, tags: Option<Vec<String>>, is_pinned: Option<bool>, is_favorite: Option<bool>) -> Result<Option<Note>, String> {
     let mut core = state.core.lock().map_err(|e| e.to_string())?;
-    let current = match core.storage.get_note(&id) { Ok(note) => note, Err(_) => return Ok(None) };
+    if core.storage.get_note(&id).is_err() { return Ok(None); }
     let next = UpdateNoteRequest { title, content, notebook_id: None, tags, is_pinned, is_favorite };
     let note = core.storage.update_note(&id, &next).map_err(|e| e.to_string())?;
     let index_content = if note.content_plain.is_empty() { &note.content } else { &note.content_plain };
@@ -212,9 +220,8 @@ pub fn delete_note(state: State<'_, AppState>, id: String) -> Result<bool, Strin
 pub fn list_notes(state: State<'_, AppState>) -> Result<Vec<Note>, String> {
     let core = state.core.lock().map_err(|e| e.to_string())?;
     let metas = core.storage.list_notes(None, MAX_NOTES_RETURNED, 0).map_err(|e| e.to_string())?;
-    let mut notes = Vec::new();
-    for meta in metas { if let Ok(note) = core.storage.get_note(&meta.id) { notes.push(note); } }
-    Ok(notes)
+    let ids: Vec<&str> = metas.iter().map(|m| m.id.as_str()).collect();
+    core.storage.get_notes_batch(&ids).map_err(|e| e.to_string())
 }
 
 /// 返回笔记元数据列表（不含 content，适用于侧边栏列表）
@@ -291,6 +298,7 @@ pub fn is_encryption_enabled(state: State<'_, AppState>) -> Result<bool, String>
 pub fn disable_encryption(state: State<'_, AppState>) -> Result<(), String> {
     let mut core = state.core.lock().map_err(|e| e.to_string())?;
     core.encryption = None;
+    core.storage.clear_encryption();
     Ok(())
 }
 #[tauri::command] pub fn list_notebooks(state: State<'_, AppState>) -> Result<Vec<Notebook>, String> { state.core.lock().map_err(|e| e.to_string())?.storage.list_notebooks().map_err(|e| e.to_string()) }
@@ -381,56 +389,68 @@ pub fn get_version_diff_stat(state: State<'_, AppState>, note_id: String, from_c
     })
 }
 
+fn lcs_table(a: &[&str], b: &[&str]) -> Vec<Vec<usize>> {
+    let m = a.len();
+    let n = b.len();
+    let mut dp = vec![vec![0usize; n + 1]; m + 1];
+    for i in 1..=m {
+        for j in 1..=n {
+            if a[i - 1] == b[j - 1] {
+                dp[i][j] = dp[i - 1][j - 1] + 1;
+            } else {
+                dp[i][j] = dp[i - 1][j].max(dp[i][j - 1]);
+            }
+        }
+    }
+    dp
+}
+
+fn lcs_diff(from: &[&str], to: &[&str]) -> Vec<DiffOperation> {
+    let dp = lcs_table(from, to);
+    let mut i = from.len();
+    let mut j = to.len();
+    let mut rev_ops = Vec::new();
+    while i > 0 || j > 0 {
+        if i > 0 && j > 0 && from[i - 1] == to[j - 1] {
+            i -= 1;
+            j -= 1;
+        } else if j > 0 && (i == 0 || dp[i][j - 1] >= dp[i - 1][j]) {
+            rev_ops.push(DiffOperation {
+                op_type: "add".to_string(),
+                line_num: j as u32,
+                old_text: None,
+                new_text: Some(to[j - 1].to_string()),
+                context: format!("Added at line {}", j),
+            });
+            j -= 1;
+        } else if i > 0 {
+            rev_ops.push(DiffOperation {
+                op_type: "remove".to_string(),
+                line_num: i as u32,
+                old_text: Some(from[i - 1].to_string()),
+                new_text: None,
+                context: format!("Removed at line {}", i),
+            });
+            i -= 1;
+        }
+    }
+    rev_ops.reverse();
+    rev_ops
+}
+
 fn compute_diff(from: &str, to: &str, from_id: &str, to_id: &str) -> Result<DiffResult, String> {
     let from_lines: Vec<&str> = from.lines().collect();
     let to_lines: Vec<&str> = to.lines().collect();
-    let mut operations = Vec::new();
-    let mut similarity = 1.0_f32;
     
-    let max_len = from_lines.len().max(to_lines.len());
-    if max_len > 0 {
-        let mut matches = 0;
-        for i in 0..max_len {
-            if i < from_lines.len() && i < to_lines.len() {
-                if from_lines[i] == to_lines[i] {
-                    matches += 1;
-                }
-            }
-        }
-        similarity = (matches as f32) / (max_len as f32);
-    }
+    let operations = lcs_diff(&from_lines, &to_lines);
     
-    for (i, from_line) in from_lines.iter().enumerate() {
-        if i < to_lines.len() {
-            if from_line != &to_lines[i] {
-                operations.push(DiffOperation {
-                    op_type: "modify".to_string(),
-                    line_num: (i + 1) as u32,
-                    old_text: Some(from_line.to_string()),
-                    new_text: Some(to_lines[i].to_string()),
-                    context: format!("Line {}", i + 1),
-                });
-            }
-        } else {
-            operations.push(DiffOperation {
-                op_type: "remove".to_string(),
-                line_num: (i + 1) as u32,
-                old_text: Some(from_line.to_string()),
-                new_text: None,
-                context: format!("Removed at line {}", i + 1),
-            });
-        }
-    }
-    
-    for _i in from_lines.len()..to_lines.len() {
-        operations.push(DiffOperation {
-            op_type: "add".to_string(),
-            line_num: (_i + 1) as u32,
-            old_text: None,
-            new_text: Some(to_lines[_i].to_string()),
-            context: format!("Added at line {}", _i + 1),
-        });
-    }
+    let total = from_lines.len().max(to_lines.len());
+    let similarity = if total > 0 {
+        let lcs_len = lcs_table(&from_lines, &to_lines)[from_lines.len()][to_lines.len()];
+        lcs_len as f32 / total as f32
+    } else {
+        1.0
+    };
     
     let change_summary = compute_change_summary(from, to);
     
@@ -491,7 +511,7 @@ fn compute_change_summary(from: &str, to: &str) -> ChangeSummary {
         }
     }
     
-    for i in from_lines.len()..to_lines.len() {
+    for _i in from_lines.len()..to_lines.len() {
         lines_added += 1;
     }
     
@@ -786,6 +806,7 @@ pub fn list_note_versions_cached(state: State<'_, AppState>, note_id: String) ->
         versions.retain(|v| !deleted.contains(&v.id));
         
         if let Ok(mut cache) = VERSION_CACHE.lock() {
+            evict_cache(&mut cache);
             cache.insert(cache_key, (versions.clone(), get_current_timestamp()));
         }
         
@@ -795,7 +816,7 @@ pub fn list_note_versions_cached(state: State<'_, AppState>, note_id: String) ->
 
 #[tauri::command]
 pub fn get_version_diff_cached(state: State<'_, AppState>, note_id: String, from_commit: String, to_commit: String) -> Result<DiffResult, String> {
-    let cache_key = cache_key_for_diff(&from_commit, &to_commit);
+    let cache_key = cache_key_for_diff(&note_id, &from_commit, &to_commit);
     
     {
         if let Ok(cache) = DIFF_CACHE.lock() {
@@ -810,6 +831,7 @@ pub fn get_version_diff_cached(state: State<'_, AppState>, note_id: String, from
     let result = get_version_diff(state, note_id, from_commit, to_commit)?;
     
     if let Ok(mut cache) = DIFF_CACHE.lock() {
+        evict_cache(&mut cache);
         cache.insert(cache_key, (result.clone(), get_current_timestamp()));
     }
     
@@ -833,6 +855,7 @@ pub fn search_versions_cached(state: State<'_, AppState>, note_id: String, query
     let results = search_versions(state, note_id.clone(), query.clone())?;
     
     if let Ok(mut cache) = SEARCH_CACHE.lock() {
+        evict_cache(&mut cache);
         cache.insert(cache_key, (results.clone(), get_current_timestamp()));
     }
     

@@ -5,6 +5,11 @@
 use pulldown_cmark::{html, Event, HeadingLevel, Options, Parser, Tag};
 use serde::{Deserialize, Serialize};
 
+lazy_static::lazy_static! {
+    static ref WIKI_LINK_RE: regex_lite::Regex = regex_lite::Regex::new(r"\[\[([^\]|]+)(?:\|([^\]]+))?\]\]").unwrap();
+    static ref TAG_RE: regex_lite::Regex = regex_lite::Regex::new(r"(?:^|\s)#([\w\u{4e00}-\u{9fff}\-]+)").unwrap();
+}
+
 /// Markdown AST 节点
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum AstNode {
@@ -52,12 +57,12 @@ impl MarkdownEngine {
         options
     }
 
-    fn wiki_link_regex() -> regex_lite::Regex {
-        regex_lite::Regex::new(r"\[\[([^\]|]+)(?:\|([^\]]+))?\]\]").unwrap()
+    fn wiki_link_regex() -> &'static regex_lite::Regex {
+        &WIKI_LINK_RE
     }
 
-    fn tag_regex() -> regex_lite::Regex {
-        regex_lite::Regex::new(r"(?:^|\s)#([\w\u{4e00}-\u{9fff}\-]+)").unwrap()
+    fn tag_regex() -> &'static regex_lite::Regex {
+        &TAG_RE
     }
 
     fn heading_level_to_u32(level: HeadingLevel) -> u32 {

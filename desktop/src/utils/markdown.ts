@@ -27,13 +27,13 @@ export function renderMarkdown(md: string, highlightQuery = ''): string {
     if (inCode) { codeBuf.push(line); continue; }
     if (!line.trim()) { flushList(); out.push('<p class="empty-line"></p>'); continue; }
     const hMatch = line.match(/^(#{1,6})\s(.+)/);
-    if (hMatch) { flushList(); if (inTable) { out.push('</table>'); inTable = false; } out.push(`<h${hMatch[1].length}>${inlineMd(hMatch[2], highlightQuery)}</h${hMatch[1].length}>`); continue; }
+    if (hMatch) { flushList(); if (inTable) { out.push('</table>'); inTable = false; } out.push(`<h${hMatch[1]!.length}>${inlineMd(hMatch[2]!, highlightQuery)}</h${hMatch[1]!.length}>`); continue; }
     if (/^(-{3,}|\*{3,})\s*$/.test(line)) { flushList(); out.push('<hr>'); continue; }
     if (line.startsWith('> ')) { flushList(); out.push(`<blockquote class="quote-block">${inlineMd(line.slice(2), highlightQuery)}</blockquote>`); continue; }
-    if (/^- \[[ xX]\] /.test(line)) { const done = line[3] === 'x' || line[3] === 'X'; if (listType !== 'ul') { flushList(); listType = 'ul'; out.push('<ul class="task-list">'); } out.push(`<li class="${done ? 'task-done' : ''}">${done ? '✅' : '⬜'} ${inlineMd(line.slice(6), highlightQuery)}</li>`); continue; }
+    if (/^- \[[ xX]\] /.test(line)) { const ch3 = line[3]; const done = ch3 === 'x' || ch3 === 'X'; if (listType !== 'ul') { flushList(); listType = 'ul'; out.push('<ul class="task-list">'); } out.push(`<li class="${done ? 'task-done' : ''}">${done ? '✅' : '⬜'} ${inlineMd(line.slice(6), highlightQuery)}</li>`); continue; }
     if (/^[-*+]\s/.test(line)) { if (listType !== 'ul') { flushList(); listType = 'ul'; out.push('<ul>'); } out.push(`<li>${inlineMd(line.replace(/^[-*+]\s/, ''), highlightQuery)}</li>`); continue; }
     const olMatch = line.match(/^(\d+)\.\s(.+)/);
-    if (olMatch) { if (listType !== 'ol') { flushList(); listType = 'ol'; out.push('<ol>'); } out.push(`<li>${inlineMd(olMatch[2], highlightQuery)}</li>`); continue; }
+    if (olMatch) { if (listType !== 'ol') { flushList(); listType = 'ol'; out.push('<ol>'); } out.push(`<li>${inlineMd(olMatch[2]!, highlightQuery)}</li>`); continue; }
     if (line.startsWith('|')) { flushList(); const cells = line.split('|').filter(c => c.trim()).map(c => inlineMd(c.trim(), highlightQuery)); const isSep = /^[\s:|:-]+$/.test(line); if (!inTable && !isSep) { inTable = true; out.push('<table>'); } if (!isSep) { out.push(`<tr>${cells.map(c => `<td>${c}</td>`).join('')}</tr>`); } continue; }
     if (inTable) { out.push('</table>'); inTable = false; }
     flushList();
@@ -51,8 +51,8 @@ function inlineMd(text: string, highlightQuery = ''): string {
   r = r.replace(/\*(.+?)\*/g, '<em>$1</em>');
   r = r.replace(/~~(.+?)~~/g, '<s>$1</s>');
   r = r.replace(/`([^`]+)`/g, '<code>$1</code>');
-  r = r.replace(/\[\[([^\]]+)\]\]/g, '<a class="wiki-link">$1</a>');
-  r = r.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+  r = r.replace(/\[\[([^\]]+)\]\]/g, '<button class="wiki-link" role="link" tabIndex="0">$1</button>');
+  r = r.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
   if (highlightQuery.trim()) {
     const escaped = escapeRegExp(highlightQuery.trim());
     if (escaped) {
@@ -61,7 +61,6 @@ function inlineMd(text: string, highlightQuery = ''): string {
     }
   }
   r = r.replace(/(?<!\w)(#[\w\u4e00-\u9fff\-/]+)/gu, '<span class="tag">$1</span>');
-  r = r.replace(/\n/g, '<br>');
   return r;
 }
 

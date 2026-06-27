@@ -251,7 +251,8 @@ export function NewNoteModal({ open, notebooks = [], onClose, onCreate }: NewNot
     setTagText('');
     const template = TEMPLATES.find((t) => t.id === 'blank');
     setContent(template?.content ?? '');
-  }, [notebooks, open]);
+  }, [open]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const selectedTemplate = TEMPLATES.find((t) => t.id === templateId);

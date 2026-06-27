@@ -1,6 +1,46 @@
+import { memo, useMemo } from 'react';
 import { useStore } from '@/stores/context';
 import { formatTime } from '@/utils/markdown';
 import { Icon } from '@/components/Common/Icon';
+
+function NoteCard({ note, isActive, searchQuery, onSelect, onContextMenu }: {
+  note: import('@/types').Note;
+  isActive: boolean;
+  searchQuery: string;
+  onSelect: (id: string) => void;
+  onContextMenu: (e: React.MouseEvent, id: string) => void;
+}) {
+  const titleEl = useMemo(() => {
+    if (!searchQuery) return note.meta.title;
+    const escaped = searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const parts = note.meta.title.split(new RegExp(`(${escaped})`, 'gi'));
+    return parts.map((p, i) =>
+      p.toLowerCase() === searchQuery.toLowerCase() ? <mark key={i}>{p}</mark> : p
+    );
+  }, [note.meta.title, searchQuery]);
+
+  return (
+    <div
+      className={`note-card${isActive ? ' note-card--active' : ''}`}
+      onClick={() => onSelect(note.meta.id)}
+      onContextMenu={(e) => onContextMenu(e, note.meta.id)}
+      draggable
+    >
+      <div className="note-card__title">
+        <strong>{titleEl}</strong>
+        <div>{note.meta.isPinned ? <Icon type="gudin" /> : note.meta.isFavorite ? <Icon type="shoucang" /> : ''}</div>
+      </div>
+      <div className="preview">{note.content.slice(0, 120)}</div>
+      <div className="note-card__meta">
+        <span>{formatTime(note.meta.updatedAt)}</span>
+        <span>{note.meta.wordCount} 字</span>
+        {note.meta.tags.length > 0 && <span>#{note.meta.tags[0]}</span>}
+      </div>
+    </div>
+  );
+}
+
+const NoteCardMemo = memo(NoteCard);
 
 export function NoteList() {
   const store = useStore();
@@ -21,44 +61,18 @@ export function NoteList() {
   return (
     <div className="editor-view" style={{ gap: 12 }}>
       {store.filteredNotes.map(note => (
-        <div
+        <NoteCardMemo
           key={note.meta.id}
-          className={`note-card${note.meta.id === store.currentNoteId ? ' note-card--active' : ''}`}
-          onClick={() => store.selectNote(note.meta.id)}
-          onContextMenu={e => {
+          note={note}
+          isActive={note.meta.id === store.currentNoteId}
+          searchQuery={store.searchQuery}
+          onSelect={store.selectNote}
+          onContextMenu={(e, id) => {
             e.preventDefault();
-            store.setContextMenu({
-              visible: true,
-              x: e.clientX,
-              y: e.clientY,
-              noteId: note.meta.id,
-              notebookId: null,
-              kind: 'note',
-            });
+            store.setContextMenu({ visible: true, x: e.clientX, y: e.clientY, noteId: id, notebookId: null, kind: 'note' });
           }}
-          draggable
-        >
-          <div className="note-card__title">
-            <strong>{highlight(note.meta.title, store.searchQuery)}</strong>
-            <div>{note.meta.isPinned ? <Icon type="gudin" /> : note.meta.isFavorite ? <Icon type="shoucang" /> : ''}</div>
-          </div>
-          <div className="preview">{note.content.slice(0, 120)}</div>
-          <div className="note-card__meta">
-            <span>{formatTime(note.meta.updatedAt)}</span>
-            <span>{note.meta.wordCount} 字</span>
-            {note.meta.backlinks > 0 && <span>🔗 {note.meta.backlinks}</span>}
-          </div>
-        </div>
+        />
       ))}
     </div>
-  );
-}
-
-function highlight(text: string, query: string) {
-  if (!query) return text;
-  const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const parts = text.split(new RegExp(`(${escaped})`, 'gi'));
-  return parts.map((p, i) =>
-    p.toLowerCase() === query.toLowerCase() ? <mark key={i}>{p}</mark> : p
   );
 }

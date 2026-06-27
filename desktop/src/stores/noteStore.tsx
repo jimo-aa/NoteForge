@@ -1,6 +1,6 @@
 // NoteForge — 全局状态管理
 
-import { createContext, useContext, useState, useCallback, useRef, useEffect, type ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, useRef, useEffect, useMemo, type ReactNode } from 'react';
 import type { Note, NoteFilter, ToastMessage, ContextMenuState, SortOption, Notebook } from '@/types';
 import type { EntityModalState } from '@/components/Modals/EntityModal';
 import { countWords } from '@/utils/markdown';
@@ -67,7 +67,7 @@ export function useNoteStore() {
   }, []);
 
   useEffect(() => { void (async () => { await Promise.all([refreshNotes(), refreshNotebooks()]); setIsLoading(false); })(); }, [refreshNotes, refreshNotebooks]);
-  useEffect(() => { void refreshNotebooks(); }, [notes, refreshNotebooks]);
+  useEffect(() => { void refreshNotebooks(); }, [refreshNotebooks]);
 
   useEffect(() => {
     return () => {
@@ -88,15 +88,8 @@ export function useNoteStore() {
     return copy;
   }, [sortBy]);
 
-  const filteredNotes = sortNotes(notes.filter((n) => {
-    // 搜索过滤 — 仅按标题和标签匹配（正文搜索由 Tantivy SearchBox 处理）
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      const inTitle = n.meta.title.toLowerCase().includes(q);
-      const inTags = n.meta.tags.some((t) => t.toLowerCase().includes(q));
-      if (!inTitle && !inTags) return false;
-    }
-
+  const filteredNotes = useMemo(() => sortNotes(notes.filter((n) => {
+    // 笔记列表只按筛选条件过滤，全文搜索由 SearchBox 通过 Tantivy 处理
     // 笔记本过滤 - 修复：处理 notebookId 为 null 的情况
     if (activeNotebook !== 'all') {
       // 获取笔记的笔记本 ID，如果为 null 则使用 'default'
@@ -109,18 +102,19 @@ export function useNoteStore() {
     if (currentFilter === 'pinned' && !n.meta.isPinned) return false;
     if (activeTags.length > 0 && !activeTags.every((tag) => n.meta.tags.includes(tag))) return false;
     return true;
-  }));
+  })), [notes, activeNotebook, currentFilter, activeTags, sortBy, sortNotes]);
 
-  const currentNote = notes.find((n) => n.meta.id === currentNoteId) || null;
+  const currentNote = useMemo(() => notes.find((n) => n.meta.id === currentNoteId) || null, [notes, currentNoteId]);
   const selectNote = useCallback((id: string) => {
     setCurrentNoteId((prev) => {
-      if (autosaveTimerRef.current[prev]) {
+      if (prev && autosaveTimerRef.current[prev]) {
         window.clearTimeout(autosaveTimerRef.current[prev]!);
         autosaveTimerRef.current[prev] = null;
+        safeWrite(autosaveKey(prev), { content: notes.find((n) => n.meta.id === prev)?.content || '', title: notes.find((n) => n.meta.id === prev)?.meta.title || '', updatedAt: Date.now() });
       }
       return id;
     });
-  }, []);
+  }, [notes]);
 
   const createNote = useCallback(async (title: string, content: string, notebookId: string, tags: string[]) => {
     try {
@@ -154,13 +148,16 @@ export function useNoteStore() {
     }, 5000);
   }, []);
 
-  const updateNote = useCallback((id: string, updates: Partial<Note['meta'] & { content: string }>) => {
+  const updateNote = useCallback((id: string, updates: Partial<Note['meta']> & { content?: string }) => {
     setNotes((prev) => prev.map((n) => {
       if (n.meta.id !== id) return n;
       const nextContent = updates.content ?? n.content;
-      const next = {
-        meta: { ...n.meta, ...updates, updatedAt: Date.now(), version: n.meta.version + (updates.content !== undefined ? 1 : 0), wordCount: countWords(nextContent) },
+      const { content: _unused, ...metaUpdates } = updates;
+      const nextContentPlain = updates.content !== undefined ? n.contentPlain : n.contentPlain;
+      const next: Note = {
+        meta: { ...n.meta, ...metaUpdates, updatedAt: Date.now(), version: n.meta.version + (updates.content !== undefined ? 1 : 0), wordCount: countWords(nextContent) },
         content: nextContent,
+        contentPlain: nextContentPlain,
       };
       if (updates.content !== undefined) {
         safeWrite(draftKey(id), nextContent);
@@ -179,7 +176,19 @@ export function useNoteStore() {
     setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 2800);
   }, []);
 
-  const deleteNote = useCallback((id: string) => { setNotes((prev) => prev.filter((n) => n.meta.id !== id)); setCurrentNoteId((prev) => (prev === id ? '' : prev)); void tauriInvoke('delete_note', { id }); }, []);
+  const deleteNote = useCallback((id: string) => {
+    setNotes((prev) => {
+      const idx = prev.findIndex((n) => n.meta.id === id);
+      const filtered = prev.filter((n) => n.meta.id !== id);
+      setCurrentNoteId((current) => {
+        if (current !== id) return current;
+        const nextIdx = Math.min(idx, filtered.length - 1);
+        return filtered[nextIdx]?.meta.id ?? '';
+      });
+      return filtered;
+    });
+    void tauriInvoke('delete_note', { id });
+  }, []);
   const duplicateNote = useCallback((id: string) => { const note = notes.find((n) => n.meta.id === id); if (!note) return; void createNote(`${note.meta.title} (副本)`, note.content, note.meta.notebookId || 'default', note.meta.tags); showToast('success', '📋 已复制'); }, [createNote, notes, showToast]);
   const toggleFavorite = useCallback((id: string) => { const note = notes.find((n) => n.meta.id === id); if (!note) return; updateNote(id, { isFavorite: !note.meta.isFavorite }); }, [notes, updateNote]);
   const togglePin = useCallback((id: string) => { const note = notes.find((n) => n.meta.id === id); if (!note) return; updateNote(id, { isPinned: !note.meta.isPinned }); }, [notes, updateNote]);
@@ -287,23 +296,53 @@ export function useNoteStore() {
   }, [showToast]);
   const saveCursor = useCallback((id: string, range: { start: number; end: number }) => safeWrite(cursorKey(id), range), []);
   const loadCursor = useCallback((id: string) => safeRead<{ start: number; end: number } | null>(cursorKey(id), null), []);
-  const loadRecovery = useCallback((_id: string) => null, []);
+  const loadRecovery = useCallback(() => {
+    try {
+      const drafts: Array<{ id: string; title: string; content: string; updatedAt: number }> = [];
+      for (let i = 0; i < window.localStorage.length; i++) {
+        const key = window.localStorage.key(i);
+        if (!key) continue;
+        if (key.startsWith(`${STORAGE_PREFIX}:draft:`)) {
+          const id = key.slice(`${STORAGE_PREFIX}:draft:`.length);
+          const content = window.localStorage.getItem(key) || '';
+          if (content) drafts.push({ id, title: '', content, updatedAt: Date.now() });
+        } else if (key.startsWith(`${STORAGE_PREFIX}:autosave:`)) {
+          try {
+            const id = key.slice(`${STORAGE_PREFIX}:autosave:`.length);
+            const parsed = JSON.parse(window.localStorage.getItem(key) || '{}');
+            if (parsed?.content) drafts.push({ id, title: parsed.title || '', content: parsed.content, updatedAt: parsed.updatedAt || Date.now() });
+          } catch { /* skip malformed */ }
+        }
+      }
+      drafts.sort((a, b) => b.updatedAt - a.updatedAt);
+      return drafts;
+    } catch {
+      return [];
+    }
+  }, []);
+
+  const recoveryDraftsRef = useRef<Array<{ id: string; title: string; content: string; updatedAt: number }> | null>(null);
+  if (!recoveryDraftsRef.current) recoveryDraftsRef.current = loadRecovery();
+  const recoveryDrafts = recoveryDraftsRef.current;
+  const clearRecovery = useCallback((id: string) => {
+    try { window.localStorage.removeItem(`${STORAGE_PREFIX}:draft:${id}`); window.localStorage.removeItem(`${STORAGE_PREFIX}:autosave:${id}`); } catch {}
+  }, []);
 
   // 计算每个笔记本的笔记数
-  const notebooksWithCounts = notebooks.map((notebook) => {
+  const notebooksWithCounts = useMemo(() => notebooks.map((notebook) => {
     if (notebook.id === 'all') {
       return { ...notebook, noteCount: notes.length };
     }
     const count = notes.filter((n) => (n.meta.notebookId || 'default') === notebook.id).length;
     return { ...notebook, noteCount: count };
-  });
+  }), [notebooks, notes]);
 
-  const tags = Array.from(new Set(notes.flatMap((n) => n.meta.tags)));
+  const tags = useMemo(() => Array.from(new Set(notes.flatMap((n) => n.meta.tags))), [notes]);
   const totalCount = notes.length;
   const favoriteCount = notes.filter((n) => n.meta.isFavorite).length;
-  const searchResultCount = searchQuery ? filteredNotes.length : null;
+  const searchResultCount = null;
 
-  return { notes, filteredNotes, currentNote, currentNoteId, notebooks: notebooksWithCounts, activeNotebook, currentFilter, searchQuery, sortBy, activeTags, isPreviewVisible, isGraphOpen, isPropertiesOpen, toasts, contextMenu, settingsOpen, isLoading, entityModal, totalCount, favoriteCount, searchResultCount, tags, setActiveNotebook, setCurrentFilter, setSearchQuery, setSortBy, setActiveTags, setIsPreviewVisible, setIsGraphOpen, setIsPropertiesOpen, setContextMenu, setSettingsOpen, openEntityModal, closeEntityModal, selectNote, createNote, updateNote, deleteNote, duplicateNote, toggleFavorite, togglePin, createNotebook, renameNotebook, deleteNotebook, refreshNotes, refreshNotebooks, showToast, setCurrentNoteId, saveDraft, loadDraft, clearDraft, loadVersions, restoreVersion, checkoutBranch, createBranch, createVersion, saveCursor, loadCursor, loadRecovery };
+  return { notes, filteredNotes, currentNote, currentNoteId, notebooks: notebooksWithCounts, activeNotebook, currentFilter, searchQuery, sortBy, activeTags, isPreviewVisible, isGraphOpen, isPropertiesOpen, toasts, contextMenu, settingsOpen, isLoading, entityModal, totalCount, favoriteCount, searchResultCount, tags, setActiveNotebook, setCurrentFilter, setSearchQuery, setSortBy, setActiveTags, setIsPreviewVisible, setIsGraphOpen, setIsPropertiesOpen, setContextMenu, setSettingsOpen, openEntityModal, closeEntityModal, selectNote, createNote, updateNote, deleteNote, duplicateNote, toggleFavorite, togglePin, createNotebook, renameNotebook, deleteNotebook, refreshNotes, refreshNotebooks, showToast, setCurrentNoteId, saveDraft, loadDraft, clearDraft, loadVersions, restoreVersion, checkoutBranch, createBranch, createVersion, saveCursor, loadCursor, loadRecovery, recoveryDrafts, clearRecovery };
 }
 
 export const NoteContext = createContext<NoteStore | null>(null);

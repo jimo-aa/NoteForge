@@ -13,6 +13,8 @@ import { GraphView } from '@/components/Common/GraphView';
 import { EntityModal } from '@/components/Modals/EntityModal';
 import { AdvancedVersioningPanel } from '@/components/Features/AdvancedVersioningPanel';
 import { ErrorBoundary } from '@/components/Common/ErrorBoundary';
+import { ManageModal } from '@/components/Modals/ManageModal';
+import { DraftRecoveryModal } from '@/components/Modals/DraftRecoveryModal';
 import type { NotebookModalState } from '@/components/Modals/NotebookModal';
 
 export default function App() {
@@ -20,6 +22,8 @@ export default function App() {
   const storeRef = useRef(store);
   storeRef.current = store;
   const [newNoteOpen, setNewNoteOpen] = useState(false);
+  const [manageOpen, setManageOpen] = useState(false);
+  const [draftRecoveryOpen, setDraftRecoveryOpen] = useState(false);
   const [advancedVersioningOpen, setAdvancedVersioningOpen] = useState(false);
   const [notebookModal, setNotebookModal] = useState<NotebookModalState>({
     open: false,
@@ -30,16 +34,27 @@ export default function App() {
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.key.toLowerCase() === 'n' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); setNewNoteOpen(true); }
-      if (e.key.toLowerCase() === 'f' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); storeRef.current.setSettingsOpen(false); }
-      if (e.key.toLowerCase() === 'v' && (e.metaKey || e.ctrlKey) && e.shiftKey) {
-        e.preventDefault();
-        setAdvancedVersioningOpen(true);
-      }
+      const s = storeRef.current;
+      if (e.key.toLowerCase() === 'n' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); setNewNoteOpen(true); return; }
+      if (e.key.toLowerCase() === 'p' && (e.metaKey || e.ctrlKey) && e.shiftKey) { e.preventDefault(); setAdvancedVersioningOpen(true); return; }
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'e') { e.preventDefault(); s.setIsPreviewVisible(!s.isPreviewVisible); return; }
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'p') { e.preventDefault(); if (s.currentNote) s.togglePin(s.currentNote.meta.id); return; }
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'd') { e.preventDefault(); if (s.currentNote) s.deleteNote(s.currentNote.meta.id); return; }
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'g') { e.preventDefault(); s.setIsGraphOpen(!s.isGraphOpen); return; }
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'f') { e.preventDefault(); if (s.currentNote) s.toggleFavorite(s.currentNote.meta.id); return; }
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') { e.preventDefault(); if (s.currentNote) { s.saveDraft(s.currentNote.meta.id, s.currentNote.content); s.showToast('success', '已手动保存'); } return; }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, []);
+
+  const draftRecoveryShownRef = useRef(false);
+  useEffect(() => {
+    if (!draftRecoveryShownRef.current && !store.isLoading && store.recoveryDrafts && store.recoveryDrafts.length > 0) {
+      draftRecoveryShownRef.current = true;
+      setDraftRecoveryOpen(true);
+    }
+  }, [store.isLoading, store.recoveryDrafts]);
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
@@ -88,7 +103,7 @@ export default function App() {
   return (
     <ErrorBoundary>
       <div className="app-shell">
-        <Sidebar onNewNote={() => setNewNoteOpen(true)} onNewNotebook={handleOpenNotebookModal} />
+        <Sidebar onNewNote={() => setNewNoteOpen(true)} onNewNotebook={handleOpenNotebookModal} onManage={() => setManageOpen(true)} onDraftRecovery={() => setDraftRecoveryOpen(true)} />
         <main className="main-panel"><div className="main-surface"><div className="content-layout"><section className="note-list-column"><NoteList /></section><section className="preview-column"><Editor /></section></div></div></main>
         <NewNoteModal open={newNoteOpen} notebooks={store.notebooks} onClose={() => setNewNoteOpen(false)} onCreate={async ({ title, content, notebookId, tags }) => { const result = await store.createNote(title, content, notebookId, tags); if (result) { store.showToast('success', '✓ 已创建笔记'); setNewNoteOpen(false); } else { store.showToast('error', '创建笔记失败，请重试'); } }} />
         <NotebookModal state={notebookModal} onClose={() => setNotebookModal({ open: false, mode: null, title: '', value: '' })} onConfirm={handleConfirmNotebook} />
@@ -122,6 +137,8 @@ export default function App() {
         )}
         <ContextMenu />
         <GraphView />
+        <ManageModal open={manageOpen} onClose={() => setManageOpen(false)} />
+        <DraftRecoveryModal open={draftRecoveryOpen} onClose={() => setDraftRecoveryOpen(false)} />
         {store.toasts.map((t) => (<Toast key={t.id} message={t.message} />))}
       </div>
     </ErrorBoundary>

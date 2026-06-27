@@ -1,99 +1,78 @@
 package com.noteforge.note.controller;
 
-import com.noteforge.note.entity.NoteEntity;
-import com.noteforge.note.repository.NoteRepository;
+import com.noteforge.common.response.ApiResponse;
+import com.noteforge.common.response.PageResponse;
+import com.noteforge.note.dto.*;
+import com.noteforge.note.service.NoteService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/api/v1/notes")
 @RequiredArgsConstructor
 public class NoteController {
 
-    private final NoteRepository noteRepository;
+    private final NoteService noteService;
 
     @PostMapping
-    public ResponseEntity<NoteEntity> createNote(@RequestBody NoteEntity note) {
-        note.setId(null);
-        note.setVersion(1);
-        note.setDeleted(false);
-        NoteEntity saved = noteRepository.save(note);
-        return ResponseEntity.ok(saved);
+    public ResponseEntity<ApiResponse<NoteResponse>> createNote(
+            Authentication auth,
+            @Valid @RequestBody NoteCreateRequest request) {
+        NoteResponse note = noteService.createNote(auth.getName(), request);
+        return ResponseEntity.ok(ApiResponse.success(note));
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<NoteEntity> getNote(@PathVariable String id) {
-        return noteRepository.findById(id)
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
+    public ResponseEntity<ApiResponse<NoteResponse>> getNote(
+            Authentication auth,
+            @PathVariable String id) {
+        NoteResponse note = noteService.getNote(id, auth.getName());
+        return ResponseEntity.ok(ApiResponse.success(note));
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<NoteEntity> updateNote(
+    public ResponseEntity<ApiResponse<NoteResponse>> updateNote(
+            Authentication auth,
             @PathVariable String id,
-            @RequestBody NoteEntity update) {
-        return noteRepository.findById(id)
-                .map(existing -> {
-                    if (update.getTitle() != null) existing.setTitle(update.getTitle());
-                    if (update.getContent() != null) {
-                        existing.setContent(update.getContent());
-                        existing.setContentPlain(stripHtml(update.getContent()));
-                        existing.setWordCount(countWords(update.getContent()));
-                    }
-                    existing.setVersion(existing.getVersion() + 1);
-                    return ResponseEntity.ok(noteRepository.save(existing));
-                })
-                .orElse(ResponseEntity.notFound().build());
+            @Valid @RequestBody NoteUpdateRequest request) {
+        NoteResponse note = noteService.updateNote(id, auth.getName(), request);
+        return ResponseEntity.ok(ApiResponse.success(note));
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteNote(@PathVariable String id) {
-        return noteRepository.findById(id)
-                .map(note -> {
-                    note.setDeleted(true);
-                    noteRepository.save(note);
-                    return ResponseEntity.ok().<Void>build();
-                })
-                .orElse(ResponseEntity.notFound().build());
+    public ResponseEntity<ApiResponse<Void>> deleteNote(
+            Authentication auth,
+            @PathVariable String id) {
+        noteService.deleteNote(id, auth.getName());
+        return ResponseEntity.ok(ApiResponse.success());
     }
 
     @GetMapping
-    public ResponseEntity<List<NoteEntity>> listNotes(
-            @RequestParam String userId,
-            @RequestParam(required = false) String notebookId) {
-        List<NoteEntity> notes;
-        if (notebookId != null) {
-            notes = noteRepository
-                    .findByUserIdAndNotebookIdAndIsDeletedFalseOrderByUpdatedAtDesc(userId, notebookId);
-        } else {
-            notes = noteRepository.findByUserIdAndIsDeletedFalseOrderByUpdatedAtDesc(userId);
-        }
-        return ResponseEntity.ok(notes);
+    public ResponseEntity<ApiResponse<PageResponse<NoteResponse>>> listNotes(
+            Authentication auth,
+            @RequestParam(required = false) String notebookId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        List<NoteResponse> items = noteService.listNotes(auth.getName(), notebookId, page, size);
+        PageResponse<NoteResponse> pageResp = new PageResponse<>(items, page, size, items.size(), 0);
+        return ResponseEntity.ok(ApiResponse.success(pageResp));
     }
 
-    private String stripHtml(String html) {
-        return html.replaceAll("<[^>]*>", "");
-    }
-
-    private int countWords(String text) {
-        if (text == null || text.isEmpty()) return 0;
-        String clean = text.replaceAll("<[^>]*>", "");
-        int count = 0;
-        boolean inWord = false;
-        for (char c : clean.toCharArray()) {
-            if (Character.isLetterOrDigit(c)) {
-                if (!inWord) { count++; inWord = true; }
-            } else if (Character.isWhitespace(c)) {
-                inWord = false;
-            } else if (Character.isIdeographic(c)) {
-                count++;
-                inWord = false;
-            }
-        }
-        return Math.max(count, 1);
+    @GetMapping("/search")
+    public ResponseEntity<ApiResponse<PageResponse<NoteResponse>>> searchNotes(
+            Authentication auth,
+            @RequestParam String q,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        Page<NoteResponse> result = noteService.searchNotes(auth.getName(), q, page, size);
+        PageResponse<NoteResponse> pageResp = new PageResponse<>(
+                result.getContent(), page, size, result.getTotalElements(), result.getTotalPages());
+        return ResponseEntity.ok(ApiResponse.success(pageResp));
     }
 }

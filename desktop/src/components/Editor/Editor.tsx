@@ -2,24 +2,24 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent 
 import { useStore } from '../../stores/context';
 import { renderMarkdown } from '@/utils/markdown';
 import { VersionControlModal } from '@/components/Modals/VersionControlModal';
-import { AdvancedFeaturesToolbar } from '@/components/Modals/AdvancedFeaturesToolbar';
 import { Icon } from '@/components/Common/Icon';
+import { CodeMirrorEditor, type CodeMirrorHandle } from './CodeMirrorEditor';
 
 
 const MARKDOWN_ACTIONS = [
-  { label: 'B', title: '粗体', before: '**', after: '**', sample: '粗体' },
-  { label: 'I', title: '斜体', before: '*', after: '*', sample: '斜体' },
-  { label: 'S', title: '删除线', before: '~~', after: '~~', sample: '删除线' },
-  { label: '`', title: '行内代码', before: '`', after: '`', sample: 'code' },
-  { label: 'H', title: '标题', before: '## ', after: '', sample: '标题' },
-  { label: '•', title: '无序列表', before: '- ', after: '', sample: '列表项' },
-  { label: '1.', title: '有序列表', before: '1. ', after: '', sample: '列表项' },
-  { label: '□', title: '任务', before: '- [ ] ', after: '', sample: '待办事项' },
-  { label: '“', title: '引用', before: '> ', after: '', sample: '引用内容' },
-  { label: '</>', title: '代码块', before: '```\n', after: '\n```', sample: '代码' },
-  { label: '🔗', title: '链接', before: '[', after: '](https://)', sample: '链接文本' },
-  { label: '▦', title: '表格', before: '\n| 列1 | 列2 | 列3 |\n|---|---|---|\n| | | |\n', after: '', sample: '' },
-  { label: '—', title: '分割线', before: '\n---\n', after: '', sample: '' },
+  { label: 'B', title: '粗体', before: '**', after: '**' },
+  { label: 'I', title: '斜体', before: '*', after: '*' },
+  { label: 'S', title: '删除线', before: '~~', after: '~~' },
+  { label: '`', title: '行内代码', before: '`', after: '`' },
+  { label: 'H', title: '标题', before: '## ', after: '' },
+  { label: '•', title: '无序列表', before: '- ', after: '' },
+  { label: '1.', title: '有序列表', before: '1. ', after: '' },
+  { label: '□', title: '任务', before: '- [ ] ', after: '' },
+  { label: '“', title: '引用', before: '> ', after: '' },
+  { label: '</>', title: '代码块', before: '```\n', after: '\n```' },
+  { label: '🔗', title: '链接', before: '[', after: '](https://)' },
+  { label: '▦', title: '表格', before: '\n| 列1 | 列2 | 列3 |\n|---|---|---|\n| | | |\n', after: '' },
+  { label: '—', title: '分割线', before: '\n---\n', after: '' },
 ];
 
 export function Editor() {
@@ -45,8 +45,8 @@ export function Editor() {
     searchQuery,
   } = useStore();
 
-  const note = useMemo(() => currentNote, [currentNote]);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const note = currentNote;
+  const cmRef = useRef<CodeMirrorHandle>(null);
   const autosaveTimerRef = useRef<number | null>(null);
   const lastSavedSnapshotRef = useRef('');
   const restoreCursorRef = useRef<{ start: number; end: number } | null>(null);
@@ -72,6 +72,13 @@ export function Editor() {
     }
   }, [loadCursor, loadDraft, note, showToast, updateNote]);
 
+  useLayoutEffect(() => {
+    if (!note || !restoreCursorRef.current) return;
+    const { start, end } = restoreCursorRef.current;
+    cmRef.current?.focus();
+    cmRef.current?.setSelection(start, end);
+  }, [note?.meta.id]);
+
   useEffect(() => {
     if (!note) return;
     if (lastSavedSnapshotRef.current === note.content) return;
@@ -83,20 +90,12 @@ export function Editor() {
     const onJump = (event: Event) => {
       const detail = (event as CustomEvent<{ noteId: string; line: number; column: number }>).detail;
       if (!detail || !note || detail.noteId !== note.meta.id) return;
-      const textarea = textareaRef.current;
-      if (!textarea) return;
       const targetLine = Math.max(1, detail.line);
-      const targetIndex = note.content.split('\n').slice(0, targetLine - 1).reduce((acc, line) => acc + line.length + 1, 0);
+      const lines = note.content.split('\n');
+      const targetIndex = lines.slice(0, targetLine - 1).reduce((acc, line) => acc + line.length + 1, 0);
       setJumpLine(targetLine);
       setIsPreviewVisible(true);
-      textarea.focus();
-      textarea.setSelectionRange(targetIndex, Math.min(targetIndex + 1, note.content.length));
-      const styles = window.getComputedStyle(textarea);
-      const lineHeight = Number.parseFloat(styles.lineHeight || '24') || 24;
-      const paddingTop = Number.parseFloat(styles.paddingTop || '0') || 0;
-      const visibleLines = Math.max(1, Math.floor(textarea.clientHeight / lineHeight));
-      const desiredLine = Math.max(1, targetLine - Math.floor(visibleLines / 3));
-      textarea.scrollTop = Math.max(0, (desiredLine - 1) * lineHeight - paddingTop);
+      cmRef.current?.focus();
       window.setTimeout(() => setJumpLine((current) => (current === targetLine ? null : current)), 1800);
     };
 
@@ -112,12 +111,13 @@ export function Editor() {
 
   const wikiCandidates = useMemo(() => notes.map((item) => item.meta.title).filter(Boolean), [notes]);
 
+  const renderedHtml = useMemo(() => note ? renderMarkdown(note.content ?? '', searchQuery) : '', [note?.content, searchQuery]);
+
   const persistCursor = () => {
-    const textarea = textareaRef.current;
-    if (!textarea || !note) return;
-    const selection = { start: textarea.selectionStart, end: textarea.selectionEnd };
-    restoreCursorRef.current = selection;
-    saveCursor(note.meta.id, selection);
+    if (!note || !cmRef.current) return;
+    const sel = cmRef.current.getSelection();
+    restoreCursorRef.current = { start: sel.from, end: sel.to };
+    saveCursor(note.meta.id, { start: sel.from, end: sel.to });
   };
 
   const updateContent = (content: string) => {
@@ -125,35 +125,24 @@ export function Editor() {
     updateNote(note.meta.id, { content });
     if (autosaveTimerRef.current) window.clearTimeout(autosaveTimerRef.current);
     autosaveTimerRef.current = window.setTimeout(() => {
-      const textarea = textareaRef.current;
-      const selection = textarea ? { start: textarea.selectionStart, end: textarea.selectionEnd } : restoreCursorRef.current;
-      if (selection) restoreCursorRef.current = selection;
+      if (cmRef.current) {
+        const sel = cmRef.current.getSelection();
+        restoreCursorRef.current = { start: sel.from, end: sel.to };
+      }
       saveDraft(note.meta.id, content);
       lastSavedSnapshotRef.current = content;
-      if (textarea && selection) {
-        textarea.setSelectionRange(selection.start, selection.end);
-      }
     }, 300);
   };
 
-  useLayoutEffect(() => {
-    const textarea = textareaRef.current;
-    const cursor = restoreCursorRef.current;
-    if (!textarea || !cursor) return;
-    textarea.setSelectionRange(cursor.start, cursor.end);
-  }, [note?.meta.id]);
-
   const openWikiSuggestions = () => {
-    if (!note) return;
-    const textarea = textareaRef.current;
-    if (!textarea) return;
-    const before = note.content.slice(0, textarea.selectionStart);
+    if (!note || !cmRef.current) return;
+    const before = cmRef.current.getContentBeforeCursor();
     const match = before.match(/\[\[([^[\]]*)$/);
     if (!match) {
       setWikiOpen(false);
       return;
     }
-    const query = match[1];
+    const query = match[1]!;
     const suggestions = wikiCandidates.filter((title) => title.toLowerCase().includes(query.toLowerCase())).slice(0, 6);
     setWikiQuery(query);
     setWikiSuggestions(suggestions);
@@ -164,36 +153,28 @@ export function Editor() {
   const closeWikiSuggestions = () => setWikiOpen(false);
 
   const commitWikiLink = (title: string) => {
-    if (!note) return;
-    const textarea = textareaRef.current;
-    if (!textarea) return;
-    const before = note.content.slice(0, textarea.selectionStart);
-    const after = note.content.slice(textarea.selectionEnd);
+    if (!note || !cmRef.current) return;
+    const before = cmRef.current.getContentBeforeCursor();
+    const content = cmRef.current.getContent();
+    const sel = cmRef.current.getSelection();
+    const after = content.slice(sel.to);
     const replaced = before.replace(/\[\[([^[\]]*)$/, `[[${title}`);
     const next = `${replaced}]]${after}`;
     updateContent(next);
-    window.requestAnimationFrame(() => {
-      textarea.focus();
-      const cursor = replaced.length + title.length + 2;
-      textarea.setSelectionRange(cursor, cursor);
-    });
+    cmRef.current.setContent(next);
+    cmRef.current.focus();
     closeWikiSuggestions();
   };
 
-  const insertMarkdown = (before: string, after: string, sample: string) => {
-    if (!note) return;
-    const textarea = textareaRef.current;
-    if (!textarea) return;
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    const selected = note.content.slice(start, end) || sample;
-    const next = `${note.content.slice(0, start)}${before}${selected}${after}${note.content.slice(end)}`;
+  const insertMarkdown = (before: string, after: string) => {
+    if (!note || !cmRef.current) return;
+    const sel = cmRef.current.getSelection();
+    const content = cmRef.current.getContent();
+    const selected = content.slice(sel.from, sel.to) || 'text';
+    const next = `${content.slice(0, sel.from)}${before}${selected}${after}${content.slice(sel.to)}`;
     updateContent(next);
-    window.requestAnimationFrame(() => {
-      textarea.focus();
-      const cursor = start + before.length + selected.length;
-      textarea.setSelectionRange(cursor, cursor);
-    });
+    cmRef.current.setContent(next);
+    cmRef.current.focus();
   };
 
   const startResize = (event: ReactMouseEvent<HTMLDivElement>) => {
@@ -227,38 +208,19 @@ export function Editor() {
     showToast('success', '已下载 Markdown 文件');
   };
 
-  const handlePaste = async (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
-    const items = Array.from(event.clipboardData.items);
-    const imageItem = items.find((item) => item.type.startsWith('image/'));
-    if (!imageItem) return;
-    const file = imageItem.getAsFile();
-    if (!file) return;
-    event.preventDefault();
+  const insertImage = (file: File) => {
     const reader = new FileReader();
     reader.onload = () => {
       const dataUrl = String(reader.result || '');
-      insertTextAtCursor(`![pasted-image](${dataUrl})`);
-      showToast('success', '已插入粘贴图片');
+      cmRef.current?.insertTextAtCursor(`![${file.name}](${dataUrl})`);
+      showToast('success', '已插入图片');
     };
     reader.readAsDataURL(file);
   };
+  const handleImagePaste = (file: File) => insertImage(file);
+  const handleImageDrop = (file: File) => insertImage(file);
 
-  const insertTextAtCursor = (text: string) => {
-    if (!note) return;
-    const textarea = textareaRef.current;
-    if (!textarea) return;
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    const next = `${note.content.slice(0, start)}${text}${note.content.slice(end)}`;
-    updateContent(next);
-    window.requestAnimationFrame(() => {
-      textarea.focus();
-      const cursor = start + text.length;
-      textarea.setSelectionRange(cursor, cursor);
-    });
-  };
-
-  const handleEditorKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+  const handleEditorKeyDown = (event: React.KeyboardEvent) => {
     if (wikiOpen) {
       if (event.key === 'Escape') { event.preventDefault(); closeWikiSuggestions(); return; }
       if (event.key === 'ArrowDown') { event.preventDefault(); setWikiActiveIndex((index) => Math.min(index + 1, Math.max(0, wikiSuggestions.length - 1))); return; }
@@ -266,29 +228,11 @@ export function Editor() {
       if (event.key === 'Enter' || event.key === 'Tab') {
         if (wikiSuggestions.length) {
           event.preventDefault();
-          commitWikiLink(wikiSuggestions[wikiActiveIndex] || wikiSuggestions[0]);
+          commitWikiLink(wikiSuggestions[wikiActiveIndex] ?? wikiSuggestions[0]!);
           return;
         }
       }
     }
-    if (note && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
-      event.preventDefault();
-      saveDraft(note.meta.id, note.content);
-      showToast('success', '已手动保存');
-    }
-  };
-
-  const handleDrop = async (event: React.DragEvent<HTMLTextAreaElement>) => {
-    const image = Array.from(event.dataTransfer.files).find((file) => file.type.startsWith('image/'));
-    if (!image) return;
-    event.preventDefault();
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = String(reader.result || '');
-      insertTextAtCursor(`![${image.name}](${dataUrl})`);
-      showToast('success', '已插入拖拽图片');
-    };
-    reader.readAsDataURL(image);
   };
 
   if (!note) {
@@ -330,7 +274,7 @@ export function Editor() {
       <div className="markdown-toolbar">
         <div className="markdown-buttons">
           {MARKDOWN_ACTIONS.map((action) => (
-            <button key={action.title} className="markdown-button" title={action.title} onClick={() => insertMarkdown(action.before, action.after, action.sample)}>
+            <button key={action.title} className="markdown-button" title={action.title} onClick={() => insertMarkdown(action.before, action.after)}>
               {action.label}
             </button>
           ))}
@@ -339,27 +283,22 @@ export function Editor() {
       </div>
       <div className={isPreviewVisible ? 'split-editor' : 'split-editor no-preview'}>
         <div className="markdown-editor-pane" style={{ flexBasis: isPreviewVisible ? `${editorWidth}%` : '100%' }}>
-          <textarea
-            ref={textareaRef}
-            value={note.content ?? ''}
-            onChange={(event) => {
-              updateContent(event.target.value);
+          <CodeMirrorEditor
+            ref={cmRef}
+            initialContent={note.content ?? ''}
+            onChange={(next) => {
+              updateContent(next);
               if (wikiOpen) openWikiSuggestions();
             }}
-            onKeyDown={handleEditorKeyDown}
-            spellCheck={false}
-            className={jumpLine ? 'editor-textarea jump-line' : 'editor-textarea'}
-            onBlur={persistCursor}
-            onSelect={() => {
+            onSelectionChange={() => {
               persistCursor();
               if (wikiOpen) openWikiSuggestions();
             }}
-            onPaste={handlePaste}
-            onDrop={handleDrop}
-            onDragOver={(event) => event.preventDefault()}
+            onImagePaste={handleImagePaste}
+            onImageDrop={handleImageDrop}
           />
           {wikiOpen && (
-            <div className="wiki-autocomplete">
+            <div className="wiki-autocomplete" onKeyDown={handleEditorKeyDown}>
               <div className="wiki-autocomplete-header">Wiki Link {wikiQuery ? `：${wikiQuery}` : ''}</div>
               {wikiSuggestions.length ? wikiSuggestions.map((title, index) => (
                 <button key={title} className={index === wikiActiveIndex ? 'wiki-autocomplete-item active' : 'wiki-autocomplete-item'} onMouseDown={(event) => { event.preventDefault(); commitWikiLink(title); }}>
@@ -373,7 +312,7 @@ export function Editor() {
         {isPreviewVisible && (
           <>
             <div className="editor-resizer" onMouseDown={startResize} role="separator" aria-orientation="vertical"><span /></div>
-            <article className="markdown-preview-pane" style={{ flexBasis: `${100 - editorWidth}%` }} dangerouslySetInnerHTML={{ __html: renderMarkdown(note.content ?? '', searchQuery) }} />
+            <article className="markdown-preview-pane" style={{ flexBasis: `${100 - editorWidth}%` }} dangerouslySetInnerHTML={{ __html: renderedHtml }} />
           </>
         )}
       </div>
