@@ -1,5 +1,96 @@
-/docs
-/desktop/node_modules
-/desktop/src-tauri/target
-/desktop/dist
-/core/target
+# ===========================
+# OS & System
+# ===========================
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+*.swp
+*.swo
+*~
+._*
+
+# ===========================
+# IDE / Editor
+# ===========================
+.idea/
+.vscode/
+*.iml
+*.iws
+*.ipr
+*.sublime-project
+*.sublime-workspace
+
+# ===========================
+# Backend (Java / Gradle)
+# ===========================
+backend/.gradle/
+backend/.gradle_home/
+backend/.gradle_tmp/
+backend/build/
+backend/**/build/
+backend/**/bin/
+backend/**/*.log
+backend/**/application-local.yml
+
+# ===========================
+# Desktop (Node.js / Tauri / Vite)
+# ===========================
+desktop/node_modules/
+desktop/dist/
+desktop/out/
+desktop/.cache/
+desktop/src-tauri/target/
+desktop/src-tauri/release/
+desktop/src-tauri/WixTools/
+
+# ===========================
+# Core (Rust)
+# ===========================
+core/target/
+
+# ===========================
+# Web (Next.js)
+# ===========================
+web/node_modules/
+web/.next/
+web/out/
+
+# ===========================
+# Infrastructure (Docker)
+# ===========================
+infra/docker-data/
+infra/.env
+
+# ===========================
+# Project State / Config
+# ===========================
+.codegraph/
+.omo/
+
+# ===========================
+# Environment & Secrets
+# ===========================
+.env
+.env.*
+*.pem
+*.key
+*.cert
+
+# ===========================
+# Logs
+# ===========================
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ===========================
+# Misc
+# ===========================
+*.tmp
+*.bak
+*.orig
+*.patch

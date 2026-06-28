@@ -10,9 +10,11 @@ Multi-platform smart notes system (MVP phase). Primary deliverable is a **Tauri 
 |-----------|------|--------|
 | `desktop/` | Tauri 2 + React 18 + Vite 5 | **Primary deliverable**, working |
 | `core/` | Rust lib crate `noteforge-core` | Working, used by desktop via path dep |
-| `backend/` | Java 21 + Spring Boot 3.3 (Gradle, multi-module) | Config exists, **no Java source yet** |
+| `backend/` | Java 21 + Spring Boot 3.3 (Gradle, multi-module) | Working: ~70 Java files across 3 submodules (common, note-service, user-service) |
 | `web/` | Next.js 15 (planned) | **Empty directory** |
 | `infra/` | Docker Compose (PostgreSQL+pgvector, Redis, MinIO) | Ready for use |
+| `docs/` | Architecture & design docs (11 `.md` files) | Covers API, DB, sync, AI, deployment, UX |
+| `scripts/` | Build/dev helper scripts (`.ps1`, `.bat`) | `up`, `down`, `test`, `rebuild` |
 
 ## Key entry points
 
@@ -51,7 +53,7 @@ Run all from repo root:
 - **No .github/CI** — no workflows configured
 - **Desktop Rust code** uses `lazy_static!` for caching (5-min TTL caches for versions, diffs, search)
 - **Desktop Rust entry** is `desktop/src-tauri/src/main.rs` (just calls `lib::run()`)
-- **Backend** uses Gradle wrapper; `note-service/build.gradle` references Java 21 but no application code exists
+- **Backend** uses Gradle wrapper; services in `note-service/` and `user-service/` have Spring Boot application code
 - **infra/init.sql** creates tables (notes, notebooks, tags, note_tags) and enables pgvector + uuid-ossp extensions
 - **Tauri config** has `"bundle": {"active": false}` — bundling is disabled
 
@@ -69,3 +71,10 @@ Run all from repo root:
 - Tauri commands use snake_case names (e.g. `create_note`, `search_notes_fuzzy`)
 - React components use PascalCase, files match component names
 - CSS: `desktop/src/styles/globals.css` (no CSS-in-JS or Tailwind detected)
+
+## Subdirectory AGENTS.md
+
+| File | Covers |
+|------|--------|
+| `desktop/src/components/AGENTS.md` | React component tree (28 files, 5 subdirs) |
+| `backend/AGENTS.md` | Java/Spring Boot microservices |

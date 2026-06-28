@@ -4,17 +4,9 @@ server:
 spring:
   application:
     name: user-service
-  datasource:
-    url: jdbc:postgresql://localhost:5432/noteforge
-    username: noteforge
-    password: noteforge123
-    hikari:
-      maximum-pool-size: 10
-      minimum-idle: 3
+  profiles:
+    active: dev
   jpa:
-    hibernate:
-      ddl-auto: update
-    show-sql: true
     properties:
       hibernate:
         format_sql: true
@@ -23,6 +15,15 @@ jwt:
   secret: noteforge-mvp-dev-jwt-secret-key-2026
   access-token-expiration: 900000
   refresh-token-expiration: 604800000
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
 
 logging:
   level:

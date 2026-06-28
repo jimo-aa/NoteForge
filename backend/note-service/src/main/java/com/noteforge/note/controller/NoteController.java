@@ -57,9 +57,10 @@ public class NoteController {
     public ResponseEntity<ApiResponse<PageResponse<NoteResponse>>> listNotes(
             Authentication auth,
             @RequestParam(required = false) String notebookId,
+            @RequestParam(required = false) String tag,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        List<NoteResponse> items = noteService.listNotes(auth.getName(), notebookId, page, size);
+        List<NoteResponse> items = noteService.listNotesWithFilter(auth.getName(), notebookId, tag, page, size);
         PageResponse<NoteResponse> pageResp = new PageResponse<>(items, page, size, items.size(), 0);
         return ResponseEntity.ok(ApiResponse.success(pageResp));
     }
@@ -74,5 +75,13 @@ public class NoteController {
         PageResponse<NoteResponse> pageResp = new PageResponse<>(
                 result.getContent(), page, size, result.getTotalElements(), result.getTotalPages());
         return ResponseEntity.ok(ApiResponse.success(pageResp));
+    }
+
+    @GetMapping("/{id}/backlinks")
+    public ResponseEntity<ApiResponse<List<NoteLinkResponse>>> getBacklinks(
+            Authentication auth,
+            @PathVariable String id) {
+        List<NoteLinkResponse> backlinks = noteService.getBacklinks(id, auth.getName());
+        return ResponseEntity.ok(ApiResponse.success(backlinks));
     }
 }

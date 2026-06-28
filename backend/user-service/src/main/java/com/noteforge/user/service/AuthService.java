@@ -2,6 +2,7 @@ package com.noteforge.user.service;
 
 import com.noteforge.user.dto.*;
 import com.noteforge.user.entity.UserEntity;
+import com.noteforge.user.exception.ResourceNotFoundException;
 import com.noteforge.user.repository.UserRepository;
 import com.noteforge.user.security.JwtTokenProvider;
 import lombok.RequiredArgsConstructor;
@@ -57,7 +58,7 @@ public class AuthService {
         }
         String userId = jwtTokenProvider.getUserIdFromToken(token);
         UserEntity entity = userRepository.findById(userId)
-                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
         UserResponse userResp = UserResponse.fromEntity(entity);
         String newAccessToken = jwtTokenProvider.generateAccessToken(entity.getId(), entity.getEmail());

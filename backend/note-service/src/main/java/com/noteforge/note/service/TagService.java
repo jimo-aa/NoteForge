@@ -2,6 +2,7 @@ package com.noteforge.note.service;
 
 import com.noteforge.note.dto.TagResponse;
 import com.noteforge.note.entity.TagEntity;
+import com.noteforge.note.exception.ResourceNotFoundException;
 import com.noteforge.note.repository.TagRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -33,9 +34,9 @@ public class TagService {
 
     public void deleteTag(String tagId, String userId) {
         TagEntity entity = tagRepository.findById(tagId)
-                .orElseThrow(() -> new IllegalArgumentException("Tag not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Tag not found"));
         if (!entity.getUserId().equals(userId)) {
-            throw new IllegalArgumentException("Tag not found");
+            throw new ResourceNotFoundException("Tag not found");
         }
         tagRepository.delete(entity);
     }

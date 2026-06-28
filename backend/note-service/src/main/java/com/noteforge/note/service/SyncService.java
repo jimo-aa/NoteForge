@@ -1,6 +1,5 @@
 package com.noteforge.note.service;
 
-import com.noteforge.note.dto.SyncPullRequest;
 import com.noteforge.note.dto.SyncPushRequest;
 import com.noteforge.note.entity.SyncLogEntity;
 import com.noteforge.note.repository.SyncLogRepository;
@@ -29,5 +28,11 @@ public class SyncService {
             log.setVersion(item.getClientVersion());
             syncLogRepository.save(log);
         }
+    }
+
+    public long getCurrentVersion(String userId) {
+        List<SyncLogEntity> logs = syncLogRepository
+                .findByUserIdAndVersionGreaterThanOrderByVersionAsc(userId, 0L);
+        return logs.stream().mapToLong(SyncLogEntity::getVersion).max().orElse(0);
     }
 }
