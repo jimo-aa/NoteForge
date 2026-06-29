@@ -48,4 +48,16 @@ public interface NoteRepository extends JpaRepository<NoteEntity, String> {
            "AND :tag MEMBER OF n.tags ORDER BY n.updatedAt DESC")
     Page<NoteEntity> findByUserIdAndTagAndIsDeletedFalse(
         @Param("userId") String userId, @Param("tag") String tag, Pageable pageable);
+
+    // Favorite filtering
+    @Query("SELECT n FROM NoteEntity n WHERE n.userId = :userId AND n.isDeleted = false " +
+           "AND n.isFavorite = true ORDER BY n.updatedAt DESC")
+    Page<NoteEntity> findByUserIdAndIsFavoriteAndIsDeletedFalse(
+        @Param("userId") String userId, Pageable pageable);
+
+    // Pinned filtering
+    @Query("SELECT n FROM NoteEntity n WHERE n.userId = :userId AND n.isDeleted = false " +
+           "AND n.isPinned = true ORDER BY n.updatedAt DESC")
+    Page<NoteEntity> findByUserIdAndIsPinnedAndIsDeletedFalse(
+        @Param("userId") String userId, Pageable pageable);
 }

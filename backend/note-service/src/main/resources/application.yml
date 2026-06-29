@@ -18,7 +18,9 @@ spring:
       port: 6379
 
 jwt:
-  secret: noteforge-mvp-dev-jwt-secret-key-2026
+  secret: ${JWT_SECRET:noteforge-mvp-dev-jwt-secret-key-2026}
+  access-token-expiration: ${JWT_ACCESS_TOKEN_EXPIRATION:3600000}
+  refresh-token-expiration: ${JWT_REFRESH_TOKEN_EXPIRATION:604800000}
 
 minio:
   endpoint: ""

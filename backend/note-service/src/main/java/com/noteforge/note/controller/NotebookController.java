@@ -49,4 +49,12 @@ public class NotebookController {
         notebookService.deleteNotebook(id, auth.getName());
         return ResponseEntity.ok(ApiResponse.success());
     }
+
+    @PutMapping("/reorder")
+    public ResponseEntity<ApiResponse<Void>> reorderNotebooks(
+            Authentication auth,
+            @RequestBody List<String> orderedIds) {
+        notebookService.reorderNotebooks(auth.getName(), orderedIds);
+        return ResponseEntity.ok(ApiResponse.success());
+    }
 }

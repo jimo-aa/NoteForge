@@ -58,10 +58,14 @@ public class NoteController {
             Authentication auth,
             @RequestParam(required = false) String notebookId,
             @RequestParam(required = false) String tag,
+            @RequestParam(required = false) Boolean isFavorite,
+            @RequestParam(required = false) Boolean isPinned,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        List<NoteResponse> items = noteService.listNotesWithFilter(auth.getName(), notebookId, tag, page, size);
-        PageResponse<NoteResponse> pageResp = new PageResponse<>(items, page, size, items.size(), 0);
+        Page<NoteResponse> result = noteService.listNotesWithFilter(
+                auth.getName(), notebookId, tag, isFavorite, isPinned, page, size);
+        PageResponse<NoteResponse> pageResp = new PageResponse<>(
+                result.getContent(), page, size, result.getTotalElements(), result.getTotalPages());
         return ResponseEntity.ok(ApiResponse.success(pageResp));
     }
 

@@ -27,6 +27,8 @@ public class NotebookEntity {
 
     private int sortOrder;
 
+    private boolean isDeleted;
+
     @Column(nullable = false)
     private LocalDateTime createdAt;
 

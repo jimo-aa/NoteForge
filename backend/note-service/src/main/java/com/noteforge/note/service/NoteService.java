@@ -134,17 +134,25 @@ public class NoteService {
         }).filter(r -> r != null).toList();
     }
 
-    public List<NoteResponse> listNotesWithFilter(String userId, String notebookId, String tag, int page, int size) {
+    public Page<NoteResponse> listNotesWithFilter(String userId, String notebookId, String tag,
+                                                   Boolean isFavorite, Boolean isPinned,
+                                                   int page, int size) {
         Pageable pageable = PageRequest.of(page, size);
         Page<NoteEntity> entities;
-        if (tag != null && !tag.isEmpty()) {
+
+        if (isFavorite != null && isFavorite) {
+            entities = noteRepository.findByUserIdAndIsFavoriteAndIsDeletedFalse(userId, pageable);
+        } else if (isPinned != null && isPinned) {
+            entities = noteRepository.findByUserIdAndIsPinnedAndIsDeletedFalse(userId, pageable);
+        } else if (tag != null && !tag.isEmpty()) {
             entities = noteRepository.findByUserIdAndTagAndIsDeletedFalse(userId, tag, pageable);
         } else if (notebookId != null && !notebookId.isEmpty()) {
             entities = noteRepository.findByUserIdAndNotebookIdAndIsDeletedFalse(userId, notebookId, pageable);
         } else {
             entities = noteRepository.findByUserIdAndIsDeletedFalse(userId, pageable);
         }
-        return entities.map(NoteResponse::fromEntity).getContent();
+
+        return entities.map(NoteResponse::fromEntity);
     }
 
     private NoteEntity findNote(String noteId, String userId) {

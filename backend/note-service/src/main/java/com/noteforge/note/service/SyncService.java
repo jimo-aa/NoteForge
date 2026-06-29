@@ -1,6 +1,7 @@
 package com.noteforge.note.service;
 
 import com.noteforge.note.dto.SyncPushRequest;
+import com.noteforge.note.dto.SyncStateResponse;
 import com.noteforge.note.entity.SyncLogEntity;
 import com.noteforge.note.repository.SyncLogRepository;
 import lombok.RequiredArgsConstructor;
@@ -13,6 +14,13 @@ import java.util.List;
 public class SyncService {
 
     private final SyncLogRepository syncLogRepository;
+
+    public SyncStateResponse getSyncState(String userId) {
+        List<SyncLogEntity> logs = syncLogRepository
+                .findByUserIdAndVersionGreaterThanOrderByVersionAsc(userId, 0L);
+        long lastVersion = logs.stream().mapToLong(SyncLogEntity::getVersion).max().orElse(0);
+        return new SyncStateResponse(lastVersion, 0, 0);
+    }
 
     public List<SyncLogEntity> pullChanges(String userId, long lastVersion) {
         return syncLogRepository.findByUserIdAndVersionGreaterThanOrderByVersionAsc(userId, lastVersion);

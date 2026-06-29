@@ -90,6 +90,8 @@ public class SyncWebSocketHandler extends TextWebSocketHandler {
     private String authenticate(WebSocketSession session) {
         URI uri = session.getUri();
         if (uri == null) return null;
+
+        // Try query param first: ?token=xxx
         String token = uri.getQuery();
         if (token != null && token.startsWith("token=")) {
             token = token.substring(6);
@@ -97,6 +99,16 @@ public class SyncWebSocketHandler extends TextWebSocketHandler {
                 return jwtTokenProvider.getUserIdFromToken(token);
             }
         }
+
+        // Try header: Sec-WebSocket-Protocol: <token>
+        List<String> protocols = session.getHandshakeHeaders().get("Sec-WebSocket-Protocol");
+        if (protocols != null && !protocols.isEmpty()) {
+            token = protocols.get(0);
+            if (jwtTokenProvider.validateToken(token)) {
+                return jwtTokenProvider.getUserIdFromToken(token);
+            }
+        }
+
         return null;
     }
 

@@ -8,5 +8,5 @@ import java.util.List;
 
 @Repository
 public interface NotebookRepository extends JpaRepository<NotebookEntity, String> {
-    List<NotebookEntity> findByUserIdOrderBySortOrderAsc(String userId);
+    List<NotebookEntity> findByUserIdAndIsDeletedFalseOrderBySortOrderAsc(String userId);
 }
