@@ -13,8 +13,13 @@ public class SyncPushRequest {
     @Data
     public static class SyncChangeItem {
         private String noteId;
-        private String operation;
-        private String snapshot;
         private long clientVersion;
+        private String title;
+        private String content;
+        private String notebookId;
+        private List<String> tags;
+        private Boolean isPinned;
+        private Boolean isFavorite;
+        private Boolean isDeleted;
     }
 }

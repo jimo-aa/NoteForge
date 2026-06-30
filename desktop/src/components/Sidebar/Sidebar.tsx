@@ -1,8 +1,11 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useStore } from '../../stores/context';
 import { useTheme } from '@/hooks/useTheme';
+import { useAuth } from '@/stores/authStore';
 import { SearchBox } from '@/components/Sidebar/SearchBox';
 import { Icon } from '@/components/Common/Icon';
+import { SyncIndicator } from '@/components/Common/SyncIndicator';
+import { AuthModal } from '@/components/Modals/AuthModal';
 import { formatTime } from '@/utils/markdown';
 import type { EntityModalState } from '@/components/Modals/EntityModal';
 
@@ -22,6 +25,8 @@ interface SidebarProps {
 
 export function Sidebar({ onNewNote, onNewNotebook, onManage, onDraftRecovery }: SidebarProps) {
   const { searchQuery, setSearchQuery, currentFilter, setCurrentFilter, activeNotebook, setActiveNotebook, notebooks, tags, favoriteCount, totalCount, searchResultCount, setIsGraphOpen, selectNote, currentNoteId, activeTags, setActiveTags, filteredNotes, setContextMenu } = useStore();
+  const { user, isAuthenticated, logout } = useAuth();
+  const [authOpen, setAuthOpen] = useState(false);
 
   const openNotebookModal = () => onNewNotebook?.();
 
@@ -40,12 +45,17 @@ export function Sidebar({ onNewNote, onNewNotebook, onManage, onDraftRecovery }:
       <section className="sidebar-section tags-section"><div className="section-heading static"><span>标签</span></div><div className="tag-grid">{tags.length === 0 ? <div className="tag-empty"><div className="tag-empty__title">暂无标签</div><div className="tag-empty__desc">创建笔记并添加标签后，会在这里显示可筛选的标签。</div></div> : <>{tags.map((tag) => { const selected = activeTags.includes(tag); return (<button key={tag} className={selected ? 'tag-pill active' : 'tag-pill'} onClick={() => { setActiveTags((prev) => prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]); setCurrentFilter('tag'); }} title={`#${tag}`}>#{tag}</button>); })}<div className="tag-empty tag-empty--inline"><div className="tag-empty__title">标签筛选</div><div className="tag-empty__desc">支持多选，未选中任何标签时将默认展示全部文件列表。</div></div></>}</div></section>
       <section className="sidebar-notes"><div className="section-heading static notes-heading"><span>最近笔记</span><span>{searchResultCount ?? totalCount} 条</span></div><div className="sidebar-note-scroll">{visibleNotes.length === 0 ? <div className="sidebar-empty">暂无笔记</div> : visibleNotes.map((note) => (<button key={note.meta.id} className={note.meta.id === currentNoteId ? 'sidebar-note active' : 'sidebar-note'} onClick={() => selectNote(note.meta.id)} onContextMenu={(e) => { e.preventDefault(); setContextMenu({ visible: true, x: e.clientX, y: e.clientY, noteId: note.meta.id, notebookId: null, kind: 'note' }); }}><div className="sidebar-note-title"><span>{note.meta.isPinned ? <Icon type="gudin" /> : note.meta.isFavorite ? <Icon type="shoucang" /> : ''}</span><strong>{note.meta.title}</strong></div><p>{note.content.replace(/[#*`>-]/g, '').slice(0, 42)}...</p><div className="sidebar-note-meta"><span>{formatTime(note.meta.updatedAt)}</span></div></button>))}</div></section>
       <footer className="sidebar-status">
-        <span className="sync-dot" />
-        <span>已同步</span>
+        <SyncIndicator />
         <span>{favoriteCount} 收藏</span>
+        {isAuthenticated ? (
+          <button className="sidebar-manage-btn" onClick={logout} title={`已登录: ${user?.username} — 点击退出`}>{user?.username} ⏻</button>
+        ) : (
+          <button className="sidebar-manage-btn auth-btn" onClick={() => setAuthOpen(true)} title="登录/注册">🔑 登录</button>
+        )}
         <button className="sidebar-manage-btn" onClick={onManage} title="管理笔记本和标签">⚙</button>
         <button className="sidebar-manage-btn" onClick={onDraftRecovery} title="恢复草稿">📝</button>
       </footer>
+      {authOpen && <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} />}
     </aside>
   );
 }

@@ -39,9 +39,8 @@ public class HealthController {
 
         // Check Redis
         if (redisConnectionFactory != null) {
-            try {
-                StringRedisTemplate template = new StringRedisTemplate(redisConnectionFactory);
-                template.getConnectionFactory().connection().ping();
+            try (var connection = redisConnectionFactory.getConnection()) {
+                connection.ping();
                 result.put("redis", "UP");
             } catch (Exception e) {
                 result.put("redis", "DOWN: " + e.getMessage());

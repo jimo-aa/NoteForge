@@ -1,10 +1,11 @@
 // NoteForge — 全局状态管理
 
 import { createContext, useContext, useState, useCallback, useRef, useEffect, useMemo, type ReactNode } from 'react';
-import type { Note, NoteFilter, ToastMessage, ContextMenuState, SortOption, Notebook } from '@/types';
+import type { Note, NoteFilter, ToastMessage, ContextMenuState, SortOption, Notebook, SyncChangeItem, NoteResponseItem, SyncPullResponse } from '@/types';
 import type { EntityModalState } from '@/components/Modals/EntityModal';
 import { countWords } from '@/utils/markdown';
 import { tauriInvoke } from '@/utils/invoke';
+import { getSyncService } from '@/services/syncService';
 
 const ALL_NOTEBOOK: Notebook = { id: 'all', name: '全部笔记', icon: '📋', color: '', parentId: null, sortOrder: 0, noteCount: 0, createdAt: 0, updatedAt: 0 };
 const STORAGE_PREFIX = 'noteforge';
@@ -47,6 +48,64 @@ export function useNoteStore() {
   const [entityModal, setEntityModal] = useState<EntityModalState>({ open: false, mode: null, title: '', label: '', value: '', confirmText: '确定', targetId: null });
   const toastIdRef = useRef(0);
   const autosaveTimerRef = useRef<Record<string, number | null>>({});
+  const lastSyncVersionRef = useRef(0);
+  const syncServiceRef = useRef(getSyncService());
+
+  // Convert a Note into a SyncChangeItem and queue it
+  const queueSyncChange = useCallback((noteId: string, note: Note, isDeleted?: boolean) => {
+    const change: SyncChangeItem = {
+      noteId,
+      clientVersion: note.meta.version,
+      title: note.meta.title,
+      content: note.content,
+      notebookId: note.meta.notebookId,
+      tags: note.meta.tags,
+      isPinned: note.meta.isPinned,
+      isFavorite: note.meta.isFavorite,
+      isDeleted,
+    };
+    syncServiceRef.current.queueChange(change);
+  }, []);
+
+  // Merge a SyncPullResponse into local notes state
+  const applySyncPull = useCallback((pull: SyncPullResponse) => {
+    setNotes((prev) => {
+      const updated = [...prev];
+      for (const resp of pull.notes) {
+        const existingIdx = updated.findIndex((n) => n.meta.id === resp.id);
+        const importedNote: Note = {
+          meta: {
+            id: resp.id,
+            title: resp.title,
+            notebookId: resp.notebookId,
+            tags: resp.tags,
+            isPinned: resp.isPinned,
+            isFavorite: resp.isFavorite,
+            wordCount: resp.wordCount,
+            version: resp.version,
+            createdAt: resp.createdAt,
+            updatedAt: resp.updatedAt,
+          },
+          content: resp.content,
+          contentPlain: resp.contentPlain,
+        };
+        if (existingIdx >= 0) {
+          const existing = updated[existingIdx];
+          if (existing && resp.version > existing.meta.version) {
+            updated[existingIdx] = importedNote;
+          }
+        } else {
+          updated.push(importedNote);
+        }
+      }
+      // Remove deleted notes
+      for (const delId of pull.deletedNoteIds) {
+        const idx = updated.findIndex((n) => n.meta.id === delId);
+        if (idx >= 0) updated.splice(idx, 1);
+      }
+      return updated;
+    });
+  }, []);
 
   const refreshNotebooks = useCallback(async () => {
     const backendNotebooks = await tauriInvoke<Notebook[]>('list_notebooks');
@@ -66,8 +125,58 @@ export function useNoteStore() {
     }
   }, []);
 
-  useEffect(() => { void (async () => { await Promise.all([refreshNotes(), refreshNotebooks()]); setIsLoading(false); })(); }, [refreshNotes, refreshNotebooks]);
-  useEffect(() => { void refreshNotebooks(); }, [refreshNotebooks]);
+  useEffect(() => {
+    void (async () => {
+      await Promise.all([refreshNotes(), refreshNotebooks()]);
+      setIsLoading(false);
+
+      // Only start sync if user has auth token
+      const hasToken = !!window.localStorage.getItem('noteforge:auth:access-token');
+      if (!hasToken) return;
+
+      // After initial load, trigger first sync pull
+      const svc = syncServiceRef.current;
+      svc.sync(lastSyncVersionRef.current).then((result) => {
+        if (result) {
+          lastSyncVersionRef.current = result.serverVersion;
+          applySyncPull(result);
+        }
+      }).catch(() => {});
+      // Wire pull-result callback for polling
+      svc.onPullResultCallback((pullResult) => {
+        if (pullResult.serverVersion > lastSyncVersionRef.current) {
+          lastSyncVersionRef.current = pullResult.serverVersion;
+          applySyncPull(pullResult);
+        }
+      });
+      // Start background polling
+      svc.startPolling(30000, () => lastSyncVersionRef.current);
+    })();
+    return () => {
+      syncServiceRef.current.stopPolling();
+      syncServiceRef.current.destroy();
+    };
+  }, [refreshNotes, refreshNotebooks, applySyncPull]);
+
+  // Listen for auth changes — start sync after login
+  useEffect(() => {
+    const onAuthChanged = () => {
+      const hasToken = !!window.localStorage.getItem('noteforge:auth:access-token');
+      if (!hasToken) return;
+      const svc = syncServiceRef.current;
+      // Initial sync pull on login
+      svc.sync(lastSyncVersionRef.current).then((result) => {
+        if (result) {
+          lastSyncVersionRef.current = result.serverVersion;
+          applySyncPull(result);
+        }
+      }).catch(() => {});
+      // Start polling if not already running
+      svc.startPolling(30000, () => lastSyncVersionRef.current);
+    };
+    window.addEventListener('noteforge:auth-changed', onAuthChanged);
+    return () => window.removeEventListener('noteforge:auth-changed', onAuthChanged);
+  }, [applySyncPull]);
 
   useEffect(() => {
     return () => {
@@ -130,6 +239,11 @@ export function useNoteStore() {
         setCurrentNoteId(note.meta.id);
         safeWrite(draftKey(note.meta.id), content);
         safeWrite(autosaveKey(note.meta.id), { content, title, updatedAt: Date.now() });
+        // Queue sync change in background
+        queueSyncChange(note.meta.id, note);
+        void syncServiceRef.current.sync(lastSyncVersionRef.current).then((result) => {
+          if (result) lastSyncVersionRef.current = result.serverVersion;
+        }).catch(() => {});
         return note;
       }
       console.warn('[createNote] Backend returned null for note creation');
@@ -166,9 +280,20 @@ export function useNoteStore() {
       return next;
     }));
     if (updates.title !== undefined || updates.content !== undefined || updates.tags !== undefined || updates.isPinned !== undefined || updates.isFavorite !== undefined) {
-      void tauriInvoke('update_note', { id, title: updates.title ?? null, content: updates.content ?? null, tags: updates.tags ?? null, isPinned: updates.isPinned ?? null, isFavorite: updates.isFavorite ?? null });
+      void tauriInvoke('update_note', { id, title: updates.title ?? null, content: updates.content ?? null, tags: updates.tags ?? null, is_pinned: updates.isPinned ?? null, is_favorite: updates.isFavorite ?? null });
     }
-  }, [scheduleAutosave]);
+    // Queue sync change in background after state update
+    setNotes((prev) => {
+      const updated = prev.find((n) => n.meta.id === id);
+      if (updated) {
+        queueSyncChange(id, updated);
+      }
+      return prev;
+    });
+    void syncServiceRef.current.sync(lastSyncVersionRef.current).then((result) => {
+      if (result) lastSyncVersionRef.current = result.serverVersion;
+    }).catch(() => {});
+  }, [scheduleAutosave, queueSyncChange]);
 
   const showToast = useCallback((type: ToastMessage['type'], message: string) => {
     const id = ++toastIdRef.current;
@@ -177,6 +302,8 @@ export function useNoteStore() {
   }, []);
 
   const deleteNote = useCallback((id: string) => {
+    // Find note before removing from state for sync queue
+    const noteToDelete = notes.find((n) => n.meta.id === id);
     setNotes((prev) => {
       const idx = prev.findIndex((n) => n.meta.id === id);
       const filtered = prev.filter((n) => n.meta.id !== id);
@@ -188,7 +315,14 @@ export function useNoteStore() {
       return filtered;
     });
     void tauriInvoke('delete_note', { id });
-  }, []);
+    // Queue sync delete in background
+    if (noteToDelete) {
+      queueSyncChange(id, noteToDelete, true);
+      void syncServiceRef.current.sync(lastSyncVersionRef.current).then((result) => {
+        if (result) lastSyncVersionRef.current = result.serverVersion;
+      }).catch(() => {});
+    }
+  }, [notes, queueSyncChange]);
   const duplicateNote = useCallback((id: string) => { const note = notes.find((n) => n.meta.id === id); if (!note) return; void createNote(`${note.meta.title} (副本)`, note.content, note.meta.notebookId || 'default', note.meta.tags); showToast('success', '📋 已复制'); }, [createNote, notes, showToast]);
   const toggleFavorite = useCallback((id: string) => { const note = notes.find((n) => n.meta.id === id); if (!note) return; updateNote(id, { isFavorite: !note.meta.isFavorite }); }, [notes, updateNote]);
   const togglePin = useCallback((id: string) => { const note = notes.find((n) => n.meta.id === id); if (!note) return; updateNote(id, { isPinned: !note.meta.isPinned }); }, [notes, updateNote]);
@@ -259,11 +393,11 @@ export function useNoteStore() {
   const loadDraft = useCallback((id: string) => safeRead<string>(draftKey(id), ''), []);
   const clearDraft = useCallback((id: string) => { try { window.localStorage.removeItem(draftKey(id)); window.localStorage.removeItem(autosaveKey(id)); } catch {} }, []);
   const loadVersions = useCallback(async (id: string) => {
-    const backend = await tauriInvoke<Array<{ id: string; title: string; updatedAt: number; summary?: string }>>('list_note_versions', { noteId: id });
+    const backend = await tauriInvoke<Array<{ id: string; title: string; updatedAt: number; summary?: string }>>('list_note_versions', { note_id: id });
     return backend || [];
   }, []);
   const restoreVersion = useCallback(async (id: string, versionId: string) => {
-    const content = await tauriInvoke<string>('checkout_note_version', { noteId: id, commitId: versionId });
+    const content = await tauriInvoke<string>('checkout_note_version', { note_id: id, commit_id: versionId });
     if (!content) return false;
     updateNote(id, { content });
     saveDraft(id, content);
@@ -271,7 +405,7 @@ export function useNoteStore() {
     return true;
   }, [saveDraft, showToast, updateNote]);
   const checkoutBranch = useCallback(async (id: string, branch: string) => {
-    const content = await tauriInvoke<string>('checkout_note_branch', { noteId: id, branch });
+    const content = await tauriInvoke<string>('checkout_note_branch', { note_id: id, branch });
     if (!content) return false;
     updateNote(id, { content });
     saveDraft(id, content);
@@ -279,7 +413,7 @@ export function useNoteStore() {
     return true;
   }, [saveDraft, showToast, updateNote]);
   const createBranch = useCallback(async (id: string, branch: string, fromCommit?: string) => {
-    const ok = await tauriInvoke<void>('create_note_branch', { noteId: id, branch, fromCommit });
+    const ok = await tauriInvoke<void>('create_note_branch', { note_id: id, branch, from_commit: fromCommit });
     if (ok === undefined) {
       showToast('success', `已创建分支: ${branch}`);
       return true;
@@ -287,7 +421,7 @@ export function useNoteStore() {
     return false;
   }, [showToast]);
   const createVersion = useCallback(async (id: string, title: string, description?: string) => {
-    const commitId = await tauriInvoke<string>('create_note_version', { noteId: id, title, description });
+    const commitId = await tauriInvoke<string>('create_note_version', { note_id: id, title, description });
     if (commitId) {
       showToast('success', `已创建版本: ${title}`);
       return true;

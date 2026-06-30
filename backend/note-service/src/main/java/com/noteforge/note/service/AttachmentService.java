@@ -10,6 +10,9 @@ import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.InputStreamResource;
+import org.springframework.core.io.Resource;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -22,6 +25,7 @@ import java.util.UUID;
 public class AttachmentService {
 
     private static final Logger log = LoggerFactory.getLogger(AttachmentService.class);
+    private static final long MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 
     private final AttachmentRepository attachmentRepository;
 
@@ -66,10 +70,13 @@ public class AttachmentService {
         }
     }
 
-    public AttachmentResponse uploadAttachment(MultipartFile file, String userId) {
+    public AttachmentResponse uploadAttachment(MultipartFile file, String userId, String noteId) {
         if (!enabled) {
             throw new UnsupportedOperationException(
                     "Attachment upload is not configured. Set minio.endpoint/access-key/secret-key in application.yml");
+        }
+        if (file.getSize() > MAX_FILE_SIZE) {
+            throw new IllegalArgumentException("File size exceeds 50MB limit: " + file.getSize());
         }
         try {
             String objectName = userId + "/" + UUID.randomUUID() + "_" + file.getOriginalFilename();
@@ -85,14 +92,17 @@ public class AttachmentService {
 
             AttachmentEntity entity = new AttachmentEntity();
             entity.setUserId(userId);
+            entity.setNoteId(noteId);
             entity.setFilename(file.getOriginalFilename());
             entity.setContentType(file.getContentType());
             entity.setSize(file.getSize());
             entity.setUrl(url);
             attachmentRepository.save(entity);
 
-            log.info("Uploaded attachment: {}", url);
+            log.info("Uploaded attachment: {} for note {}", url, noteId);
             return AttachmentResponse.fromEntity(entity);
+        } catch (IllegalArgumentException e) {
+            throw e;
         } catch (Exception e) {
             throw new RuntimeException("Failed to upload attachment: " + e.getMessage(), e);
         }
@@ -103,6 +113,49 @@ public class AttachmentService {
                 .stream()
                 .map(AttachmentResponse::fromEntity)
                 .toList();
+    }
+
+    public List<AttachmentResponse> listAttachmentsByNoteId(String noteId, String userId) {
+        return attachmentRepository.findByNoteIdAndUserId(noteId, userId)
+                .stream()
+                .map(AttachmentResponse::fromEntity)
+                .toList();
+    }
+
+    public AttachmentResponse getAttachment(String id, String userId) {
+        AttachmentEntity entity = attachmentRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Attachment not found"));
+        if (!entity.getUserId().equals(userId)) {
+            throw new ResourceNotFoundException("Attachment not found");
+        }
+        return AttachmentResponse.fromEntity(entity);
+    }
+
+    public Resource downloadAttachment(String id, String userId) {
+        AttachmentEntity entity = attachmentRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Attachment not found"));
+        if (!entity.getUserId().equals(userId)) {
+            throw new ResourceNotFoundException("Attachment not found");
+        }
+        try {
+            GetObjectResponse obj = minioClient.getObject(GetObjectArgs.builder()
+                    .bucket(bucket)
+                    .object(extractObjectName(entity.getUrl()))
+                    .build());
+            return new InputStreamResource(obj);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to download attachment: " + e.getMessage(), e);
+        }
+    }
+
+    public MediaType getAttachmentMediaType(String id, String userId) {
+        AttachmentEntity entity = attachmentRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Attachment not found"));
+        if (!entity.getUserId().equals(userId)) {
+            throw new ResourceNotFoundException("Attachment not found");
+        }
+        String contentType = entity.getContentType();
+        return contentType != null ? MediaType.parseMediaType(contentType) : MediaType.APPLICATION_OCTET_STREAM;
     }
 
     public void deleteAttachment(String attachmentId, String userId) {
@@ -133,7 +186,7 @@ public class AttachmentService {
 
     private String extractObjectName(String url) {
         String prefix = endpoint + "/" + bucket + "/";
-        if (url.startsWith(prefix)) {
+        if (url != null && url.startsWith(prefix)) {
             return url.substring(prefix.length());
         }
         return null;

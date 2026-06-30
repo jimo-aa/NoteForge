@@ -3,6 +3,7 @@ import { useStore } from '../../stores/context';
 import { renderMarkdown } from '@/utils/markdown';
 import { VersionControlModal } from '@/components/Modals/VersionControlModal';
 import { Icon } from '@/components/Common/Icon';
+import { AttachmentPanel } from '@/components/Editor/AttachmentPanel';
 import { CodeMirrorEditor, type CodeMirrorHandle } from './CodeMirrorEditor';
 
 
@@ -56,6 +57,7 @@ export function Editor() {
   const [isResizing, setIsResizing] = useState(false);
   const [jumpLine, setJumpLine] = useState<number | null>(null);
   const [versionControlOpen, setVersionControlOpen] = useState(false);
+  const [attachmentPanelOpen, setAttachmentPanelOpen] = useState(false);
   const [wikiQuery, setWikiQuery] = useState('');
   const [wikiSuggestions, setWikiSuggestions] = useState<string[]>([]);
   const [wikiOpen, setWikiOpen] = useState(false);
@@ -269,6 +271,7 @@ export function Editor() {
           <button className="plain-action" onClick={() => setIsPropertiesOpen(true)} title="属性">i</button>
           <button className="plain-action" onClick={() => { clearDraft(meta.id); showToast('success', '草稿已清除'); }} title="清除草稿">↺</button>
           <button className="plain-action" onClick={exportedFile} title="下载">⬇</button>
+          <button className={attachmentPanelOpen ? 'state-button active' : 'plain-action'} onClick={() => setAttachmentPanelOpen((v) => !v)} title="附件">📎</button>
         </div>
       </header>
       <div className="markdown-toolbar">
@@ -316,6 +319,11 @@ export function Editor() {
           </>
         )}
       </div>
+      {attachmentPanelOpen && (
+        <div className="editor-attachment-section">
+          <AttachmentPanel noteId={meta.id} />
+        </div>
+      )}
       <footer className="document-statusbar">
         <span>字数 {meta.wordCount}</span>
         <span>行 {note.content.split('\n').length}</span>

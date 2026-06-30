@@ -10,4 +10,5 @@ import java.util.List;
 public interface SyncLogRepository extends JpaRepository<SyncLogEntity, String> {
     List<SyncLogEntity> findByUserIdAndVersionGreaterThanOrderByVersionAsc(String userId, long version);
     List<SyncLogEntity> findByNoteIdAndUserIdOrderByVersionAsc(String noteId, String userId);
+    List<SyncLogEntity> findByNoteIdAndUserIdOrderByVersionDesc(String noteId, String userId);
 }

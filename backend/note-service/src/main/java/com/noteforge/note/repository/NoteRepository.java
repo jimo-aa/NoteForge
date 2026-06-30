@@ -8,12 +8,15 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Repository
 public interface NoteRepository extends JpaRepository<NoteEntity, String> {
 
     List<NoteEntity> findByUserIdAndIsDeletedFalseOrderByUpdatedAtDesc(String userId);
+
+    List<NoteEntity> findByUserIdAndUpdatedAtAfterOrderByUpdatedAtAsc(String userId, LocalDateTime since);
 
     Page<NoteEntity> findByUserIdAndIsDeletedFalse(String userId, Pageable pageable);
 
