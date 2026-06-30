@@ -45,7 +45,7 @@ export function GraphView() {
     const outgoing = new Map<string, Set<string>>();
 
     for (const note of store.notes) {
-      const refs = Array.from(note.content.matchAll(/\[\[([^\]]+)\]\]/g)).map((match) => match[1].trim());
+      const refs = Array.from(note.content.matchAll(/\[\[([^\]]+)\]\]/g)).map((match) => match[1]?.trim() ?? '');
       const targets = refs.map((title) => titleToId.get(title)).filter((id): id is string => Boolean(id));
       outgoing.set(note.meta.id, new Set(targets));
       for (const to of targets) {

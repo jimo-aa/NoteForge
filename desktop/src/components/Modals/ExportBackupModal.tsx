@@ -5,7 +5,7 @@ import { tauriInvoke as invoke } from '@/utils/invoke';
 type ExportFormat = 'markdown' | 'html' | 'json';
 
 function downloadFile(data: Uint8Array, filename: string, mimeType: string) {
-  const blob = new Blob([data], { type: mimeType });
+  const blob = new Blob([data.buffer as ArrayBuffer], { type: mimeType });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;

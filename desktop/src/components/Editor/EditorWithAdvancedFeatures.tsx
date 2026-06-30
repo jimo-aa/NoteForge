@@ -1,10 +1,10 @@
 import { useState, useEffect, useMemo } from 'react';
 import { tauriInvoke as invoke } from '@/utils/invoke';
 import type { Note } from '@/types';
-import { DiffViewerModal } from './DiffViewerModal';
-import { MilestoneModal } from './MilestoneModal';
-import { VersionSearchModal } from './VersionSearchModal';
-import { ExportBackupModal } from './ExportBackupModal';
+import { DiffViewerModal } from '../Modals/DiffViewerModal';
+import { MilestoneModal } from '../Modals/MilestoneModal';
+import { VersionSearchModal } from '../Modals/VersionSearchModal';
+import { ExportBackupModal } from '../Modals/ExportBackupModal';
 
 /**
  * 完整的编辑器集成示例
@@ -276,7 +276,7 @@ export function EditorWithAdvancedFeatures({
         open={showExportBackup}
         noteId={note.meta.id}
         noteTitle={note.meta.title}
-        notebookId={note.meta.notebookId}
+        notebookId={note.meta.notebookId ?? undefined}
         notebookName="笔记本"
         onClose={() => setShowExportBackup(false)}
       />

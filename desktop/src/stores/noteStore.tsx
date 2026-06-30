@@ -46,6 +46,9 @@ export function useNoteStore() {
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({ visible: false, x: 0, y: 0, noteId: null, notebookId: null, kind: null });
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [entityModal, setEntityModal] = useState<EntityModalState>({ open: false, mode: null, title: '', label: '', value: '', confirmText: '确定', targetId: null });
+  const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
+  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved');
+  const [showWelcomeGuide, setShowWelcomeGuide] = useState(false);
   const toastIdRef = useRef(0);
   const autosaveTimerRef = useRef<Record<string, number | null>>({});
   const lastSyncVersionRef = useRef(0);
@@ -129,6 +132,11 @@ export function useNoteStore() {
     void (async () => {
       await Promise.all([refreshNotes(), refreshNotebooks()]);
       setIsLoading(false);
+
+      // Show welcome guide on first launch
+      if (!window.localStorage.getItem('noteforge:welcome:completed')) {
+        setShowWelcomeGuide(true);
+      }
 
       // Only start sync if user has auth token
       const hasToken = !!window.localStorage.getItem('noteforge:auth:access-token');
@@ -257,7 +265,12 @@ export function useNoteStore() {
   const scheduleAutosave = useCallback((id: string, title: string, content: string) => {
     if (autosaveTimerRef.current[id]) window.clearTimeout(autosaveTimerRef.current[id]!);
     autosaveTimerRef.current[id] = window.setTimeout(() => {
+      setSaveStatus('saving');
       safeWrite(autosaveKey(id), { content, title, updatedAt: Date.now() });
+      // Also flush to SQLite in background for crash safety
+      tauriInvoke('update_note', { id, title: null, content, tags: null, is_pinned: null, is_favorite: null })
+        .then(() => { setSaveStatus('saved'); setLastSavedAt(Date.now()); })
+        .catch(() => { setSaveStatus('saved'); });
       autosaveTimerRef.current[id] = null;
     }, 5000);
   }, []);
@@ -279,8 +292,17 @@ export function useNoteStore() {
       }
       return next;
     }));
-    if (updates.title !== undefined || updates.content !== undefined || updates.tags !== undefined || updates.isPinned !== undefined || updates.isFavorite !== undefined) {
+    const needsPersist = updates.title !== undefined || updates.content !== undefined || updates.tags !== undefined || updates.isPinned !== undefined || updates.isFavorite !== undefined;
+    if (needsPersist) {
       void tauriInvoke('update_note', { id, title: updates.title ?? null, content: updates.content ?? null, tags: updates.tags ?? null, is_pinned: updates.isPinned ?? null, is_favorite: updates.isFavorite ?? null });
+      // Auto-create git version on content change (background, non-blocking)
+      if (updates.content !== undefined) {
+        void tauriInvoke('create_note_version', {
+          note_id: id,
+          title: `自动保存 ${new Date().toLocaleString('zh-CN')}`,
+          description: null,
+        }).catch(() => {});
+      }
     }
     // Queue sync change in background after state update
     setNotes((prev) => {
@@ -389,7 +411,11 @@ export function useNoteStore() {
   const openEntityModal = useCallback((next: EntityModalState) => setEntityModal(next), []);
   const closeEntityModal = useCallback(() => setEntityModal({ open: false, mode: null, title: '', label: '', value: '', confirmText: '确定', targetId: null }), []);
 
-  const saveDraft = useCallback((id: string, content: string) => { safeWrite(draftKey(id), content); }, []);
+  const saveDraft = useCallback((id: string, content: string) => {
+    safeWrite(draftKey(id), content);
+    // Also persist to SQLite for crash safety
+    void tauriInvoke('update_note', { id, title: null, content, tags: null, is_pinned: null, is_favorite: null }).catch(() => {});
+  }, []);
   const loadDraft = useCallback((id: string) => safeRead<string>(draftKey(id), ''), []);
   const clearDraft = useCallback((id: string) => { try { window.localStorage.removeItem(draftKey(id)); window.localStorage.removeItem(autosaveKey(id)); } catch {} }, []);
   const loadVersions = useCallback(async (id: string) => {
@@ -476,7 +502,7 @@ export function useNoteStore() {
   const favoriteCount = notes.filter((n) => n.meta.isFavorite).length;
   const searchResultCount = null;
 
-  return { notes, filteredNotes, currentNote, currentNoteId, notebooks: notebooksWithCounts, activeNotebook, currentFilter, searchQuery, sortBy, activeTags, isPreviewVisible, isGraphOpen, isPropertiesOpen, toasts, contextMenu, settingsOpen, isLoading, entityModal, totalCount, favoriteCount, searchResultCount, tags, setActiveNotebook, setCurrentFilter, setSearchQuery, setSortBy, setActiveTags, setIsPreviewVisible, setIsGraphOpen, setIsPropertiesOpen, setContextMenu, setSettingsOpen, openEntityModal, closeEntityModal, selectNote, createNote, updateNote, deleteNote, duplicateNote, toggleFavorite, togglePin, createNotebook, renameNotebook, deleteNotebook, refreshNotes, refreshNotebooks, showToast, setCurrentNoteId, saveDraft, loadDraft, clearDraft, loadVersions, restoreVersion, checkoutBranch, createBranch, createVersion, saveCursor, loadCursor, loadRecovery, recoveryDrafts, clearRecovery };
+  return { notes, filteredNotes, currentNote, currentNoteId, notebooks: notebooksWithCounts, activeNotebook, currentFilter, searchQuery, sortBy, activeTags, isPreviewVisible, isGraphOpen, isPropertiesOpen, toasts, contextMenu, settingsOpen, isLoading, entityModal, totalCount, favoriteCount, searchResultCount, tags, setActiveNotebook, setCurrentFilter, setSearchQuery, setSortBy, setActiveTags, setIsPreviewVisible, setIsGraphOpen, setIsPropertiesOpen, setContextMenu, setSettingsOpen, openEntityModal, closeEntityModal, selectNote, createNote, updateNote, deleteNote, duplicateNote, toggleFavorite, togglePin, createNotebook, renameNotebook, deleteNotebook, refreshNotes, refreshNotebooks, showToast, setCurrentNoteId, saveDraft, loadDraft, clearDraft, loadVersions, restoreVersion, checkoutBranch, createBranch, createVersion, saveCursor, loadCursor, loadRecovery, recoveryDrafts, clearRecovery, lastSavedAt, saveStatus, showWelcomeGuide, setShowWelcomeGuide };
 }
 
 export const NoteContext = createContext<NoteStore | null>(null);

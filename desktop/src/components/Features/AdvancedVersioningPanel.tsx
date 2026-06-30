@@ -80,8 +80,8 @@ export function AdvancedVersioningPanel({ noteId, onClose }: { noteId: string; o
       if (data) {
         setVersions(data);
         if (data.length >= 2) {
-          setSelectedFrom(data[data.length - 1].id);
-          setSelectedTo(data[0].id);
+          setSelectedFrom(data[data.length - 1]!.id);
+          setSelectedTo(data[0]!.id);
         }
       }
     };

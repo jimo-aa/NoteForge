@@ -15,6 +15,7 @@ import { AdvancedVersioningPanel } from '@/components/Features/AdvancedVersionin
 import { ErrorBoundary } from '@/components/Common/ErrorBoundary';
 import { ManageModal } from '@/components/Modals/ManageModal';
 import { DraftRecoveryModal } from '@/components/Modals/DraftRecoveryModal';
+import { WelcomeGuide } from '@/components/Modals/WelcomeGuide';
 import type { NotebookModalState } from '@/components/Modals/NotebookModal';
 
 export default function App() {
@@ -139,6 +140,7 @@ export default function App() {
         <GraphView />
         <ManageModal open={manageOpen} onClose={() => setManageOpen(false)} />
         <DraftRecoveryModal open={draftRecoveryOpen} onClose={() => setDraftRecoveryOpen(false)} />
+        <WelcomeGuide open={store.showWelcomeGuide} onClose={() => store.setShowWelcomeGuide(false)} />
         {store.toasts.map((t) => (<Toast key={t.id} message={t.message} />))}
       </div>
     </ErrorBoundary>

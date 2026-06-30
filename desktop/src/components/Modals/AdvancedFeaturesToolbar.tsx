@@ -43,8 +43,8 @@ export function AdvancedFeaturesToolbar({
       setVersions(data);
       // 自动选择最新的两个版本
       setDiffVersions({
-        from: data[1].id,
-        to: data[0].id,
+        from: data[1]!.id,
+        to: data[0]!.id,
       });
     }
     setLoadingVersions(false);

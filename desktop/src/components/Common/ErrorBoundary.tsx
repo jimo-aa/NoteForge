@@ -12,6 +12,19 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error('[ErrorBoundary]', error, info.componentStack);
+    try {
+      window.localStorage.setItem('noteforge:crash:last', JSON.stringify({
+        crashedAt: Date.now(),
+        error: error.message,
+        stack: info.componentStack,
+      }));
+    } catch {}
+  }
+
+  handleReload() {
+    this.setState({ hasError: false, error: null });
+    try { window.localStorage.setItem('noteforge:crash:recovered', JSON.stringify({ recoveredAt: Date.now() })); } catch {}
+    window.location.reload();
   }
 
   render() {
@@ -20,7 +33,7 @@ export class ErrorBoundary extends Component<Props, State> {
         <div className="error-boundary">
           <strong>应用出错了</strong>
           <p>{this.state.error?.message}</p>
-          <button onClick={() => { this.setState({ hasError: false, error: null }); window.location.reload(); }}>
+          <button onClick={() => this.handleReload()}>
             重新加载
           </button>
         </div>
