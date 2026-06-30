@@ -53,6 +53,7 @@ export function useNoteStore() {
   const autosaveTimerRef = useRef<Record<string, number | null>>({});
   const lastSyncVersionRef = useRef(0);
   const syncServiceRef = useRef(getSyncService());
+  const lastCommittedContentRef = useRef<Record<string, string>>({});
 
   // Convert a Note into a SyncChangeItem and queue it
   const queueSyncChange = useCallback((noteId: string, note: Note, isDeleted?: boolean) => {
@@ -295,13 +296,17 @@ export function useNoteStore() {
     const needsPersist = updates.title !== undefined || updates.content !== undefined || updates.tags !== undefined || updates.isPinned !== undefined || updates.isFavorite !== undefined;
     if (needsPersist) {
       void tauriInvoke('update_note', { id, title: updates.title ?? null, content: updates.content ?? null, tags: updates.tags ?? null, is_pinned: updates.isPinned ?? null, is_favorite: updates.isFavorite ?? null });
-      // Auto-create git version on content change (background, non-blocking)
+      // Auto-create git version on actual content change (deduplicated)
       if (updates.content !== undefined) {
-        void tauriInvoke('create_note_version', {
-          note_id: id,
-          title: `自动保存 ${new Date().toLocaleString('zh-CN')}`,
-          description: null,
-        }).catch(() => {});
+        const prev = lastCommittedContentRef.current[id];
+        if (updates.content !== prev) {
+          lastCommittedContentRef.current[id] = updates.content;
+          void tauriInvoke('create_note_version', {
+            note_id: id,
+            title: `自动保存 ${new Date().toLocaleString('zh-CN')}`,
+            description: null,
+          }).catch(() => {});
+        }
       }
     }
     // Queue sync change in background after state update

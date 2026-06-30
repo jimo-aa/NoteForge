@@ -6,9 +6,24 @@ use noteforge_core::{md_engine::MarkdownEngine, search::{SearchEngine, SearchPag
 use crate::git_history::{GitBranchEntry, GitHistory, GitVersionEntry};
 
 const MAX_NOTES_RETURNED: usize = 10_000;
+const SLOW_COMMAND_THRESHOLD_MS: u128 = 100;
 
 // 导入必要的生成ID和时间函数
 use noteforge_core::types::{generate_id, now_ms};
+
+/// 计时宏：记录 Tauri 命令执行时间，超过阈值时输出性能日志
+macro_rules! timed_command {
+    ($name:expr, $body:expr) => {{
+        let _start = std::time::Instant::now();
+        let _result = $body;
+        let _elapsed = _start.elapsed().as_millis();
+        if _elapsed > SLOW_COMMAND_THRESHOLD_MS {
+            println!("[Perf] command '{}' took {}ms (slow)", $name, _elapsed);
+        }
+        _result
+    }};
+}
+
 
 // ============================================================
 // 性能缓存系统 (Feature 5 - Performance Optimization)
@@ -233,35 +248,43 @@ pub fn list_note_metas(state: State<'_, AppState>) -> Result<Vec<NoteMeta>, Stri
 
 #[tauri::command] 
 pub fn search_notes(state: State<'_, AppState>, query: String) -> Result<Vec<SearchResult>, String> { 
-    state.core.lock().map_err(|e| e.to_string())?.search.search(&query, 1000).map_err(|e| e.to_string()) 
+    timed_command!("search_notes", {
+        state.core.lock().map_err(|e| e.to_string())?.search.search(&query, 1000).map_err(|e| e.to_string())
+    })
 }
 
 /// 模糊搜索 - 支持部分匹配和容错
 #[tauri::command] 
 pub fn search_notes_fuzzy(state: State<'_, AppState>, query: String) -> Result<Vec<SearchResult>, String> { 
-    state.core.lock()
-        .map_err(|e| e.to_string())?
-        .search
-        .search_fuzzy(&query, 1000)
-        .map_err(|e| e.to_string())
+    timed_command!("search_notes_fuzzy", {
+        state.core.lock()
+            .map_err(|e| e.to_string())?
+            .search
+            .search_fuzzy(&query, 1000)
+            .map_err(|e| e.to_string())
+    })
 }
 
 /// 在特定笔记中搜索
 #[tauri::command]
 pub fn search_in_note(state: State<'_, AppState>, note_id: String, query: String) -> Result<Vec<SearchResult>, String> {
-    state.core.lock()
-        .map_err(|e| e.to_string())?
-        .search
-        .search_in_note(&note_id, &query, 1000)
-        .map_err(|e| e.to_string())
+    timed_command!("search_in_note", {
+        state.core.lock()
+            .map_err(|e| e.to_string())?
+            .search
+            .search_in_note(&note_id, &query, 1000)
+            .map_err(|e| e.to_string())
+    })
 }
 
 /// 高级搜索 - 支持自定义 limit/offset，返回分页结果（含总命中数）
 #[tauri::command]
 pub fn search_notes_advanced(state: State<'_, AppState>, query: String, limit: usize, offset: usize) -> Result<SearchPage, String> {
-    let core = state.core.lock().map_err(|e| e.to_string())?;
-    let options = noteforge_core::search::SearchOptions { limit, offset };
-    core.search.search_paginated(&query, options).map_err(|e| e.to_string())
+    timed_command!("search_notes_advanced", {
+        let core = state.core.lock().map_err(|e| e.to_string())?;
+        let options = noteforge_core::search::SearchOptions { limit, offset };
+        core.search.search_paginated(&query, options).map_err(|e| e.to_string())
+    })
 }
 
 // ============================================================

@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useStore } from '@/stores/context';
 import { Icon } from '@/components/Common/Icon';
 import { tauriInvoke } from '@/utils/invoke';
+import { searchCache } from '@/utils/searchCache';
 
 type SearchResult = {
   note_id: string;
@@ -67,8 +68,29 @@ export function SearchBox() {
     }
 
     const t = window.setTimeout(async () => {
+      // Check cache first
+      const cached = searchCache.get<SearchPage>('adv', query, 0);
+      if (cached) {
+        setTotalResults(cached.total_hits);
+        setResults(
+          cached.results.map((hit: SearchResult) => ({
+            id: hit.note_id,
+            title: hit.title,
+            snippet: hit.snippet || '暂无内容预览',
+            score: hit.score,
+            updatedAt: new Date(hit.updated_at).toLocaleString(),
+            noteId: hit.note_id,
+          }))
+        );
+        setCurrentPage(0);
+        setLoading(false);
+        setActiveIndex(0);
+        return;
+      }
+
       setLoading(true);
       setFuzzyFallback(false);
+      const t0 = performance.now();
       try {
         const page = await tauriInvoke<SearchPage>('search_notes_advanced', {
           query,
@@ -77,6 +99,7 @@ export function SearchBox() {
         });
 
         if (page && page.results.length > 0) {
+          searchCache.set('adv', query, 0, page);
           setTotalResults(page.total_hits);
           setResults(
             page.results.map((hit: SearchResult) => ({
@@ -116,10 +139,14 @@ export function SearchBox() {
         setResults([]);
         setTotalResults(0);
       } finally {
+        const elapsed = performance.now() - t0;
+        if (elapsed > 100) {
+          console.debug(`[Perf] search "${query}" took ${elapsed.toFixed(0)}ms`);
+        }
         setLoading(false);
         setActiveIndex(0);
       }
-    }, 300);
+    }, 200); // Reduced from 300ms for snappier feel
 
     return () => window.clearTimeout(t);
   }, [open, query]);

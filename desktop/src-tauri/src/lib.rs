@@ -3,8 +3,8 @@
 use tauri::{menu::{Menu, MenuItem}, tray::TrayIconBuilder, Manager, Wry};
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
-mod commands;
-mod git_history;
+pub mod commands;
+pub mod git_history;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {

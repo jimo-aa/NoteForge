@@ -2467,6 +2467,7 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-global-shortcut",
  "tauri-plugin-shell",
+ "tempfile",
  "thiserror 2.0.18",
 ]
 
