@@ -16,7 +16,7 @@
 
 ### 技术栈
 
-| 端 | 技术 | 
+| 端 | 技术 |
 |:---|:-----|
 | 🖥️ 桌面端 | Tauri 2.x + React 19 + Rust Core |
 | 🌐 Web 端 | Next.js 15 + React 19 + PWA |
@@ -70,13 +70,13 @@ NoteForge/
 ## 🔧 开发计划
 
 ```
-Phase 1: MVP (4周)      ← 现在
+Phase 1: MVP (4周)      
 ├── Rust 核心引擎
 ├── Tauri 桌面端
 ├── Java 后端基础
 └── 基础同步
 
-Phase 2: 完整客户端 (4周)
+Phase 2: 完整客户端 (4周)  ← 现在
 ├── React Web 端
 ├── Flutter 移动端
 ├── 端到端加密
@@ -92,13 +92,3 @@ Phase 4: 协作与发布 (3周)
 ├── 分享 + 权限
 └── 性能优化 + 发布
 ```
-
----
-
-## 📄 相关文件
-
-| 文件 | 位置 |
-|------|------|
-| OceanBase 黑客松方案 | `../oceanbase-hackathon/OB-IoT-Edge-RFC.md` |
-| Rust 教程 | `../oceanbase-hackathon/tutorial/` |
-| 办公自动化 Skill | `../skills/office-automation/SKILL.md` |
