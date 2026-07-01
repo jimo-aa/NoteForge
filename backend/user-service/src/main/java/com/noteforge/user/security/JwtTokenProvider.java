@@ -60,6 +60,16 @@ public class JwtTokenProvider {
                 .getSubject();
     }
 
+    public long getExpiryFromToken(String token) {
+        return Jwts.parser()
+                .verifyWith(key)
+                .build()
+                .parseSignedClaims(token)
+                .getPayload()
+                .getExpiration()
+                .getTime();
+    }
+
     public boolean validateToken(String token) {
         try {
             Jwts.parser().verifyWith(key).build().parseSignedClaims(token);

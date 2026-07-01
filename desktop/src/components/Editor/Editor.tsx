@@ -1,10 +1,12 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, useCallback } from 'react';
 import { useStore } from '../../stores/context';
-import { renderMarkdown } from '@/utils/markdown';
+import { renderMarkdown, formatTable, TABLE_CELL_KEYS } from '@/utils/markdown';
 import { VersionControlModal } from '@/components/Modals/VersionControlModal';
 import { Icon } from '@/components/Common/Icon';
 import { AttachmentPanel } from '@/components/Editor/AttachmentPanel';
 import { CodeMirrorEditor, type CodeMirrorHandle } from './CodeMirrorEditor';
+import hljs from 'highlight.js';
+import 'highlight.js/styles/github.css';
 
 
 const MARKDOWN_ACTIONS = [
@@ -43,6 +45,7 @@ export function Editor() {
     createBranch,
     saveCursor,
     loadCursor,
+    selectNote,
     searchQuery,
   } = useStore();
 
@@ -115,12 +118,33 @@ export function Editor() {
 
   const renderedHtml = useMemo(() => note ? renderMarkdown(note.content ?? '', searchQuery) : '', [note?.content, searchQuery]);
 
-  const persistCursor = () => {
-    if (!note || !cmRef.current) return;
-    const sel = cmRef.current.getSelection();
-    restoreCursorRef.current = { start: sel.from, end: sel.to };
-    saveCursor(note.meta.id, { start: sel.from, end: sel.to });
-  };
+  // ── Syntax highlight for preview ──
+  const previewRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!renderedHtml || !previewRef.current) return;
+    const codes = previewRef.current.querySelectorAll<HTMLElement>('pre code[class*="language-"]');
+    codes.forEach((el) => {
+      hljs.highlightElement(el);
+    });
+  }, [renderedHtml]);
+
+  // ── Wiki Link 导航 ──
+  const [backlinks, setBacklinks] = useState<Array<{sourceId: string; sourceTitle: string}>>([]);
+  const [backlinksLoading, setBacklinksLoading] = useState(false);
+  const [hoveredWikiLink, setHoveredWikiLink] = useState<{title: string; x: number; y: number} | null>(null);
+  const [hoverPreviewContent, setHoverPreviewContent] = useState<string | null>(null);
+
+  // 加载反向链接
+  useEffect(() => {
+    if (!note) { setBacklinks([]); return; }
+    setBacklinksLoading(true);
+    import('@tauri-apps/api/core').then(({ invoke }) => {
+      invoke<Array<{sourceId: string; sourceTitle: string}>>('get_backlinks_with_titles', { noteId: note.meta.id })
+        .then((result) => { setBacklinks(result ?? []); })
+        .catch(() => { setBacklinks([]); })
+        .finally(() => setBacklinksLoading(false));
+    });
+  }, [note?.meta.id]);
 
   const updateContent = (content: string) => {
     if (!note) return;
@@ -134,6 +158,106 @@ export function Editor() {
       saveDraft(note.meta.id, content);
       lastSavedSnapshotRef.current = content;
     }, 300);
+  };
+
+  // 处理预览区点击：Wiki Link 导航 + 任务列表切换 + 代码复制
+  const handlePreviewClick = useCallback((e: React.MouseEvent<HTMLElement>) => {
+    const target = e.target as HTMLElement;
+
+    // —— Wiki Link 导航 ——
+    const wikiBtn = target.closest('.wiki-link') as HTMLElement | null;
+    if (wikiBtn && wikiBtn.textContent) {
+      e.preventDefault();
+      const title = wikiBtn.textContent.trim();
+      const found = notes.find((n) => n.meta.title.toLowerCase() === title.toLowerCase());
+      if (found) {
+        selectNote(found.meta.id);
+        showToast('info', `已跳转到「${found.meta.title}」`);
+      } else {
+        showToast('error', `未找到笔记「${title}」`);
+      }
+      return;
+    }
+
+    // —— 任务列表复选框切换 ——
+    const taskCheckbox = target.closest('.task-checkbox') as HTMLElement | null;
+    if (taskCheckbox) {
+      e.preventDefault();
+      const isChecked = taskCheckbox.getAttribute('data-checked') === 'true';
+      // Toggle the checkbox by updating the note content
+      if (!note || !cmRef.current) return;
+      const content = cmRef.current.getContent();
+      const lines = content.split('\n');
+      // Simple approach: find any task line near where the click happened
+      const previewPane = target.closest('.markdown-preview-pane');
+      if (!previewPane) return;
+      // Walk through rendered HTML to find which task line was clicked
+      const allItems = previewPane.querySelectorAll('.task-list li');
+      allItems.forEach((li, idx) => {
+        if (li.contains(taskCheckbox)) {
+          // Find the corresponding line in the source
+          let taskCount = -1;
+          for (let i = 0; i < lines.length; i++) {
+            const taskMatch = lines[i]?.match(/^(- \[[ xX]\] )/);
+            if (taskMatch) {
+              taskCount++;
+              if (taskCount === idx) {
+                const toggled = isChecked ? lines[i]!.replace('- [x] ', '- [ ] ').replace('- [X] ', '- [ ] ') : lines[i]!.replace('- [ ] ', '- [x] ');
+                if (toggled !== lines[i]) {
+                  lines[i] = toggled;
+                  updateContent(lines.join('\n'));
+                  cmRef.current?.setContent(lines.join('\n'));
+                  showToast('success', isChecked ? '已标记未完成' : '已标记完成');
+                }
+                return;
+              }
+            }
+          }
+        }
+      });
+      return;
+    }
+
+    // —— 代码复制 ——
+    const copyBtn = target.closest('.code-copy-btn') as HTMLElement | null;
+    if (copyBtn) {
+      e.preventDefault();
+      const code = copyBtn.getAttribute('data-code') || '';
+      void navigator.clipboard.writeText(code).then(() => {
+        showToast('success', '代码已复制');
+      }).catch(() => {
+        showToast('error', '复制失败');
+      });
+      return;
+    }
+  }, [notes, selectNote, showToast, note, updateContent]);
+
+  // 处理 Wiki Link 悬停预览
+  const handlePreviewMouseOver = useCallback((e: React.MouseEvent<HTMLElement>) => {
+    const target = e.target as HTMLElement;
+    const wikiBtn = target.closest('.wiki-link') as HTMLElement | null;
+    if (!wikiBtn || !wikiBtn.textContent) {
+      setHoveredWikiLink(null);
+      setHoverPreviewContent(null);
+      return;
+    }
+    const title = wikiBtn.textContent.trim();
+    const found = notes.find((n) => n.meta.title.toLowerCase() === title.toLowerCase());
+    if (found) {
+      const preview = found.content.length > 200 ? found.content.slice(0, 200) + '...' : found.content;
+      setHoverPreviewContent(preview);
+      setHoveredWikiLink({ title, x: e.clientX, y: e.clientY });
+    } else {
+      setHoveredWikiLink({ title, x: e.clientX, y: e.clientY });
+      setHoverPreviewContent(null);
+    }
+  }, [notes]);
+
+  const persistCursor = () => {
+    if (!note || !cmRef.current) return;
+    const sel = cmRef.current.getSelection();
+    restoreCursorRef.current = { start: sel.from, end: sel.to };
+    saveCursor(note.meta.id, { start: sel.from, end: sel.to });
   };
 
   const openWikiSuggestions = () => {
@@ -222,6 +346,51 @@ export function Editor() {
   const handleImagePaste = (file: File) => insertImage(file);
   const handleImageDrop = (file: File) => insertImage(file);
 
+  const handleFormatTable = () => {
+    if (!note || !cmRef.current) return;
+    const content = cmRef.current.getContent();
+    const sel = cmRef.current.getSelection();
+    // Find the table around cursor: scan backward for start of table, forward for end
+    const lines = content.split('\n');
+    const cursorLine = content.slice(0, sel.from).split('\n').length - 1;
+    let tableStart = -1;
+    let tableEnd = -1;
+    for (let i = cursorLine; i >= 0; i--) {
+      if (lines[i]?.trim().startsWith('|')) { tableStart = i; break; }
+    }
+    if (tableStart === -1) {
+      // Try selected text
+      const selected = content.slice(sel.from, sel.to);
+      if (selected && selected.includes('|')) {
+        const formatted = formatTable(selected);
+        if (formatted !== selected) {
+          const next = content.slice(0, sel.from) + formatted + content.slice(sel.to);
+          updateContent(next);
+          cmRef.current.setContent(next);
+          showToast('success', '表格已格式化');
+        }
+        return;
+      }
+      showToast('info', '请将光标放在表格行上');
+      return;
+    }
+    for (let i = tableStart; i < lines.length; i++) {
+      if (lines[i]?.trim().startsWith('|')) { tableEnd = i; } else { break; }
+    }
+    const tableText = lines.slice(tableStart, tableEnd + 1).join('\n');
+    const formatted = formatTable(tableText);
+    if (formatted !== tableText) {
+      const before = lines.slice(0, tableStart).join('\n');
+      const after = lines.slice(tableEnd + 1).join('\n');
+      const next = before + (before ? '\n' : '') + formatted + (after ? '\n' : '') + after;
+      updateContent(next);
+      cmRef.current.setContent(next);
+      showToast('success', '表格已格式化');
+    } else {
+      showToast('info', '表格已经对齐');
+    }
+  };
+
   const handleEditorKeyDown = (event: React.KeyboardEvent) => {
     if (wikiOpen) {
       if (event.key === 'Escape') { event.preventDefault(); closeWikiSuggestions(); return; }
@@ -281,6 +450,9 @@ export function Editor() {
               {action.label}
             </button>
           ))}
+          <button className="markdown-button" title="格式化表格（对齐列宽）" onClick={handleFormatTable}>
+            ⊞ 表格
+          </button>
         </div>
         <button className={isPreviewVisible ? 'preview-toggle active' : 'preview-toggle'} onClick={() => setIsPreviewVisible(!isPreviewVisible)}>👁 预览</button>
       </div>
@@ -315,7 +487,29 @@ export function Editor() {
         {isPreviewVisible && (
           <>
             <div className="editor-resizer" onMouseDown={startResize} role="separator" aria-orientation="vertical"><span /></div>
-            <article className="markdown-preview-pane" style={{ flexBasis: `${100 - editorWidth}%` }} dangerouslySetInnerHTML={{ __html: renderedHtml }} />
+            <article
+              ref={previewRef}
+              className="markdown-preview-pane"
+              style={{ flexBasis: `${100 - editorWidth}%` }}
+              dangerouslySetInnerHTML={{ __html: renderedHtml }}
+              onClick={handlePreviewClick}
+              onMouseOver={handlePreviewMouseOver}
+              onMouseOut={() => { setHoveredWikiLink(null); setHoverPreviewContent(null); }}
+            />
+            {/* Wiki Link 悬停预览 */}
+            {hoveredWikiLink && (
+              <div
+                className="wiki-link-preview"
+                style={{ left: hoveredWikiLink.x - 300, top: hoveredWikiLink.y + 16 }}
+              >
+                <div className="wiki-link-preview-title">{hoveredWikiLink.title}</div>
+                {hoverPreviewContent ? (
+                  <div className="wiki-link-preview-content">{hoverPreviewContent}</div>
+                ) : (
+                  <div className="wiki-link-preview-empty">未找到笔记</div>
+                )}
+              </div>
+            )}
           </>
         )}
       </div>
@@ -341,11 +535,11 @@ export function Editor() {
       />
       {isPropertiesOpen && (
         <aside className="note-properties-drawer">
-          <div className="properties-header">
+          <div className="drawer-header">
             <h3>笔记属性</h3>
             <button onClick={() => setIsPropertiesOpen(false)}>×</button>
           </div>
-          <div className="properties-content">
+          <section>
             <div className="property-row"><span>标题</span><strong>{meta.title}</strong></div>
             <div className="property-row"><span>创建时间</span><strong>{new Date(meta.createdAt).toLocaleString('zh-CN')}</strong></div>
             <div className="property-row"><span>更新时间</span><strong>{new Date(meta.updatedAt).toLocaleString('zh-CN')}</strong></div>
@@ -353,6 +547,28 @@ export function Editor() {
             <div className="property-row"><span>标签</span><strong>{currentTags.length ? currentTags.join('、') : '无'}</strong></div>
             <div className="property-row"><span>收藏</span><strong>{meta.isFavorite ? '是' : '否'}</strong></div>
             <div className="property-row"><span>固定</span><strong>{meta.isPinned ? '是' : '否'}</strong></div>
+          </section>
+          {/* 反向链接面板 */}
+          <div className="backlinks-section">
+            <h4>反向链接 ({backlinks.length})</h4>
+            {backlinksLoading ? (
+              <div className="backlinks-loading">加载中...</div>
+            ) : backlinks.length === 0 ? (
+              <div className="backlinks-empty">没有笔记引用此笔记</div>
+            ) : (
+              <ul className="backlinks-list">
+                {backlinks.map((bl) => (
+                  <li key={bl.sourceId} className="backlinks-item">
+                    <button
+                      className="backlinks-link"
+                      onClick={() => { selectNote(bl.sourceId); setIsPropertiesOpen(false); }}
+                    >
+                      {bl.sourceTitle}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         </aside>
       )}

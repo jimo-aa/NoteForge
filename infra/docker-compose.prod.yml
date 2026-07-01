@@ -1,0 +1,88 @@
+# NoteForge — Production Override
+# Usage: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+version: '3.8'
+
+services:
+  # === note-service (production) ===
+  note-service:
+    build:
+      context: ../backend
+      args:
+        SERVICE: note-service
+    image: noteforge/note-service:latest
+    container_name: noteforge-note-service-prod
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      DB_URL: jdbc:postgresql://postgres:5432/noteforge
+      DB_USER: noteforge
+      DB_PASS: noteforge123
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: noteforge
+      MINIO_SECRET_KEY: noteforge123
+      MINIO_BUCKET: noteforge-attachments
+      JWT_SECRET: ${JWT_SECRET:-noteforge-prod-jwt-secret-change-me}
+      CORS_ALLOWED_ORIGINS: http://localhost:1420,tauri://localhost
+    ports:
+      - "8081:8081"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      minio:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/actuator/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
+    networks:
+      - noteforge-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # === user-service (production) ===
+  user-service:
+    build:
+      context: ../backend
+      args:
+        SERVICE: user-service
+    image: noteforge/user-service:latest
+    container_name: noteforge-user-service-prod
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      DB_URL: jdbc:postgresql://postgres:5432/noteforge
+      DB_USER: noteforge
+      DB_PASS: noteforge123
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      JWT_SECRET: ${JWT_SECRET:-noteforge-prod-jwt-secret-change-me}
+      CORS_ALLOWED_ORIGINS: http://localhost:1420,tauri://localhost
+    ports:
+      - "8082:8082"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/actuator/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
+    networks:
+      - noteforge-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

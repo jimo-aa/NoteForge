@@ -1,6 +1,7 @@
 package com.noteforge.user.dto;
 
 import com.noteforge.user.entity.UserEntity;
+import com.noteforge.user.entity.UserRole;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 
@@ -13,6 +14,7 @@ public class UserResponse {
     private String email;
     private String name;
     private String avatarUrl;
+    private UserRole role;
     private long createdAt;
     private long updatedAt;
 
@@ -22,6 +24,7 @@ public class UserResponse {
             entity.getEmail(),
             entity.getName(),
             entity.getAvatarUrl(),
+            entity.getRole(),
             entity.getCreatedAt() != null ? entity.getCreatedAt().toEpochSecond(ZoneOffset.UTC) * 1000 : 0,
             entity.getUpdatedAt() != null ? entity.getUpdatedAt().toEpochSecond(ZoneOffset.UTC) * 1000 : 0
         );

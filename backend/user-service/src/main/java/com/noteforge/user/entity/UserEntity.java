@@ -24,6 +24,10 @@ public class UserEntity {
 
     private String avatarUrl;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private UserRole role = UserRole.USER;
+
     @Column(nullable = false)
     private LocalDateTime createdAt;
 

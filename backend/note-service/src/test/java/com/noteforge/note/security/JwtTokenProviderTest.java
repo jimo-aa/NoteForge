@@ -1,0 +1,71 @@
+package com.noteforge.note.security;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+class JwtTokenProviderTest {
+
+    private JwtTokenProvider tokenProvider;
+
+    @BeforeEach
+    void setUp() {
+        tokenProvider = new JwtTokenProvider();
+        ReflectionTestUtils.setField(tokenProvider, "jwtSecret", "noteforge-mvp-dev-jwt-secret-key-2026");
+        ReflectionTestUtils.setField(tokenProvider, "accessTokenExpiration", 3600000L);
+        ReflectionTestUtils.setField(tokenProvider, "refreshTokenExpiration", 604800000L);
+        tokenProvider.init();
+    }
+
+    @Test
+    void generateAccessToken_shouldReturnNonNullToken() {
+        String token = tokenProvider.generateAccessToken("test-user", "test@example.com");
+        assertThat(token).isNotNull();
+        assertThat(token.length()).isGreaterThan(0);
+    }
+
+    @Test
+    void generateRefreshToken_shouldReturnNonNullToken() {
+        String token = tokenProvider.generateRefreshToken("test-user");
+        assertThat(token).isNotNull();
+        assertThat(token.length()).isGreaterThan(0);
+    }
+
+    @Test
+    void getUserIdFromToken_shouldReturnCorrectUserId() {
+        String token = tokenProvider.generateAccessToken("test-user-123", "test@example.com");
+        String userId = tokenProvider.getUserIdFromToken(token);
+        assertThat(userId).isEqualTo("test-user-123");
+    }
+
+    @Test
+    void validateToken_shouldReturnTrue_forValidAccessToken() {
+        String token = tokenProvider.generateAccessToken("test-user", "test@example.com");
+        assertThat(tokenProvider.validateToken(token)).isTrue();
+    }
+
+    @Test
+    void validateToken_shouldReturnTrue_forValidRefreshToken() {
+        String token = tokenProvider.generateRefreshToken("test-user");
+        assertThat(tokenProvider.validateToken(token)).isTrue();
+    }
+
+    @Test
+    void validateToken_shouldReturnFalse_forInvalidToken() {
+        assertThat(tokenProvider.validateToken("invalid-token-string")).isFalse();
+    }
+
+    @Test
+    void validateToken_shouldReturnFalse_forEmptyToken() {
+        assertThat(tokenProvider.validateToken("")).isFalse();
+    }
+
+    @Test
+    void generateToken_shouldProduceDifferentTokens_forDifferentUsers() {
+        String token1 = tokenProvider.generateAccessToken("user-a", "a@example.com");
+        String token2 = tokenProvider.generateAccessToken("user-b", "b@example.com");
+        assertThat(token1).isNotEqualTo(token2);
+    }
+}

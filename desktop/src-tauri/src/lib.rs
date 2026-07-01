@@ -89,6 +89,14 @@ pub fn run() {
             commands::search_versions_cached,
             commands::clear_cache,
             commands::get_cache_stats,
+            // Wiki Link Backlinks
+            commands::get_backlinks_with_titles,
+            // Sync Queue
+            commands::enqueue_sync_change,
+            commands::get_pending_sync_changes,
+            commands::count_pending_sync_changes,
+            commands::remove_sync_changes,
+            commands::clear_sync_queue,
         ])
         .run(tauri::generate_context!())
         .expect("启动 NoteForge 失败");

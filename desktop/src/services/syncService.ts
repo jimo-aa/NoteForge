@@ -1,5 +1,6 @@
-// NoteForge — 同步服务（桌面↔后端 REST 同步）
+// NoteForge — 同步服务（桌面↔后端 REST 同步，SQLite 持久化）
 
+import { invoke } from '@tauri-apps/api/core';
 import type {
   SyncPullResponse,
   SyncPushRequest,
@@ -8,12 +9,19 @@ import type {
   SyncChangeItem,
 } from '@/types';
 
-const STORAGE_PREFIX = 'noteforge:sync';
 const AUTH_TOKEN_KEY = 'noteforge:auth:access-token';
 const SYNC_API_BASE = 'http://localhost:8081/api/v1/sync';
 
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 1000;
+
+interface SyncQueueItem {
+  id: string;
+  noteId: string;
+  operation: string;
+  payload: string;
+  createdAt: number;
+}
 
 type SyncListener = (status: SyncStatus) => void;
 
@@ -21,7 +29,6 @@ function getToken(): string | null {
   try {
     const raw = window.localStorage.getItem(AUTH_TOKEN_KEY);
     if (!raw) return null;
-    // Stored via JSON.stringify by authStore — need to parse
     return JSON.parse(raw) as string;
   } catch {
     return null;
@@ -40,29 +47,22 @@ export class SyncService {
   private isSyncing = false;
 
   constructor() {
-    this.loadPendingQueue();
+    void this.loadPendingQueue();
   }
 
-  // ── Pending queue persistence ──
+  // ── Pending queue persistence (SQLite via Tauri) ──
 
-  private loadPendingQueue() {
+  private async loadPendingQueue(): Promise<void> {
     try {
-      const raw = window.localStorage.getItem(`${STORAGE_PREFIX}:pending`);
-      if (raw) this.pendingQueue = JSON.parse(raw);
+      const items = await invoke<SyncQueueItem[]>('get_pending_sync_changes');
+      this.pendingQueue = items.map((item) => JSON.parse(item.payload) as SyncChangeItem);
     } catch {
       this.pendingQueue = [];
     }
   }
 
-  private savePendingQueue() {
-    try {
-      window.localStorage.setItem(
-        `${STORAGE_PREFIX}:pending`,
-        JSON.stringify(this.pendingQueue),
-      );
-    } catch {
-      /* storage full — skip */
-    }
+  private async persistQueue(): Promise<void> {
+    // Queue is persisted per-item via queueChange(); this is a no-op now.
   }
 
   // ── Status management ──
@@ -102,13 +102,10 @@ export class SyncService {
       try {
         const res = await fetch(url, options);
         if (res.ok) return res;
-        // 401/403 — auth expired, no point retrying
         if (res.status === 401 || res.status === 403) return res;
-        // 4xx/5xx — retry with backoff
         if (attempt < retries - 1) await delay(RETRY_DELAY_MS * (attempt + 1));
         else return res;
       } catch {
-        // Network error — retry
         if (attempt < retries - 1) await delay(RETRY_DELAY_MS * (attempt + 1));
         else return null;
       }
@@ -125,15 +122,12 @@ export class SyncService {
       {
         method: 'POST',
         headers: this.getAuthHeaders(),
-        body: JSON.stringify({ lastVersion } satisfies {
-          lastVersion: number;
-        }),
+        body: JSON.stringify({ lastVersion } satisfies { lastVersion: number }),
       },
     );
     if (!res) return null;
     try {
       const json = await res.json();
-      // Backend wraps in ApiResponse { code, message, data }
       if (json.code === 0 && json.data) return json.data as SyncPullResponse;
       return null;
     } catch {
@@ -143,9 +137,7 @@ export class SyncService {
 
   // ── Sync push ──
 
-  async syncPush(
-    changes: SyncChangeItem[],
-  ): Promise<SyncPushResponse | null> {
+  async syncPush(changes: SyncChangeItem[]): Promise<SyncPushResponse | null> {
     if (changes.length === 0) return null;
     if (!getToken()) return null;
     const res = await this.fetchWithRetry(
@@ -180,9 +172,20 @@ export class SyncService {
         if (pushResult) {
           // Remove accepted changes from queue
           this.pendingQueue = this.pendingQueue.slice(pushResult.accepted);
-          this.savePendingQueue();
+          // Clear the SQLite queue and re-add remaining items
+          if (pushResult.accepted > 0) {
+            try {
+              await invoke('clear_sync_queue');
+              for (const item of this.pendingQueue) {
+                await invoke('enqueue_sync_change', {
+                  noteId: item.noteId,
+                  operation: item.isDeleted ? 'delete' : 'update',
+                  payload: JSON.stringify(item),
+                });
+              }
+            } catch { /* queue cleanup failed silently */ }
+          }
         }
-        // If push failed (network error), keep queue for retry
       }
 
       // Then pull latest
@@ -194,19 +197,23 @@ export class SyncService {
     }
   }
 
-  // ── Change queue ──
+  // ── Change queue (persisted to SQLite) ──
 
   queueChange(change: SyncChangeItem) {
-    // Replace existing pending change for same noteId
-    const idx = this.pendingQueue.findIndex(
-      (c) => c.noteId === change.noteId,
-    );
+    // Replace existing pending change for same noteId in memory
+    const idx = this.pendingQueue.findIndex((c) => c.noteId === change.noteId);
     if (idx >= 0) {
       this.pendingQueue[idx] = change;
     } else {
       this.pendingQueue.push(change);
     }
-    this.savePendingQueue();
+    // Persist to SQLite
+    const operation = change.isDeleted ? 'delete' : 'update';
+    void invoke('enqueue_sync_change', {
+      noteId: change.noteId,
+      operation,
+      payload: JSON.stringify(change),
+    }).catch(() => {});
   }
 
   getPendingCount(): number {
@@ -221,7 +228,6 @@ export class SyncService {
       if (this.isSyncing) return;
       const result = await this.sync(lastVersion());
       if (result) {
-        // Return the pull result so caller can apply it
         this.notifyPullResult(result);
       }
     }, intervalMs);

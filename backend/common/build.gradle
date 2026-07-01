@@ -6,4 +6,11 @@ dependencies {
     api 'com.fasterxml.jackson.core:jackson-annotations:2.17.2'
     compileOnly 'org.projectlombok:lombok:1.18.34'
     annotationProcessor 'org.projectlombok:lombok:1.18.34'
+
+    // Servlet API & Spring Web (provided by consuming services)
+    compileOnly 'jakarta.servlet:jakarta.servlet-api:6.0.0'
+    compileOnly 'org.slf4j:slf4j-api:2.0.13'
+    compileOnly 'org.springframework:spring-web:6.1.8'
+    compileOnly 'org.springframework:spring-context:6.1.8'
+    compileOnly 'org.springframework.boot:spring-boot-autoconfigure:3.3.0'
 }

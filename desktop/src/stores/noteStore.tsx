@@ -492,6 +492,7 @@ export function useNoteStore() {
   }, [loadRecovery]);
   const clearRecovery = useCallback((id: string) => {
     try { window.localStorage.removeItem(`${STORAGE_PREFIX}:draft:${id}`); window.localStorage.removeItem(`${STORAGE_PREFIX}:autosave:${id}`); } catch { /* ignore */ }
+    setRecoveryDrafts((prev) => prev?.filter((d) => d.id !== id) ?? null);
   }, []);
 
   // 计算每个笔记本的笔记数

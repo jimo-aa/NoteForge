@@ -9,6 +9,15 @@ export function DraftRecoveryModal({ open, onClose }: { open: boolean; onClose: 
   const safeNotes = notes || [];
   const safeDrafts = recoveryDrafts || [];
 
+  // Check for crash recovery data
+  let crashInfo: { crashedAt: number; error: string } | null = null;
+  try {
+    const raw = window.localStorage.getItem('noteforge:crash:last');
+    if (raw) {
+      crashInfo = JSON.parse(raw) as { crashedAt: number; error: string };
+    }
+  } catch { /* ignore */ }
+
   const getNoteTitle = (id: string) => {
     const note = safeNotes.find((n) => n.meta.id === id);
     return note?.meta.title || '(已删除的笔记)';
@@ -19,6 +28,19 @@ export function DraftRecoveryModal({ open, onClose }: { open: boolean; onClose: 
     showToast('success', '已清除草稿');
   };
 
+  const handleClearAll = () => {
+    safeDrafts.forEach((draft) => clearRecovery(draft.id));
+    showToast('success', '已清除全部草稿');
+  };
+
+  const handleDismissCrash = () => {
+    try {
+      window.localStorage.removeItem('noteforge:crash:last');
+      window.localStorage.removeItem('noteforge:crash:recovered');
+    } catch { /* ignore */ }
+    showToast('info', '已清除崩溃记录');
+  };
+
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal draft-recovery-modal" onClick={(e) => e.stopPropagation()}>
@@ -27,10 +49,25 @@ export function DraftRecoveryModal({ open, onClose }: { open: boolean; onClose: 
           <button className="modal-close" onClick={onClose}>×</button>
         </div>
         <div className="draft-recovery-body">
+          {crashInfo && (
+            <div className="draft-recovery-crash-banner">
+              <div className="draft-recovery-crash-banner-icon">💥</div>
+              <div className="draft-recovery-crash-banner-text">
+                <strong>检测到上次崩溃</strong>
+                <span>{crashInfo.error} · {formatTime(crashInfo.crashedAt)}</span>
+              </div>
+              <button className="ghost-btn" onClick={handleDismissCrash}>忽略</button>
+            </div>
+          )}
           {safeDrafts.length === 0 && (
             <div className="draft-recovery-empty">
               <div className="draft-recovery-empty-icon">✓</div>
               <p>没有需要恢复的草稿</p>
+            </div>
+          )}
+          {safeDrafts.length > 1 && (
+            <div className="draft-recovery-bulk-actions">
+              <button className="ghost-btn" onClick={handleClearAll}>清除全部草稿</button>
             </div>
           )}
           {safeDrafts.map((draft, i) => (

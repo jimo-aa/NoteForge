@@ -9,7 +9,7 @@ interface EncryptionModalProps {
   onClose: () => void;
 }
 
-type EncryptionState = 'loading' | 'disabled' | 'enabled' | 'error';
+type EncryptionState = 'loading' | 'setup' | 'unlock' | 'enabled' | 'error';
 
 export function EncryptionModal({ open, onClose }: EncryptionModalProps) {
   const [state, setState] = useState<EncryptionState>('loading');
@@ -20,9 +20,16 @@ export function EncryptionModal({ open, onClose }: EncryptionModalProps) {
 
   const checkStatus = useCallback(async () => {
     setState('loading');
+    setError('');
     try {
-      const enabled = await tauriInvoke<boolean>('is_encryption_enabled');
-      setState(enabled ? 'enabled' : 'disabled');
+      const hasStored = await tauriInvoke<boolean>('has_stored_encryption');
+      if (hasStored) {
+        // 已有加密设置，进入解锁模式
+        setState('unlock');
+      } else {
+        // 未设置加密，进入设置模式
+        setState('setup');
+      }
     } catch {
       setState('error');
       setError('无法检测加密状态');
@@ -67,8 +74,8 @@ export function EncryptionModal({ open, onClose }: EncryptionModalProps) {
 
     setIsProcessing(true);
     try {
-      const salt = await tauriInvoke<string>('init_encryption', { password });
-      if (salt) {
+      const ok = await tauriInvoke<boolean>('try_unlock_encryption', { password });
+      if (ok) {
         setState('enabled');
         setPassword('');
       } else {
@@ -85,7 +92,7 @@ export function EncryptionModal({ open, onClose }: EncryptionModalProps) {
     setIsProcessing(true);
     try {
       await tauriInvoke<void>('disable_encryption');
-      setState('disabled');
+      setState('setup');
       setPassword('');
     } catch (e) {
       setError(`禁用加密失败: ${e}`);
@@ -102,7 +109,7 @@ export function EncryptionModal({ open, onClose }: EncryptionModalProps) {
       case 'loading':
         return <div className="encryption-loading">检测加密状态…</div>;
 
-      case 'disabled':
+      case 'setup':
         return (
           <div className="encryption-setup">
             <div className="encryption-info">
@@ -132,6 +139,30 @@ export function EncryptionModal({ open, onClose }: EncryptionModalProps) {
             </label>
             <button className="primary-btn" onClick={handleEnable} disabled={isProcessing} style={{ width: '100%', marginTop: 4 }}>
               {isProcessing ? '初始化中…' : '启用加密'}
+            </button>
+          </div>
+        );
+
+      case 'unlock':
+        return (
+          <div className="encryption-setup">
+            <div className="encryption-info">
+              <span className="encryption-icon">🔐</span>
+              <span>加密已设置。请输入密码解锁以访问加密的笔记内容。</span>
+            </div>
+            <label className="auth-field">
+              <span>加密密码</span>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="输入加密密码"
+                autoFocus
+                disabled={isProcessing}
+              />
+            </label>
+            <button className="primary-btn" onClick={handleUnlock} disabled={isProcessing} style={{ width: '100%', marginTop: 4 }}>
+              {isProcessing ? '验证中…' : '解锁'}
             </button>
           </div>
         );

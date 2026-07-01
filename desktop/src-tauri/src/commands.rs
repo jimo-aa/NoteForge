@@ -1,7 +1,7 @@
 use std::{path::PathBuf, sync::Mutex};
 use tauri::{AppHandle, Manager, State};
 
-use noteforge_core::{md_engine::MarkdownEngine, search::{SearchEngine, SearchPage}, storage::LocalStorage, types::*};
+use noteforge_core::{md_engine::MarkdownEngine, search::{SearchEngine, SearchPage}, storage::LocalStorage, types::*, types::SyncQueueItem};
 
 use crate::git_history::{GitBranchEntry, GitHistory, GitVersionEntry};
 
@@ -246,6 +246,48 @@ pub fn list_note_metas(state: State<'_, AppState>) -> Result<Vec<NoteMeta>, Stri
     core.storage.list_notes(None, MAX_NOTES_RETURNED, 0).map_err(|e| e.to_string())
 }
 
+/// 获取笔记的反向链接（哪些笔记引用了当前笔记的标题）
+#[tauri::command]
+pub fn get_backlinks_with_titles(state: State<'_, AppState>, note_id: String) -> Result<Vec<noteforge_core::types::BacklinkEntry>, String> {
+    let core = state.core.lock().map_err(|e| e.to_string())?;
+    core.storage.get_backlinks_with_titles(&note_id).map_err(|e| e.to_string())
+}
+
+// ============================================================
+// 同步队列命令
+// ============================================================
+
+#[tauri::command]
+pub fn enqueue_sync_change(state: State<'_, AppState>, note_id: String, operation: String, payload: String) -> Result<(), String> {
+    let core = state.core.lock().map_err(|e| e.to_string())?;
+    core.storage.enqueue_sync_change(&note_id, &operation, &payload).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_pending_sync_changes(state: State<'_, AppState>) -> Result<Vec<SyncQueueItem>, String> {
+    let core = state.core.lock().map_err(|e| e.to_string())?;
+    core.storage.get_pending_sync_changes().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn count_pending_sync_changes(state: State<'_, AppState>) -> Result<i64, String> {
+    let core = state.core.lock().map_err(|e| e.to_string())?;
+    core.storage.count_pending_sync_changes().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn remove_sync_changes(state: State<'_, AppState>, ids: Vec<String>) -> Result<(), String> {
+    let core = state.core.lock().map_err(|e| e.to_string())?;
+    let id_refs: Vec<&str> = ids.iter().map(|s| s.as_str()).collect();
+    core.storage.remove_sync_changes(&id_refs).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn clear_sync_queue(state: State<'_, AppState>) -> Result<(), String> {
+    let core = state.core.lock().map_err(|e| e.to_string())?;
+    core.storage.clear_sync_queue().map_err(|e| e.to_string())
+}
+
 #[tauri::command] 
 pub fn search_notes(state: State<'_, AppState>, query: String) -> Result<Vec<SearchResult>, String> { 
     timed_command!("search_notes", {
@@ -291,7 +333,7 @@ pub fn search_notes_advanced(state: State<'_, AppState>, query: String, limit: u
 // 加密与安全 (Encryption)
 // ============================================================
 
-/// 初始化加密 - 从密码派生密钥
+/// 初始化加密 - 从密码派生密钥并持久化盐值
 #[tauri::command]
 pub fn init_encryption(state: State<'_, AppState>, password: String) -> Result<String, String> {
     use noteforge_core::encryption::EncryptionManager;
@@ -301,12 +343,55 @@ pub fn init_encryption(state: State<'_, AppState>, password: String) -> Result<S
         .map_err(|e| format!("密钥派生失败: {}", e))?;
     
     let mut core = state.core.lock().map_err(|e| e.to_string())?;
+    
+    // 持久化盐值到 SQLite
+    core.storage.store_encryption_salt(&salt)
+        .map_err(|e| format!("存储加密盐值失败: {}", e))?;
+    
     let mut em = EncryptionManager::new();
     em.initialize(key);
     core.storage.set_encryption(em.clone());
     core.encryption = Some(em);
     
     Ok(salt)
+}
+
+/// 检查数据库中是否有持久化的加密盐值（表示已设置过加密）
+#[tauri::command]
+pub fn has_stored_encryption(state: State<'_, AppState>) -> Result<bool, String> {
+    let core = state.core.lock().map_err(|e| e.to_string())?;
+    core.storage.has_encryption_salt().map_err(|e| e.to_string())
+}
+
+/// 尝试用密码解锁加密（恢复会话）
+/// 需要用户输入之前设置过的密码
+#[tauri::command]
+pub fn try_unlock_encryption(state: State<'_, AppState>, password: String) -> Result<bool, String> {
+    use noteforge_core::encryption::EncryptionManager;
+    
+    let core = state.core.lock().map_err(|e| e.to_string())?;
+    
+    // 获取存储的盐值
+    let salt = match core.storage.get_encryption_salt().map_err(|e| e.to_string())? {
+        Some(s) => s,
+        None => return Err("未找到加密盐值，请先设置加密".to_string()),
+    };
+    
+    // 用密码 + 盐值重新派生密钥
+    let key = EncryptionManager::derive_key_from_password(&password, &salt)
+        .map_err(|e| format!("密码验证失败: {}", e))?;
+    
+    drop(core);
+    
+    // 初始化加密管理器并设置到存储层
+    let mut core = state.core.lock().map_err(|e| e.to_string())?;
+    let mut em = EncryptionManager::new();
+    em.initialize(key);
+    core.storage.set_encryption(em.clone());
+    core.encryption = Some(em);
+    
+    println!("🔐 加密已通过密码解锁");
+    Ok(true)
 }
 
 /// 验证加密状态
@@ -322,6 +407,7 @@ pub fn disable_encryption(state: State<'_, AppState>) -> Result<(), String> {
     let mut core = state.core.lock().map_err(|e| e.to_string())?;
     core.encryption = None;
     core.storage.clear_encryption();
+    core.storage.clear_encryption_metadata().map_err(|e| e.to_string())?;
     Ok(())
 }
 #[tauri::command] pub fn list_notebooks(state: State<'_, AppState>) -> Result<Vec<Notebook>, String> { state.core.lock().map_err(|e| e.to_string())?.storage.list_notebooks().map_err(|e| e.to_string()) }

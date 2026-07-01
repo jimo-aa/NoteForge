@@ -7,7 +7,7 @@ use rusqlite::{Connection, params};
 use std::path::Path;
 use tracing::info;
 
-use crate::types::{self, Note, NoteMeta, Notebook, Tag, CreateNoteRequest, UpdateNoteRequest};
+use crate::types::{self, Note, NoteMeta, Notebook, Tag, CreateNoteRequest, UpdateNoteRequest, SyncQueueItem, BacklinkEntry};
 use crate::encryption::EncryptionManager;
 
 /// 本地存储引擎
@@ -41,6 +41,48 @@ impl LocalStorage {
     pub fn clear_encryption(&mut self) {
         self.encryption = None;
         info!("🔓 存储层已禁用加密");
+    }
+
+    // ============================================================
+    // 加密元数据持久化
+    // ============================================================
+
+    /// 存储加密盐值到数据库
+    pub fn store_encryption_salt(&self, salt: &str) -> Result<(), Box<dyn std::error::Error>> {
+        self.conn.execute(
+            "INSERT OR REPLACE INTO encryption_meta (key, value) VALUES ('encryption_salt', ?1)",
+            params![salt],
+        )?;
+        info!("🔐 加密盐值已持久化存储");
+        Ok(())
+    }
+
+    /// 获取存储的加密盐值
+    pub fn get_encryption_salt(&self) -> Result<Option<String>, Box<dyn std::error::Error>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT value FROM encryption_meta WHERE key = 'encryption_salt'"
+        )?;
+        let result = stmt.query_row([], |row| row.get::<_, String>(0)).ok();
+        Ok(result)
+    }
+
+    /// 检查数据库中是否存在加密盐值
+    pub fn has_encryption_salt(&self) -> Result<bool, Box<dyn std::error::Error>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT COUNT(*) FROM encryption_meta WHERE key = 'encryption_salt'"
+        )?;
+        let count: i64 = stmt.query_row([], |row| row.get(0))?;
+        Ok(count > 0)
+    }
+
+    /// 清除所有加密元数据
+    pub fn clear_encryption_metadata(&self) -> Result<(), Box<dyn std::error::Error>> {
+        self.conn.execute(
+            "DELETE FROM encryption_meta WHERE key = 'encryption_salt'",
+            [],
+        )?;
+        info!("🔓 加密元数据已清除");
+        Ok(())
     }
 
     /// 初始化数据库表
@@ -90,6 +132,19 @@ impl LocalStorage {
                  source_id TEXT NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
                  target    TEXT NOT NULL,
                  PRIMARY KEY (source_id, target)
+             );
+
+             CREATE TABLE IF NOT EXISTS encryption_meta (
+                 key   TEXT PRIMARY KEY,
+                 value TEXT NOT NULL
+             );
+
+             CREATE TABLE IF NOT EXISTS sync_queue (
+                 id         TEXT PRIMARY KEY,
+                 note_id    TEXT NOT NULL,
+                 operation  TEXT NOT NULL,
+                 payload    TEXT NOT NULL,
+                 created_at INTEGER NOT NULL
              );
              "
         )?;
@@ -503,6 +558,104 @@ impl LocalStorage {
         )?.collect::<Result<Vec<_>, _>>()?;
 
         Ok(metas)
+    }
+
+    // ============================================================
+    // 同步队列持久化
+    // ============================================================
+
+    pub fn enqueue_sync_change(&self, note_id: &str, operation: &str, payload: &str) -> Result<(), Box<dyn std::error::Error>> {
+        let id = types::generate_id();
+        let now = types::now_ms() as i64;
+        self.conn.execute(
+            "INSERT INTO sync_queue (id, note_id, operation, payload, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![id, note_id, operation, payload, now],
+        )?;
+        Ok(())
+    }
+
+    pub fn get_pending_sync_changes(&self) -> Result<Vec<SyncQueueItem>, Box<dyn std::error::Error>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, note_id, operation, payload, created_at FROM sync_queue ORDER BY created_at ASC"
+        )?;
+        let items = stmt.query_map([], |row| {
+            Ok(SyncQueueItem {
+                id: row.get(0)?,
+                note_id: row.get(1)?,
+                operation: row.get(2)?,
+                payload: row.get(3)?,
+                created_at: row.get(4)?,
+            })
+        })?.collect::<Result<Vec<_>, _>>()?;
+        Ok(items)
+    }
+
+    pub fn count_pending_sync_changes(&self) -> Result<i64, Box<dyn std::error::Error>> {
+        let count: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM sync_queue", [], |row| row.get(0)
+        )?;
+        Ok(count)
+    }
+
+    pub fn remove_sync_changes(&self, ids: &[&str]) -> Result<(), Box<dyn std::error::Error>> {
+        if ids.is_empty() { return Ok(()); }
+        let placeholders: Vec<String> = ids.iter().enumerate().map(|(i, _)| format!("?{}", i + 1)).collect();
+        let sql = format!("DELETE FROM sync_queue WHERE id IN ({})", placeholders.join(","));
+        let params: Vec<&dyn rusqlite::types::ToSql> = ids.iter().map(|id| id as &dyn rusqlite::types::ToSql).collect();
+        self.conn.execute(&sql, params.as_slice())?;
+        Ok(())
+    }
+
+    pub fn clear_sync_queue(&self) -> Result<(), Box<dyn std::error::Error>> {
+        self.conn.execute("DELETE FROM sync_queue", [])?;
+        Ok(())
+    }
+
+    // ============================================================
+    // Wiki Link 反向链接
+    // ============================================================
+
+    /// 获取链接到指定笔记标题的反向链接（哪些笔记引用了此标题）
+    pub fn get_backlinks(&self, title: &str) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT source_id FROM note_links WHERE target = ?1"
+        )?;
+        let source_ids: Vec<String> = stmt.query_map(
+            params![title],
+            |row| row.get::<_, String>(0),
+        )?.collect::<Result<Vec<_>, _>>()?;
+        Ok(source_ids)
+    }
+
+    /// 获取指定笔记发出的所有 Wiki Link 目标
+    pub fn get_note_outgoing_links(&self, note_id: &str) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT target FROM note_links WHERE source_id = ?1"
+        )?;
+        let targets: Vec<String> = stmt.query_map(
+            params![note_id],
+            |row| row.get::<_, String>(0),
+        )?.collect::<Result<Vec<_>, _>>()?;
+        Ok(targets)
+    }
+
+    /// 获取笔记的反向链接（包含源笔记的标题）
+    pub fn get_backlinks_with_titles(&self, note_id: &str) -> Result<Vec<BacklinkEntry>, Box<dyn std::error::Error>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT n.id, n.title FROM note_links nl
+             JOIN notes n ON n.id = nl.source_id AND n.is_deleted = 0
+             WHERE nl.target = (SELECT title FROM notes WHERE id = ?1 AND is_deleted = 0)"
+        )?;
+        let entries = stmt.query_map(
+            params![note_id],
+            |row| {
+                Ok(BacklinkEntry {
+                    source_id: row.get(0)?,
+                    source_title: row.get(1)?,
+                })
+            },
+        )?.collect::<Result<Vec<_>, _>>()?;
+        Ok(entries)
     }
 
     // ============================================================

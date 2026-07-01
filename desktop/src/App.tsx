@@ -15,6 +15,7 @@ import { AdvancedVersioningPanel } from '@/components/Features/AdvancedVersionin
 import { ErrorBoundary } from '@/components/Common/ErrorBoundary';
 import { ManageModal } from '@/components/Modals/ManageModal';
 import { DraftRecoveryModal } from '@/components/Modals/DraftRecoveryModal';
+import { EncryptionModal } from '@/components/Modals/EncryptionModal';
 import { WelcomeGuide } from '@/components/Modals/WelcomeGuide';
 import type { NotebookModalState } from '@/components/Modals/NotebookModal';
 
@@ -48,6 +49,70 @@ export default function App() {
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, []);
+
+  // Global error handlers
+  useEffect(() => {
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      console.error('[Global] Unhandled Promise Rejection:', event.reason);
+      try {
+        const crashData = {
+          crashedAt: Date.now(),
+          error: event.reason?.message || String(event.reason),
+          stack: event.reason?.stack || '',
+          type: 'unhandledRejection',
+        };
+        window.localStorage.setItem('noteforge:crash:last', JSON.stringify(crashData));
+        // Try to show a toast through the store if available
+        const s = storeRef.current;
+        if (s && s.showToast) {
+          s.showToast('error', `发生错误: ${crashData.error.slice(0, 60)}`);
+        }
+      } catch { /* ignore storage errors */ }
+      event.preventDefault();
+    };
+
+    const handleGlobalError = (event: ErrorEvent) => {
+      console.error('[Global] Uncaught Error:', event.error || event.message);
+      try {
+        const crashData = {
+          crashedAt: Date.now(),
+          error: event.message,
+          stack: event.error?.stack || '',
+          type: 'globalError',
+        };
+        window.localStorage.setItem('noteforge:crash:last', JSON.stringify(crashData));
+      } catch { /* ignore */ }
+    };
+
+    window.addEventListener('unhandledrejection', handleUnhandledRejection as EventListener);
+    window.addEventListener('error', handleGlobalError as EventListener);
+    return () => {
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection as EventListener);
+      window.removeEventListener('error', handleGlobalError as EventListener);
+    };
+  }, []);
+
+  const [encryptionLockOpen, setEncryptionLockOpen] = useState(false);
+  const encryptionCheckRef = useRef(false);
+
+  // 启动时检测是否需要输入加密密码解锁
+  useEffect(() => {
+    if (encryptionCheckRef.current || !store.currentNote) return;
+    // 只在首次加载且未检查过时执行
+    if (store.isLoading) return;
+    encryptionCheckRef.current = true;
+    void (async () => {
+      try {
+        const hasEncryption = await tauriInvoke<boolean>('has_stored_encryption');
+        const isEnabled = await tauriInvoke<boolean>('is_encryption_enabled');
+        if (hasEncryption && !isEnabled) {
+          setEncryptionLockOpen(true);
+        }
+      } catch {
+        // 忽略错误
+      }
+    })();
+  }, [store.isLoading, store.currentNote]);
 
   const draftRecoveryShownRef = useRef(false);
   useEffect(() => {
@@ -140,6 +205,7 @@ export default function App() {
         <GraphView />
         <ManageModal open={manageOpen} onClose={() => setManageOpen(false)} />
         <DraftRecoveryModal open={draftRecoveryOpen} onClose={() => setDraftRecoveryOpen(false)} />
+        <EncryptionModal open={encryptionLockOpen} onClose={() => setEncryptionLockOpen(false)} />
         <WelcomeGuide open={store.showWelcomeGuide} onClose={() => store.setShowWelcomeGuide(false)} />
         {store.toasts.map((t) => (<Toast key={t.id} message={t.message} />))}
       </div>

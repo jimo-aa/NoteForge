@@ -16,3 +16,5 @@ jwt:
   secret: test-secret-key-for-unit-tests-only
   access-token-expiration: 900000
   refresh-token-expiration: 604800000
+
+

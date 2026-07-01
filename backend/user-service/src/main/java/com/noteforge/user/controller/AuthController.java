@@ -32,4 +32,19 @@ public class AuthController {
         AuthResponse response = authService.refreshToken(request);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
+
+    @PostMapping("/logout")
+    public ResponseEntity<ApiResponse<Void>> logout(
+            @Valid @RequestBody LogoutRequest request,
+            @RequestHeader("Authorization") String authHeader) {
+        String accessToken = authHeader.replace("Bearer ", "");
+        authService.logout(request, accessToken);
+        return ResponseEntity.ok(ApiResponse.success(null));
+    }
+
+    @GetMapping("/me")
+    public ResponseEntity<ApiResponse<UserResponse>> me() {
+        UserResponse response = authService.getCurrentUser();
+        return ResponseEntity.ok(ApiResponse.success(response));
+    }
 }

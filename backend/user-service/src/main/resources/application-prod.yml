@@ -1,4 +1,9 @@
+server:
+  shutdown: graceful
+
 spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
   datasource:
     url: ${DB_URL}
     username: ${DB_USER}
@@ -7,6 +12,22 @@ spring:
     hibernate:
       ddl-auto: validate
     show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
 
 jwt:
   secret: ${JWT_SECRET}
+  access-token-expiration: ${JWT_ACCESS_TOKEN_EXPIRATION:900000}
+
+logging:
+  level:
+    com.noteforge: INFO
+
+noteforge:
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:1420,tauri://localhost}
+  rate-limit:
+    enabled: true
+    capacity: 100
+    refill-per-second: 10

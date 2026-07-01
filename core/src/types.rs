@@ -154,6 +154,27 @@ fn uuid_v4() -> String {
     )
 }
 
+/// 同步队列条目
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SyncQueueItem {
+    pub id: String,
+    #[serde(rename = "noteId")]
+    pub note_id: String,
+    pub operation: String,
+    pub payload: String,
+    #[serde(rename = "createdAt")]
+    pub created_at: i64,
+}
+
+/// 反向链接条目
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BacklinkEntry {
+    #[serde(rename = "sourceId")]
+    pub source_id: String,
+    #[serde(rename = "sourceTitle")]
+    pub source_title: String,
+}
+
 /// 获取当前时间戳（毫秒）
 pub fn now_ms() -> u64 {
     std::time::SystemTime::now()

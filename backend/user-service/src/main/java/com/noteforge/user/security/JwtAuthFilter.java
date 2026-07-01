@@ -1,5 +1,6 @@
 package com.noteforge.user.security;
 
+import com.noteforge.user.service.TokenBlacklistService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -22,13 +23,16 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
     private final JwtTokenProvider jwtTokenProvider;
     private final UserDetailsService userDetailsService;
+    private final TokenBlacklistService tokenBlacklistService;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
         String token = extractToken(request);
-        if (token != null && jwtTokenProvider.validateToken(token)) {
+
+        // Skip authentication for blacklisted tokens (logged out)
+        if (token != null && !tokenBlacklistService.isBlacklisted(token) && jwtTokenProvider.validateToken(token)) {
             String userId = jwtTokenProvider.getUserIdFromToken(token);
             UserDetails userDetails = userDetailsService.loadUserByUsername(userId);
             UsernamePasswordAuthenticationToken auth =
