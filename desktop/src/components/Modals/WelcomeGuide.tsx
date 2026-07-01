@@ -40,7 +40,7 @@ export function WelcomeGuide({ open, onClose }: { open: boolean; onClose: () => 
 
   const handleClose = () => {
     if (dontShowAgain) {
-      try { window.localStorage.setItem('noteforge:welcome:completed', '1'); } catch {}
+      try { window.localStorage.setItem('noteforge:welcome:completed', '1'); } catch { /* localStorage may be unavailable */ }
     }
     onClose();
     setCurrentSlide(0);

@@ -17,11 +17,11 @@ const safeRead = <T,>(key: string, fallback: T): T => {
 };
 
 const safeWrite = (key: string, value: unknown) => {
-  try { window.localStorage.setItem(key, JSON.stringify(value)); } catch {}
+  try { window.localStorage.setItem(key, JSON.stringify(value)); } catch { /* ignore storage errors */ }
 };
 
 const safeRemove = (key: string) => {
-  try { window.localStorage.removeItem(key); } catch {}
+  try { window.localStorage.removeItem(key); } catch { /* ignore storage errors */ }
 };
 
 function dispatchAuthEvent() {
@@ -77,27 +77,32 @@ export function useAuthStore() {
   }, [persistTokens]);
 
   // Schedule token refresh before expiry (default: 15min before)
+  const doRefresh = useCallback(async () => {
+    const currentRefresh = refreshToken;
+    if (!currentRefresh) return;
+    try {
+      const res = await authFetch(`${BASE_URL}/refresh`, { refreshToken: currentRefresh });
+      if (!res.ok) { clearAuth(); return; }
+      const json = await res.json();
+      if (json.code === 0 && json.data) {
+        const { accessToken: newAccess, refreshToken: newRefresh, user: userData } = json.data;
+        persistTokens(newAccess, newRefresh, userData ? mapUserResponse(userData) : null);
+        // Re-schedule is handled by the timeout setter via ref
+        scheduleRefreshRef.current?.(60 * 60 * 1000);
+      }
+    } catch {
+      clearAuth();
+    }
+  }, [refreshToken, clearAuth, persistTokens]);
+
   const scheduleRefresh = useCallback((expiresInMs: number) => {
     if (refreshTimerRef.current) window.clearTimeout(refreshTimerRef.current);
     const refreshAt = Math.max(expiresInMs - 15 * 60 * 1000, 60 * 1000); // at least 1min from now
-    refreshTimerRef.current = window.setTimeout(async () => {
-      const currentRefresh = refreshToken;
-      if (!currentRefresh) return;
-      try {
-        const res = await authFetch(`${BASE_URL}/refresh`, { refreshToken: currentRefresh });
-        if (!res.ok) { clearAuth(); return; }
-        const json = await res.json();
-        if (json.code === 0 && json.data) {
-          const { accessToken: newAccess, refreshToken: newRefresh, user: userData } = json.data;
-          persistTokens(newAccess, newRefresh, userData ? mapUserResponse(userData) : null);
-          // Re-schedule based on typical 1h expiry
-          scheduleRefresh(60 * 60 * 1000);
-        }
-      } catch {
-        clearAuth();
-      }
-    }, refreshAt);
-  }, [refreshToken, clearAuth, persistTokens]);
+    refreshTimerRef.current = window.setTimeout(doRefresh, refreshAt);
+  }, [doRefresh]);
+
+  const scheduleRefreshRef = useRef(scheduleRefresh);
+  scheduleRefreshRef.current = scheduleRefresh;
 
   const login = useCallback(async (email: string, password: string): Promise<{ success: boolean; message?: string }> => {
     setIsLoading(true);

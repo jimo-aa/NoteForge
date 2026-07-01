@@ -27,19 +27,6 @@ export function VersionSearchModal({
   const [loading, setLoading] = useState(false);
   const [searchMode, setSearchMode] = useState<'versions' | 'global'>('versions');
 
-  useEffect(() => {
-    if (!query.trim()) {
-      setResults([]);
-      return;
-    }
-
-    const timer = setTimeout(() => {
-      performSearch();
-    }, 300);
-
-    return () => clearTimeout(timer);
-  }, [query, searchMode]);
-
   const performSearch = async () => {
     setLoading(true);
 
@@ -58,6 +45,19 @@ export function VersionSearchModal({
 
     setLoading(false);
   };
+
+  useEffect(() => {
+    if (!query.trim()) {
+      setResults([]);
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      performSearch();
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [query, searchMode]);
 
   if (!open) return null;
 

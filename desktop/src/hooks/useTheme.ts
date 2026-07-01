@@ -15,7 +15,7 @@ export function useTheme() {
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
-    try { window.localStorage.setItem(THEME_KEY, theme); } catch {}
+    try { window.localStorage.setItem(THEME_KEY, theme); } catch { /* localStorage may be unavailable */ }
   }, [theme]);
 
   return {

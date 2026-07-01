@@ -1,7 +1,7 @@
 // NoteForge — 全局状态管理
 
 import { createContext, useContext, useState, useCallback, useRef, useEffect, useMemo, type ReactNode } from 'react';
-import type { Note, NoteFilter, ToastMessage, ContextMenuState, SortOption, Notebook, SyncChangeItem, NoteResponseItem, SyncPullResponse } from '@/types';
+import type { Note, NoteFilter, ToastMessage, ContextMenuState, SortOption, Notebook, SyncChangeItem, SyncPullResponse } from '@/types';
 import type { EntityModalState } from '@/components/Modals/EntityModal';
 import { countWords } from '@/utils/markdown';
 import { tauriInvoke } from '@/utils/invoke';
@@ -21,12 +21,12 @@ const safeRead = <T,>(key: string, fallback: T): T => {
     if (!raw) return fallback;
     return JSON.parse(raw) as T;
   } catch {
-    return fallback;
+    return fallback; /* ignore storage errors */
   }
 };
 
 const safeWrite = (key: string, value: unknown) => {
-  try { window.localStorage.setItem(key, JSON.stringify(value)); } catch {}
+  try { window.localStorage.setItem(key, JSON.stringify(value)); } catch { /* ignore storage errors */ }
 };
 
 export function useNoteStore() {
@@ -280,7 +280,7 @@ export function useNoteStore() {
     setNotes((prev) => prev.map((n) => {
       if (n.meta.id !== id) return n;
       const nextContent = updates.content ?? n.content;
-      const { content: _unused, ...metaUpdates } = updates;
+      const { content: _content, ...metaUpdates } = updates;
       const nextContentPlain = updates.content !== undefined ? n.contentPlain : n.contentPlain;
       const next: Note = {
         meta: { ...n.meta, ...metaUpdates, updatedAt: Date.now(), version: n.meta.version + (updates.content !== undefined ? 1 : 0), wordCount: countWords(nextContent) },
@@ -422,7 +422,7 @@ export function useNoteStore() {
     void tauriInvoke('update_note', { id, title: null, content, tags: null, is_pinned: null, is_favorite: null }).catch(() => {});
   }, []);
   const loadDraft = useCallback((id: string) => safeRead<string>(draftKey(id), ''), []);
-  const clearDraft = useCallback((id: string) => { try { window.localStorage.removeItem(draftKey(id)); window.localStorage.removeItem(autosaveKey(id)); } catch {} }, []);
+  const clearDraft = useCallback((id: string) => { try { window.localStorage.removeItem(draftKey(id)); window.localStorage.removeItem(autosaveKey(id)); } catch { /* ignore */ } }, []);
   const loadVersions = useCallback(async (id: string) => {
     const backend = await tauriInvoke<Array<{ id: string; title: string; updatedAt: number; summary?: string }>>('list_note_versions', { note_id: id });
     return backend || [];
@@ -486,11 +486,12 @@ export function useNoteStore() {
     }
   }, []);
 
-  const recoveryDraftsRef = useRef<Array<{ id: string; title: string; content: string; updatedAt: number }> | null>(null);
-  if (!recoveryDraftsRef.current) recoveryDraftsRef.current = loadRecovery();
-  const recoveryDrafts = recoveryDraftsRef.current;
+  const [recoveryDrafts, setRecoveryDrafts] = useState<Array<{ id: string; title: string; content: string; updatedAt: number }> | null>(null);
+  useEffect(() => {
+    setRecoveryDrafts(loadRecovery());
+  }, [loadRecovery]);
   const clearRecovery = useCallback((id: string) => {
-    try { window.localStorage.removeItem(`${STORAGE_PREFIX}:draft:${id}`); window.localStorage.removeItem(`${STORAGE_PREFIX}:autosave:${id}`); } catch {}
+    try { window.localStorage.removeItem(`${STORAGE_PREFIX}:draft:${id}`); window.localStorage.removeItem(`${STORAGE_PREFIX}:autosave:${id}`); } catch { /* ignore */ }
   }, []);
 
   // 计算每个笔记本的笔记数

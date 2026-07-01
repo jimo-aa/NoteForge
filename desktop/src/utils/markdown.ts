@@ -77,7 +77,7 @@ export function countWords(text: string): number {
 }
 
 export function extractPlainText(md: string): string {
-  return md.replace(/```[\s\S]*?```/g, '').replace(/#{1,6}\s/g, '').replace(/[*~`\[\]]/g, '').replace(/\n+/g, ' ');
+  return md.replace(/```[\s\S]*?```/g, '').replace(/#{1,6}\s/g, '').replace(/[*~`[\]]/g, '').replace(/\n+/g, ' ');
 }
 
 export function generateId(): string { return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`; }

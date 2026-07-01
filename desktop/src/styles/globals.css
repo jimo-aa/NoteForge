@@ -1523,3 +1523,26 @@ button { cursor: pointer; }
 :root:not([data-theme='light']) .attachment-item { background: rgba(255,255,255,0.025); }
 :root:not([data-theme='light']) .attachment-item:hover { background: rgba(255,255,255,0.045); }
 :root:not([data-theme='light']) .editor-attachment-section { border-top-color: var(--line); }
+
+/* === Encryption Modal === */
+.encryption-loading { padding: 24px; text-align: center; color: var(--text-muted); font-size: 14px; }
+.encryption-setup { display: grid; gap: 14px; }
+.encryption-enabled { display: grid; gap: 14px; text-align: center; }
+.encryption-info { display: flex; align-items: flex-start; gap: 10px; font-size: 13px; color: var(--text-soft); line-height: 1.5; }
+.encryption-icon { font-size: 20px; flex-shrink: 0; margin-top: 1px; }
+.encryption-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 4px 14px; border-radius: 999px;
+  background: rgba(33, 211, 146, 0.15); color: var(--good);
+  font-size: 12px; font-weight: 600; justify-self: center;
+}
+.encryption-actions { display: grid; gap: 8px; }
+.encryption-note { margin: 0; font-size: 11px; color: var(--text-muted); }
+.danger-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  height: 40px; padding: 0 20px; border: 1px solid rgba(239, 68, 68, 0.4);
+  border-radius: 10px; background: rgba(239, 68, 68, 0.1); color: #f87171;
+  font-size: 14px; cursor: pointer; transition: all 0.15s;
+}
+.danger-btn:hover { background: rgba(239, 68, 68, 0.2); border-color: #ef4444; }
+.danger-btn:disabled { opacity: 0.5; cursor: not-allowed; }

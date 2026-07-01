@@ -2,8 +2,9 @@ import { useState, useCallback } from 'react';
 import { useStore } from '@/stores/context';
 import { NotebookModal, type NotebookModalState } from './NotebookModal';
 import { ConfirmDialog } from '@/components/Common/ConfirmDialog';
+import { EncryptionModal } from './EncryptionModal';
 
-type Tab = 'notebooks' | 'tags';
+type Tab = 'notebooks' | 'tags' | 'security';
 
 export function ManageModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { notebooks, tags, notes, deleteNotebook, renameNotebook, setActiveNotebook, updateNote, showToast } = useStore();
@@ -12,6 +13,7 @@ export function ManageModal({ open, onClose }: { open: boolean; onClose: () => v
   const [renameTag, setRenameTag] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [confirmDel, setConfirmDel] = useState<{ kind: 'notebook' | 'tag'; id: string; name: string } | null>(null);
+  const [encryptionOpen, setEncryptionOpen] = useState(false);
 
   if (!open) return null;
 
@@ -72,6 +74,7 @@ export function ManageModal({ open, onClose }: { open: boolean; onClose: () => v
         <div className="manage-modal-tabs">
           <button className={tab === 'notebooks' ? 'tab active' : 'tab'} onClick={() => setTab('notebooks')}>笔记本</button>
           <button className={tab === 'tags' ? 'tab active' : 'tab'} onClick={() => setTab('tags')}>标签</button>
+          <button className={tab === 'security' ? 'tab active' : 'tab'} onClick={() => setTab('security')}>安全</button>
         </div>
         <div className="manage-modal-body">
           {tab === 'notebooks' && (
@@ -123,7 +126,28 @@ export function ManageModal({ open, onClose }: { open: boolean; onClose: () => v
               ))}
             </div>
           )}
+          {tab === 'security' && (
+            <div className="manage-list">
+              <div className="manage-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 12, padding: '16px 20px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span className="manage-item-icon">🔐</span>
+                  <span className="manage-item-name">端到端加密</span>
+                </div>
+                <p style={{ margin: 0, fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                  使用 AES-256-GCM + Argon2 对笔记内容进行本地加密。设置密码后，每次启动应用需输入密码解锁。
+                </p>
+                <button
+                  className="primary-btn"
+                  onClick={() => setEncryptionOpen(true)}
+                  style={{ alignSelf: 'flex-start' }}
+                >
+                  管理加密设置
+                </button>
+              </div>
+            </div>
+          )}
         </div>
+        <EncryptionModal open={encryptionOpen} onClose={() => setEncryptionOpen(false)} />
         <NotebookModal state={notebookModal} onClose={() => setNotebookModal({ open: false, mode: null, title: '', value: '' })} onConfirm={async (name, icon, color) => {
           if (notebookModal.mode === 'rename' && notebookModal.notebookId) {
             await renameNotebook(notebookModal.notebookId, name);

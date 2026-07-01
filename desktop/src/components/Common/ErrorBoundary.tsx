@@ -18,12 +18,12 @@ export class ErrorBoundary extends Component<Props, State> {
         error: error.message,
         stack: info.componentStack,
       }));
-    } catch {}
+    } catch { /* localStorage may be full or blocked */ }
   }
 
   handleReload() {
     this.setState({ hasError: false, error: null });
-    try { window.localStorage.setItem('noteforge:crash:recovered', JSON.stringify({ recoveredAt: Date.now() })); } catch {}
+    try { window.localStorage.setItem('noteforge:crash:recovered', JSON.stringify({ recoveredAt: Date.now() })); } catch { /* ignore */ }
     window.location.reload();
   }
 

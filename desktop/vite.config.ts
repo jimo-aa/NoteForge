@@ -20,10 +20,12 @@ export default defineConfig(async () => ({
     ],
   },
   build: {
+    chunkSizeWarningLimit: 600,
     rollupOptions: {
       output: {
         manualChunks: {
-          codemirror: ['codemirror', '@codemirror/view', '@codemirror/state', '@codemirror/lang-markdown', '@codemirror/commands', '@codemirror/autocomplete', '@codemirror/search', '@codemirror/language', '@codemirror/language-data'],
+          'codemirror-core': ['@codemirror/view', '@codemirror/state', '@codemirror/language', '@codemirror/commands'],
+          'codemirror-ext': ['@codemirror/lang-markdown', '@codemirror/language-data', '@codemirror/autocomplete', '@codemirror/search'],
           react: ['react', 'react-dom'],
         },
       },

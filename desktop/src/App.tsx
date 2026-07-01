@@ -21,7 +21,7 @@ import type { NotebookModalState } from '@/components/Modals/NotebookModal';
 export default function App() {
   const store = useStore();
   const storeRef = useRef(store);
-  storeRef.current = store;
+  useEffect(() => { storeRef.current = store; });
   const [newNoteOpen, setNewNoteOpen] = useState(false);
   const [manageOpen, setManageOpen] = useState(false);
   const [draftRecoveryOpen, setDraftRecoveryOpen] = useState(false);

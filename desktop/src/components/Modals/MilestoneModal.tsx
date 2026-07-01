@@ -37,11 +37,6 @@ export function MilestoneModal({
     tags: ''
   });
 
-  useEffect(() => {
-    if (!open || !noteId) return;
-    loadMilestones();
-  }, [open, noteId]);
-
   const loadMilestones = async () => {
     setLoading(true);
     const data = await invoke<Milestone[]>('list_milestones', { note_id: noteId });
@@ -50,6 +45,11 @@ export function MilestoneModal({
     }
     setLoading(false);
   };
+
+  useEffect(() => {
+    if (!open || !noteId) return;
+    loadMilestones();
+  }, [open, noteId]);
 
   const handleCreate = async () => {
     if (!formData.name.trim()) return;
