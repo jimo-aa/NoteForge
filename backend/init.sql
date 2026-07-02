@@ -289,6 +289,28 @@ CREATE INDEX IF NOT EXISTS idx_share_links_note  ON share_links(note_id);
 CREATE INDEX IF NOT EXISTS idx_share_links_user  ON share_links(user_id);
 
 -- ============================================================
+-- 6. 审计模块 (note-service)
+-- ============================================================
+
+-- 6.1 audit_logs — 操作审计日志
+-- 记录关键操作（创建/删除/导出/权限变更等）以便审计追踪
+CREATE TABLE IF NOT EXISTS audit_logs (
+    id              VARCHAR(64)   PRIMARY KEY,                             -- UUID
+    user_id         VARCHAR(64)   NOT NULL,                                -- 操作人
+    action          VARCHAR(64)   NOT NULL,                                -- CREATE | DELETE | EXPORT | PERMISSION_CHANGE 等
+    resource_type   VARCHAR(64)   NOT NULL,                                -- NOTE | NOTEBOOK | TAG | ENCRYPTION 等
+    resource_id     VARCHAR(256),                                          -- 被操作资源 ID（可为空）
+    detail          TEXT,                                                   -- 操作详情（人类可读）
+    ip_address      VARCHAR(64)   NOT NULL DEFAULT 'unknown',              -- 客户端 IP
+    created_at      TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_audit_logs_user      ON audit_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_action    ON audit_logs(action);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_resource  ON audit_logs(resource_type);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_created   ON audit_logs(created_at DESC);
+
+-- ============================================================
 -- 6. 表注释（供 psql \d+ 和 pgAdmin 查看）
 -- ============================================================
 

@@ -25,6 +25,16 @@ function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+const CLUSTER_COLORS = [
+  '#6a63ff', '#65d9ff', '#50e3c2', '#ff6b6b',
+  '#ffa36b', '#ffd76b', '#b06bff', '#ff6bd6',
+  '#6bffb8', '#6bb8ff', '#ff8a6b', '#d46bff',
+] as const;
+
+function getClusterColor(index: number): string {
+  return CLUSTER_COLORS[index % CLUSTER_COLORS.length] ?? '#6a63ff';
+}
+
 export function GraphView() {
   const store = useStore();
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -33,6 +43,10 @@ export function GraphView() {
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [positions, setPositions] = useState<Record<string, { x: number; y: number }>>({});
   const [activeEdge, setActiveEdge] = useState<GraphEdge | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [zoom, setZoom] = useState(1);
+  const [showIsolated, setShowIsolated] = useState(true);
+  const [showLegend, setShowLegend] = useState(true);
 
   const graphKey = useMemo(() => {
     return store.notes.map((n) => `${n.meta.id}:${n.meta.updatedAt}`).join('|');
@@ -90,6 +104,40 @@ export function GraphView() {
 
     return { nodes, edges };
   }, [clusterMode, positions, graphKey]);
+
+  const clusters = useMemo(() => {
+    const set = new Set(graph.nodes.map((n) => n.cluster));
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'zh-CN'));
+  }, [graph.nodes]);
+
+  const clusterColorMap = useMemo(() => {
+    const map = new Map<string, string>();
+    clusters.forEach((c, i) => map.set(c, getClusterColor(i)));
+    return map;
+  }, [clusters]);
+
+  const isolatedNodeIds = useMemo(() => {
+    const withEdges = new Set<string>();
+    for (const edge of graph.edges) {
+      withEdges.add(edge.from);
+      withEdges.add(edge.to);
+    }
+    return new Set(graph.nodes.filter((n) => !withEdges.has(n.id)).map((n) => n.id));
+  }, [graph]);
+
+  const filteredGraph = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    let visibleNodes = graph.nodes;
+    if (q) {
+      visibleNodes = visibleNodes.filter((n) => n.label.toLowerCase().includes(q));
+    }
+    if (!showIsolated) {
+      visibleNodes = visibleNodes.filter((n) => !isolatedNodeIds.has(n.id));
+    }
+    const visibleIds = new Set(visibleNodes.map((n) => n.id));
+    const visibleEdges = graph.edges.filter((e) => visibleIds.has(e.from) && visibleIds.has(e.to));
+    return { nodes: visibleNodes, edges: visibleEdges };
+  }, [graph, searchQuery, showIsolated, isolatedNodeIds]);
 
   const currentId = store.currentNote?.meta.id ?? null;
   const neighborhood = useMemo(() => {
@@ -165,63 +213,132 @@ export function GraphView() {
     <div className="graph-overlay show" onClick={closeGraph}>
       <div className="graph-toolbar" onClick={(e) => e.stopPropagation()}>
         <h2>🕸 知识图谱</h2>
-        <span className="graph-info">节点: {graph.nodes.length} · 连接: {graph.edges.length} · 聚焦: {activeCount}</span>
         <div className="graph-cluster-switch">
-          <button className={clusterMode === 'notebook' ? 'active' : ''} onClick={() => setClusterMode('notebook')}>按笔记本</button>
-          <button className={clusterMode === 'tag' ? 'active' : ''} onClick={() => setClusterMode('tag')}>按标签</button>
+          <button className={clusterMode === 'notebook' ? 'active' : ''} onClick={() => { setClusterMode('notebook'); setPositions({}); }}>按笔记本</button>
+          <button className={clusterMode === 'tag' ? 'active' : ''} onClick={() => { setClusterMode('tag'); setPositions({}); }}>按标签</button>
         </div>
+        <input
+          className="graph-search-input"
+          type="text"
+          placeholder="搜索节点..."
+          value={searchQuery}
+          onChange={(e) => { setSearchQuery(e.target.value); setFocusedId(null); }}
+          onClick={(e) => e.stopPropagation()}
+        />
+        <div className="graph-zoom-group">
+          <button className="graph-btn-icon" onClick={() => setZoom((z) => Math.max(0.3, z - 0.1))} title="缩小">−</button>
+          <span className="graph-zoom-label">{Math.round(zoom * 100)}%</span>
+          <button className="graph-btn-icon" onClick={() => setZoom((z) => Math.min(3, z + 0.1))} title="放大">+</button>
+          <button className="graph-btn-icon" onClick={() => setZoom(1)} title="重置缩放">⟲</button>
+        </div>
+        <button
+          className={showIsolated ? 'graph-toggle active' : 'graph-toggle'}
+          onClick={() => setShowIsolated((v) => !v)}
+          title="显示/隐藏孤立节点"
+        >
+          {showIsolated ? '🏷' : '🏷̶'}
+        </button>
+        <button
+          className={showLegend ? 'graph-toggle active' : 'graph-toggle'}
+          onClick={() => setShowLegend((v) => !v)}
+          title="显示/隐藏图例"
+        >
+          ⊜
+        </button>
+        <button
+          className="graph-btn-icon"
+          onClick={() => setPositions({})}
+          title="重置布局"
+        >
+          ⟳
+        </button>
+        <span className="graph-info">
+          {filteredGraph.nodes.length}/{graph.nodes.length} 节点 · {filteredGraph.edges.length} 连接
+        </span>
         <span className="flex-1" />
         <button onClick={closeGraph}>✕ 关闭</button>
       </div>
 
       <div className="graph-canvas" ref={canvasRef} onClick={(e) => e.stopPropagation()}>
-        <svg className="graph-links" viewBox="0 0 100 100" preserveAspectRatio="none">
-          {graph.edges.map((edge) => {
-            const from = graph.nodes.find((node) => node.id === edge.from);
-            const to = graph.nodes.find((node) => node.id === edge.to);
-            if (!from || !to) return null;
-            const isActive = !focusedId || neighborhood.has(from.id) || neighborhood.has(to.id);
+        <div
+          className="graph-zoom-layer"
+          style={{ transform: `scale(${zoom})`, transformOrigin: 'center center' }}
+        >
+          <svg className="graph-links" viewBox="0 0 100 100" preserveAspectRatio="none">
+            {filteredGraph.edges.map((edge) => {
+              const from = filteredGraph.nodes.find((node) => node.id === edge.from);
+              const to = filteredGraph.nodes.find((node) => node.id === edge.to);
+              if (!from || !to) return null;
+              const isActive = !focusedId || neighborhood.has(from.id) || neighborhood.has(to.id);
+              const color = clusterColorMap.get(from.cluster) ?? '#6a63ff';
+              return (
+                <line
+                  key={`${edge.from}-${edge.to}`}
+                  x1={from.x}
+                  y1={from.y}
+                  x2={to.x}
+                  y2={to.y}
+                  className={isActive ? 'graph-link active' : 'graph-link dimmed'}
+                  style={isActive ? { stroke: color } : undefined}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setActiveEdge(edge);
+                  }}
+                />
+              );
+            })}
+          </svg>
+
+          {filteredGraph.nodes.map((node) => {
+            const isCurrent = node.id === currentId;
+            const isNeighbor = neighborhood.has(node.id);
+            const isFocused = !focusedId || isCurrent || isNeighbor;
+            const color = clusterColorMap.get(node.cluster) ?? '#6a63ff';
             return (
-              <line
-                key={`${edge.from}-${edge.to}`}
-                x1={from.x}
-                y1={from.y}
-                x2={to.x}
-                y2={to.y}
-                className={isActive ? 'graph-link active' : 'graph-link dimmed'}
+              <button
+                key={node.id}
+                className={['graph-node', isCurrent ? 'current' : '', isFocused ? 'focused' : 'dimmed'].join(' ')}
+                style={{
+                  left: `${node.x}%`,
+                  top: `${node.y}%`,
+                  width: `${140 + (node.degree / maxDegree) * 70}px`,
+                  backgroundColor: isCurrent ? undefined : `${color}22`,
+                  borderColor: isCurrent ? undefined : `${color}55`,
+                }}
+                title={node.label}
+                onMouseDown={(event) => startDrag(event, node.id)}
                 onClick={(event) => {
                   event.stopPropagation();
-                  setActiveEdge(edge);
+                  store.selectNote(node.id);
+                  setFocusedId(node.id);
+                  setActiveEdge(null);
                 }}
-              />
+              >
+                <strong>{node.label}</strong>
+                <span>{node.cluster}</span>
+                <span>{node.degree} 条关联</span>
+              </button>
             );
           })}
-        </svg>
+        </div>
 
-        {graph.nodes.map((node) => {
-          const isCurrent = node.id === currentId;
-          const isNeighbor = neighborhood.has(node.id);
-          const isFocused = !focusedId || isCurrent || isNeighbor;
-          return (
-            <button
-              key={node.id}
-              className={['graph-node', isCurrent ? 'current' : '', isFocused ? 'focused' : 'dimmed'].join(' ')}
-              style={{ left: `${node.x}%`, top: `${node.y}%`, width: `${140 + (node.degree / maxDegree) * 70}px` }}
-              title={node.label}
-              onMouseDown={(event) => startDrag(event, node.id)}
-              onClick={(event) => {
-                event.stopPropagation();
-                store.selectNote(node.id);
-                setFocusedId(node.id);
-                setActiveEdge(null);
-              }}
-            >
-              <strong>{node.label}</strong>
-              <span>{node.cluster}</span>
-              <span>{node.degree} 条关联</span>
-            </button>
-          );
-        })}
+        {clusters.length > 0 && showLegend && (
+          <div className="graph-legend" onClick={(e) => e.stopPropagation()}>
+            <div className="graph-legend-header">
+              <span>图例</span>
+              <button className="graph-btn-icon small" onClick={() => setShowLegend(false)}>✕</button>
+            </div>
+            <div className="graph-legend-items">
+              {clusters.slice(0, 15).map((c) => (
+                <div key={c} className="graph-legend-item">
+                  <span className="graph-legend-dot" style={{ backgroundColor: clusterColorMap.get(c) }} />
+                  <span className="graph-legend-label">{c}</span>
+                </div>
+              ))}
+              {clusters.length > 15 && <div className="graph-legend-more">+{clusters.length - 15} 更多</div>}
+            </div>
+          </div>
+        )}
       </div>
 
       {activeEdgeNote && (

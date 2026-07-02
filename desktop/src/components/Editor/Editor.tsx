@@ -47,6 +47,7 @@ export function Editor() {
     loadCursor,
     selectNote,
     searchQuery,
+    setSearchQuery,
     saveStatus,
     lastSavedAt,
   } = useStore();
@@ -67,6 +68,7 @@ export function Editor() {
   const [wikiSuggestions, setWikiSuggestions] = useState<string[]>([]);
   const [wikiOpen, setWikiOpen] = useState(false);
   const [wikiActiveIndex, setWikiActiveIndex] = useState(0);
+  const [searchMatchInfo, setSearchMatchInfo] = useState<{ current: number; total: number } | null>(null);
 
   useEffect(() => {
     if (!note) return;
@@ -460,9 +462,43 @@ export function Editor() {
       </div>
       <div className={isPreviewVisible ? 'split-editor' : 'split-editor no-preview'}>
         <div className="markdown-editor-pane" style={{ flexBasis: isPreviewVisible ? `${editorWidth}%` : '100%' }}>
+          {searchQuery && (
+            <div className="editor-search-bar">
+              <span className="editor-search-label">🔍 {searchQuery}</span>
+              {searchMatchInfo ? (
+                <span className="editor-search-count">
+                  {searchMatchInfo.current}/{searchMatchInfo.total} 个匹配
+                </span>
+              ) : (
+                <span className="editor-search-count">0 个匹配</span>
+              )}
+              <button
+                className="editor-search-nav"
+                title="上一个匹配 (Shift+Enter)"
+                onClick={() => {
+                  cmRef.current?.highlightPrev();
+                  setSearchMatchInfo(cmRef.current?.getMatchInfo() ?? null);
+                }}
+              >▲</button>
+              <button
+                className="editor-search-nav"
+                title="下一个匹配 (Enter)"
+                onClick={() => {
+                  cmRef.current?.highlightNext();
+                  setSearchMatchInfo(cmRef.current?.getMatchInfo() ?? null);
+                }}
+              >▼</button>
+              <button
+                className="editor-search-close"
+                title="清除搜索"
+                onClick={() => setSearchQuery('')}
+              >✕</button>
+            </div>
+          )}
           <CodeMirrorEditor
             ref={cmRef}
             initialContent={note.content ?? ''}
+            searchQuery={searchQuery}
             onChange={(next) => {
               updateContent(next);
               if (wikiOpen) openWikiSuggestions();
@@ -523,11 +559,16 @@ export function Editor() {
       <footer className="document-statusbar">
         <span>字数 {meta.wordCount}</span>
         <span>行 {note.content.split('\n').length}</span>
-        <span className={`status-saved status-${saveStatus}`}>
-          {saveStatus === 'saving' ? '○ 保存中...' : saveStatus === 'unsaved' ? '● 未保存' : '● 已保存'}
-          {jumpLine ? ` · 跳转到第 ${jumpLine} 行` : ''}
+        <span className={`editor-status-indicator status-${saveStatus}`} title={saveStatus === 'saving' ? '正在保存...' : saveStatus === 'unsaved' ? '有未保存的修改' : '已保存'}>
+          <span className="status-dot" />
+          <span className="status-text">{saveStatus === 'saving' ? '保存中...' : saveStatus === 'unsaved' ? '未保存' : '已保存'}</span>
         </span>
-        {lastSavedAt ? <span>最后保存：{new Date(lastSavedAt).toLocaleString('zh-CN')}</span> : <span>最后编辑：{new Date(meta.updatedAt).toLocaleString('zh-CN')}</span>}
+        {jumpLine ? <span>跳转到第 {jumpLine} 行</span> : null}
+        <span className="status-timestamp">
+          {lastSavedAt
+            ? (Date.now() - lastSavedAt < 3000 ? '刚刚保存' : `最后保存：${new Date(lastSavedAt).toLocaleString('zh-CN')}`)
+            : `最后编辑：${new Date(meta.updatedAt).toLocaleString('zh-CN')}`}
+        </span>
       </footer>
       <VersionControlModal
         open={versionControlOpen}

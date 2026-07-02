@@ -281,6 +281,34 @@ COMMENT ON COLUMN attachments.size           IS '文件大小（字节）';
 COMMENT ON COLUMN attachments.url            IS '存储路径 / MinIO 地址';
 
 -- ============================================================
+-- 2.10 audit_logs — 操作审计日志
+-- 对应: AuditLogEntity (P2 #23)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS audit_logs (
+    id              VARCHAR(64)   PRIMARY KEY,                             -- UUID
+    user_id         VARCHAR(64)   NOT NULL,                                -- 操作人
+    action          VARCHAR(64)   NOT NULL,                                -- CREATE | DELETE | EXPORT | PERMISSION_CHANGE 等
+    resource_type   VARCHAR(64)   NOT NULL,                                -- NOTE | NOTEBOOK | TAG | ENCRYPTION 等
+    resource_id     VARCHAR(256),                                          -- 被操作资源 ID
+    detail          TEXT,                                                   -- 操作详情
+    ip_address      VARCHAR(64)   NOT NULL DEFAULT 'unknown',              -- 客户端 IP
+    created_at      TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_audit_logs_user      ON audit_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_action    ON audit_logs(action);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_resource  ON audit_logs(resource_type);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_created   ON audit_logs(created_at DESC);
+
+COMMENT ON TABLE  audit_logs                IS '操作审计日志';
+COMMENT ON COLUMN audit_logs.user_id        IS '操作人';
+COMMENT ON COLUMN audit_logs.action         IS '操作类型';
+COMMENT ON COLUMN audit_logs.resource_type  IS '资源类型';
+COMMENT ON COLUMN audit_logs.resource_id    IS '被操作资源 ID';
+COMMENT ON COLUMN audit_logs.detail         IS '操作详情';
+COMMENT ON COLUMN audit_logs.ip_address     IS '客户端 IP';
+
+-- ============================================================
 -- 3. 补充说明
 -- ============================================================
 -- 此脚本精确匹配 JPA Hibernate 6 生成的 DDL。

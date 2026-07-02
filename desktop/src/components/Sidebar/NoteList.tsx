@@ -58,6 +58,7 @@ export function NoteList() {
   const store = useStore();
   const [batchTagInput, setBatchTagInput] = useState('');
   const [showBatchTag, setShowBatchTag] = useState(false);
+  const [showBatchMove, setShowBatchMove] = useState(false);
 
   const numSelected = store.selectedNoteIds.length;
 
@@ -89,16 +90,24 @@ export function NoteList() {
         <div className="batch-toolbar">
           <span className="batch-toolbar__count">已选 {numSelected} 项</span>
           <div className="batch-toolbar__actions">
-            <button
-              className="batch-btn"
-              onClick={() => {
-                const nbId = window.prompt('移动到哪个笔记本？（输入笔记本ID）');
-                if (nbId && nbId.trim()) store.batchMoveNotes(nbId.trim());
-              }}
-              title="批量移动"
-            >
-              <Icon type="rename" /> 移动
-            </button>
+            {showBatchMove ? (
+              <div className="batch-move-dropdown">
+                {store.notebooks.filter((nb) => nb.id !== 'all').map((nb) => (
+                  <button
+                    key={nb.id}
+                    className="batch-move-option"
+                    onClick={() => { store.batchMoveNotes(nb.id); setShowBatchMove(false); }}
+                  >
+                    {nb.icon} {nb.name}
+                  </button>
+                ))}
+                <button className="batch-move-option batch-move-cancel" onClick={() => setShowBatchMove(false)}>✕ 取消</button>
+              </div>
+            ) : (
+              <button className="batch-btn" onClick={() => setShowBatchMove(true)} title="批量移动">
+                <Icon type="rename" /> 移动
+              </button>
+            )}
             {showBatchTag ? (
               <div className="batch-tag-inline">
                 <input

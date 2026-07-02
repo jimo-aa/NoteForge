@@ -31,6 +31,8 @@ public class NoteService {
     private final NoteLinkRepository noteLinkRepository;
     private final NoteVersionRepository noteVersionRepository;
     private final SyncLogRepository syncLogRepository;
+    private final SyncNotificationService syncNotificationService;
+    private final AuditService auditService;
     private final ObjectMapper objectMapper;
 
     @CacheEvict(value = "notes:list", key = "#userId")
@@ -46,6 +48,8 @@ public class NoteService {
         if (req.getTags() != null) entity.setTags(req.getTags());
         noteRepository.save(entity);
         recordSyncLog(entity, "CREATE");
+        syncNotificationService.notifyNoteChanged(userId, entity.getId(), entity.getTitle(), entity.getVersion());
+        auditService.record(userId, "CREATE", "NOTE", entity.getId(), "创建笔记: " + entity.getTitle());
         return NoteResponse.fromEntity(entity);
     }
 
@@ -82,6 +86,8 @@ public class NoteService {
         noteVersionRepository.save(version);
 
         recordSyncLog(entity, "UPDATE");
+        syncNotificationService.notifyNoteChanged(userId, entity.getId(), entity.getTitle(), entity.getVersion());
+        auditService.record(userId, "UPDATE", "NOTE", noteId, "更新笔记: " + entity.getTitle());
         return NoteResponse.fromEntity(entity);
     }
 
@@ -92,6 +98,8 @@ public class NoteService {
         entity.setDeleted(true);
         noteRepository.save(entity);
         recordSyncLog(entity, "DELETE");
+        syncNotificationService.notifyNoteDeleted(userId, noteId);
+        auditService.record(userId, "DELETE", "NOTE", noteId, "删除笔记: " + entity.getTitle());
     }
 
     @Cacheable(value = "notes:list", key = "#userId + ':' + #notebookId + ':' + #page + ':' + #size",

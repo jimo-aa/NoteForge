@@ -27,6 +27,7 @@ public class SyncService {
     private static final Logger log = LoggerFactory.getLogger(SyncService.class);
     private final SyncLogRepository syncLogRepository;
     private final NoteRepository noteRepository;
+    private final SyncNotificationService syncNotificationService;
     private final ObjectMapper objectMapper;
 
     public SyncStateResponse getSyncState(String userId) {
@@ -150,6 +151,12 @@ public class SyncService {
         }
 
         long serverVersion = getMaxVersion(userId);
+
+        // Notify connected clients about the sync completion
+        if (accepted > 0) {
+            syncNotificationService.notifySyncComplete(userId, serverVersion);
+        }
+
         return new SyncPushResponse(accepted, serverVersion, conflicts);
     }
 

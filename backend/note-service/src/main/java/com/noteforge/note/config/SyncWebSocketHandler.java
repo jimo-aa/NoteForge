@@ -87,6 +87,35 @@ public class SyncWebSocketHandler extends TextWebSocketHandler {
         }
     }
 
+    /**
+     * Push a JSON message to a specific user's WebSocket session.
+     * Returns true if the user was connected and the message was sent.
+     */
+    public boolean sendToUser(String userId, Map<String, Object> payload) {
+        WebSocketSession session = sessions.get(userId);
+        if (session == null || !session.isOpen()) {
+            return false;
+        }
+        try {
+            synchronized (session) {
+                if (session.isOpen()) {
+                    String json = objectMapper.writeValueAsString(payload);
+                    session.sendMessage(new TextMessage(json));
+                    return true;
+                }
+            }
+        } catch (IOException e) {
+            log.warn("Failed to send WS message to user={}: {}", userId, e.getMessage());
+            sessions.remove(userId);
+        }
+        return false;
+    }
+
+    /** Get count of currently connected users. */
+    public int getConnectedCount() {
+        return sessions.size();
+    }
+
     private String authenticate(WebSocketSession session) {
         URI uri = session.getUri();
         if (uri == null) return null;

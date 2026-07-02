@@ -35,6 +35,25 @@ export function VersionControlModal({ open, noteId, onClose, onCheckoutVersion, 
   const [creatingVersion, setCreatingVersion] = useState(false);
   const [deletingVersion, setDeletingVersion] = useState<string | null>(null);
   const [deletingBranch, setDeletingBranch] = useState<string | null>(null);
+  const [versionFilter, setVersionFilter] = useState('');
+
+  const filteredVersions = useMemo(() => {
+    if (!versionFilter.trim()) return versions;
+    const q = versionFilter.toLowerCase();
+    return versions.filter((v) => v.title.toLowerCase().includes(q));
+  }, [versions, versionFilter]);
+
+  const relativeTime = (ts: number) => {
+    const diff = Date.now() - ts;
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return '刚刚';
+    if (mins < 60) return `${mins} 分钟前`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours} 小时前`;
+    const days = Math.floor(hours / 24);
+    if (days < 30) return `${days} 天前`;
+    return new Date(ts).toLocaleString('zh-CN');
+  };
 
   useEffect(() => {
     if (!open || !noteId) return;
@@ -242,22 +261,30 @@ export function VersionControlModal({ open, noteId, onClose, onCheckoutVersion, 
             <div className="versions-split">
               <div className="versions-list-pane">
                 <div className="list-header">
-                  <button className="primary-btn small" onClick={() => setShowCreateVersion(true)}>
-                    + 新建版本
-                  </button>
+                  <div className="list-header-row">
+                    <button className="primary-btn small" onClick={() => setShowCreateVersion(true)}>
+                      + 新建版本
+                    </button>
+                    <input
+                      className="version-filter-input"
+                      value={versionFilter}
+                      onChange={(e) => setVersionFilter(e.target.value)}
+                      placeholder="搜索版本..."
+                    />
+                  </div>
                 </div>
                 {loadingVersions ? (
                   <div className="tab-loading">加载版本中...</div>
-                ) : versions.length > 0 ? (
+                ) : filteredVersions.length > 0 ? (
                   <div className="versions-list">
-                    {versions.map((version) => (
+                    {filteredVersions.map((version) => (
                       <div 
                         key={version.id} 
                         className={`version-item-list ${selectedVersion?.id === version.id ? 'active' : ''}`}
                         onClick={() => handlePreviewVersion(version)}
                       >
                         <div className="version-title">{version.title}</div>
-                        <div className="version-meta">{new Date(version.updatedAt).toLocaleString('zh-CN')}</div>
+                        <div className="version-meta">{relativeTime(version.updatedAt)}</div>
                         <div className="version-item-actions">
                           <button 
                             className="version-restore"
@@ -280,7 +307,9 @@ export function VersionControlModal({ open, noteId, onClose, onCheckoutVersion, 
                     ))}
                   </div>
                 ) : (
-                  <div className="tab-empty">暂无版本历史</div>
+                  <div className="tab-empty">
+                    {versionFilter ? '没有匹配的版本' : '暂无版本历史'}
+                  </div>
                 )}
               </div>
               <div className="version-preview-pane">
@@ -289,6 +318,20 @@ export function VersionControlModal({ open, noteId, onClose, onCheckoutVersion, 
                     <div className="preview-header">
                       <h3>{selectedVersion.title}</h3>
                       <span className="preview-time">{new Date(selectedVersion.updatedAt).toLocaleString('zh-CN')}</span>
+                    </div>
+                    <div className="preview-header-actions">
+                      <button
+                        className="ghost-btn small"
+                        onClick={async () => {
+                          // Emit event for Editor to open diff view
+                          window.dispatchEvent(new CustomEvent('noteforge:diff-with-current', {
+                            detail: { noteId, commitId: selectedVersion.id, content: previewContent },
+                          }));
+                        }}
+                        title="对比当前笔记内容"
+                      >
+                        ↔ Diff
+                      </button>
                     </div>
                     {loadingPreview ? (
                       <div className="preview-loading">加载内容中...</div>

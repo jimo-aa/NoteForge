@@ -3,7 +3,7 @@
 #        docker build --build-arg SERVICE=user-service -t noteforge/user-service .
 
 # === Stage 1: Build ===
-FROM gradle:8.7-jdk21 AS builder
+FROM gradle:8.12-jdk21 AS builder
 WORKDIR /build
 
 # Copy dependency descriptors first for layer caching
@@ -26,21 +26,23 @@ ARG SERVICE=note-service
 RUN ./gradlew :${SERVICE}:bootJar --no-daemon --build-cache -x test
 
 # === Stage 2: Runtime ===
-FROM eclipse-temurin:21-jre
+FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 
 ARG SERVICE=note-service
 ENV SERVICE=${SERVICE}
 
+RUN apk add --no-cache curl
+
 # Copy built JAR
 COPY --from=builder /build/${SERVICE}/build/libs/*.jar app.jar
 
-# Expose port
-EXPOSE 8081 8082
+# Expose port (service-specific — only one port is relevant per image)
+EXPOSE 8081
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
-  CMD curl -f http://localhost:8081/actuator/health || curl -f http://localhost:8082/actuator/health || exit 1
+  CMD curl -f http://localhost:8081/actuator/health || exit 1
 
 # Run
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]
