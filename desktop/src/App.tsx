@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useStore } from '@/stores/context';
 import { tauriInvoke } from '@/utils/invoke';
+import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 
 import { Sidebar } from '@/components/Sidebar/Sidebar';
 import { NoteList } from '@/components/Sidebar/NoteList';
@@ -34,24 +35,34 @@ export default function App() {
     value: '',
   });
 
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      const s = storeRef.current;
-      if (e.key.toLowerCase() === 'n' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); setNewNoteOpen(true); return; }
-      if (e.key.toLowerCase() === 'p' && (e.metaKey || e.ctrlKey) && e.shiftKey) { e.preventDefault(); setAdvancedVersioningOpen(true); return; }
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'e') { e.preventDefault(); s.setIsPreviewVisible(!s.isPreviewVisible); return; }
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'p') { e.preventDefault(); if (s.currentNote) s.togglePin(s.currentNote.meta.id); return; }
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'd') { e.preventDefault(); if (s.currentNote) s.deleteNote(s.currentNote.meta.id); return; }
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'g') { e.preventDefault(); s.setIsGraphOpen(!s.isGraphOpen); return; }
-      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'f') { e.preventDefault(); if (s.currentNote) s.toggleFavorite(s.currentNote.meta.id); return; }
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') { e.preventDefault(); if (s.currentNote) { s.saveDraft(s.currentNote.meta.id, s.currentNote.content); s.showToast('success', '已手动保存'); } return; }
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, []);
+  // Centralized keyboard shortcuts via configurable system
+  useKeyboardShortcuts({
+    'new-note': () => setNewNoteOpen(true),
+    'new-notebook': () => setNotebookModal({ open: true, mode: 'create' as const, title: '新建笔记本', value: '' }),
+    'search': () => window.dispatchEvent(new CustomEvent('noteforge:open-search')),
+    'search-advanced': () => setAdvancedVersioningOpen(true),
+    'settings': () => setManageOpen(true),
+    'toggle-preview': () => store.setIsPreviewVisible(!store.isPreviewVisible),
+    'toggle-pin': () => { if (store.currentNote) store.togglePin(store.currentNote.meta.id); },
+    'delete-note': () => { if (store.currentNote) store.deleteNote(store.currentNote.meta.id); },
+    'duplicate-note': () => { if (store.currentNote) store.duplicateNote(store.currentNote.meta.id); },
+    'toggle-graph': () => store.setIsGraphOpen(!store.isGraphOpen),
+    'toggle-favorite': () => { if (store.currentNote) store.toggleFavorite(store.currentNote.meta.id); },
+    'toggle-properties': () => store.setIsPropertiesOpen(!store.isPropertiesOpen),
+    'save-draft': () => { if (store.currentNote) { store.saveDraft(store.currentNote.meta.id, store.currentNote.content); store.showToast('success', '已手动保存'); } },
+    'toggle-sidebar': () => { /* sidebar always visible in current layout */ },
+  });
 
-  // Global error handlers
+  // Global error handlers with persistent crash logging
   useEffect(() => {
+    const persistCrash = (data: Record<string, unknown>) => {
+      try {
+        void import('@/utils/invoke').then(({ tauriInvoke }) => {
+          void tauriInvoke<string>('write_crash_log', { crashData: JSON.stringify(data) });
+        });
+      } catch { /* best-effort */ }
+    };
+
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
       console.error('[Global] Unhandled Promise Rejection:', event.reason);
       try {
@@ -62,6 +73,7 @@ export default function App() {
           type: 'unhandledRejection',
         };
         window.localStorage.setItem('noteforge:crash:last', JSON.stringify(crashData));
+        persistCrash(crashData);
         // Try to show a toast through the store if available
         const s = storeRef.current;
         if (s && s.showToast) {
@@ -81,6 +93,7 @@ export default function App() {
           type: 'globalError',
         };
         window.localStorage.setItem('noteforge:crash:last', JSON.stringify(crashData));
+        persistCrash(crashData);
       } catch { /* ignore */ }
     };
 

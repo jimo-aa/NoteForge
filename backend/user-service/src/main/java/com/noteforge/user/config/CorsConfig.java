@@ -16,7 +16,7 @@ public class CorsConfig {
 
     private static final Logger log = LoggerFactory.getLogger(CorsConfig.class);
 
-    @Value("${noteforge.cors.allowed-origins:*}")
+    @Value("${cors.allowed-origins:*}")
     private String allowedOrigins;
 
     @Bean

@@ -5,8 +5,11 @@ import com.noteforge.user.dto.UserResponse;
 import com.noteforge.user.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/users")
@@ -14,6 +17,20 @@ import org.springframework.web.bind.annotation.*;
 public class UserController {
 
     private final UserService userService;
+
+    @GetMapping
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<ApiResponse<List<UserResponse>>> listUsers() {
+        List<UserResponse> users = userService.listAllUsers();
+        return ResponseEntity.ok(ApiResponse.success(users));
+    }
+
+    @DeleteMapping("/{userId}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<ApiResponse<Void>> deleteUser(@PathVariable String userId) {
+        userService.deleteUser(userId);
+        return ResponseEntity.ok(ApiResponse.success(null));
+    }
 
     @GetMapping("/me")
     public ResponseEntity<ApiResponse<UserResponse>> getMe(Authentication auth) {

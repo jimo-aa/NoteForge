@@ -985,6 +985,35 @@ pub fn clear_cache() -> Result<bool, String> {
     Ok(true)
 }
 
+// ============================================================
+// 崩溃日志持久化
+// ============================================================
+
+#[tauri::command]
+pub fn write_crash_log(app: tauri::AppHandle, crash_data: String) -> Result<String, String> {
+    let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&data_dir).map_err(|e| e.to_string())?;
+    let log_path = data_dir.join("crash");
+    std::fs::create_dir_all(&log_path).map_err(|e| e.to_string())?;
+    let ts = get_current_timestamp();
+    let file_path = log_path.join(format!("crash-{}.json", ts));
+    std::fs::write(&file_path, &crash_data).map_err(|e| e.to_string())?;
+    // Keep only last 10 crash logs
+    let mut entries: Vec<_> = std::fs::read_dir(&log_path)
+        .map_err(|e| e.to_string())?
+        .filter_map(|e| e.ok())
+        .filter(|e| e.path().extension().map(|ext| ext == "json").unwrap_or(false))
+        .collect();
+    entries.sort_by_key(|e| e.path());
+    while entries.len() > 10 {
+        if let Some(oldest) = entries.first() {
+            let _ = std::fs::remove_file(oldest.path());
+            entries.remove(0);
+        }
+    }
+    Ok(file_path.to_string_lossy().to_string())
+}
+
 #[tauri::command]
 pub fn get_cache_stats() -> Result<serde_json::Value, String> {
     let version_count = VERSION_CACHE.lock().map(|c| c.len()).unwrap_or(0);

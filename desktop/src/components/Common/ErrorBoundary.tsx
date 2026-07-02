@@ -1,10 +1,19 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
+import { tauriInvoke } from '@/utils/invoke';
 
 interface Props { children: ReactNode; }
 interface State { hasError: boolean; error: Error | null; crashCount: number; showDetails: boolean; }
 
 const CRASH_KEY = 'noteforge:crash:last';
 const CRASH_COUNT_KEY = 'noteforge:crash:count';
+
+/** Write crash data to persistent file storage via Tauri backend. Fire-and-forget. */
+function persistCrashLog(crashData: Record<string, unknown>): void {
+  try {
+    const payload = JSON.stringify({ ...crashData, persistedAt: Date.now() });
+    void tauriInvoke<string>('write_crash_log', { crashData: payload });
+  } catch { /* best-effort */ }
+}
 
 export class ErrorBoundary extends Component<Props, State> {
   state: State = { hasError: false, error: null, crashCount: 0, showDetails: false };
@@ -20,9 +29,12 @@ export class ErrorBoundary extends Component<Props, State> {
       error: error.message,
       stack: info.componentStack,
       url: window.location.href,
+      type: 'errorBoundary',
     };
     try {
       window.localStorage.setItem(CRASH_KEY, JSON.stringify(crashData));
+      // Persist to file via Tauri backend
+      persistCrashLog(crashData);
       // Track consecutive crash count
       const prevCount = parseInt(window.sessionStorage.getItem(CRASH_COUNT_KEY) || '0', 10);
       const newCount = prevCount + 1;

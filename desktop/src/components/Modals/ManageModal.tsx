@@ -1,19 +1,99 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useStore } from '@/stores/context';
+import { useTheme, type ThemeMode } from '@/hooks/useTheme';
 import { NotebookModal, type NotebookModalState } from './NotebookModal';
 import { ConfirmDialog } from '@/components/Common/ConfirmDialog';
 import { EncryptionModal } from './EncryptionModal';
+import {
+  getShortcuts,
+  updateShortcut,
+  resetShortcut,
+  resetAllShortcuts,
+  eventToCombo,
+  formatKeyCombo,
+  isComboTaken,
+  type ShortcutDef,
+  type KeyCombo,
+} from '@/services/shortcutService';
 
-type Tab = 'notebooks' | 'tags' | 'security';
+const ACCENT_PRESETS = [
+  '#6a63ff', // purple (default)
+  '#3b82f6', // blue
+  '#06b6d4', // cyan
+  '#10b981', // emerald
+  '#84cc16', // lime
+  '#eab308', // yellow
+  '#f97316', // orange
+  '#ef4444', // red
+  '#ec4899', // pink
+  '#a855f7', // violet
+];
+
+type Tab = 'notebooks' | 'tags' | 'security' | 'appearance' | 'shortcuts';
 
 export function ManageModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { notebooks, tags, notes, deleteNotebook, renameNotebook, setActiveNotebook, updateNote, showToast } = useStore();
-  const [tab, setTab] = useState<Tab>('notebooks');
+  const { theme, setTheme, accentColor, setAccentColor } = useTheme();
+  const [tab, setTab] = useState<Tab>('appearance');
   const [notebookModal, setNotebookModal] = useState<NotebookModalState>({ open: false, mode: null, title: '', value: '' });
   const [renameTag, setRenameTag] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [confirmDel, setConfirmDel] = useState<{ kind: 'notebook' | 'tag'; id: string; name: string } | null>(null);
   const [encryptionOpen, setEncryptionOpen] = useState(false);
+
+  // ── Shortcut editing state ──
+  const [shortcuts, setShortcuts] = useState<ShortcutDef[]>(() => getShortcuts());
+  const [capturingId, setCapturingId] = useState<string | null>(null);
+  const [captureKey, setCaptureKey] = useState<string | null>(null);
+  const captureRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (capturingId === null) return;
+    const handler = (e: KeyboardEvent) => {
+      // Ignore bare modifiers
+      if (['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) return;
+      if (e.key === 'Escape') { setCapturingId(null); setCaptureKey(null); return; }
+      e.preventDefault();
+      e.stopPropagation();
+      const combo = eventToCombo(e);
+      const conflict = isComboTaken(combo, capturingId);
+      updateShortcut(capturingId, combo);
+      setCaptureKey(formatKeyCombo(combo));
+      setShortcuts(getShortcuts());
+      setCapturingId(null);
+      if (conflict) {
+        // The conflict will be auto-resolved (the other shortcut now uses default)
+        // Show a brief visual hint via the captureKey message
+        setCaptureKey(`已绑定 ${formatKeyCombo(combo)}` + (conflict ? `（${conflict.label} 已重置为默认）` : ''));
+      }
+      setTimeout(() => setCaptureKey(null), 2000);
+    };
+    window.addEventListener('keydown', handler, true);
+    return () => window.removeEventListener('keydown', handler, true);
+  }, [capturingId]);
+
+  const handleStartCapture = (id: string) => {
+    setCapturingId(id);
+    setCaptureKey('按下快捷键...');
+  };
+
+  const handleResetAll = () => {
+    resetAllShortcuts();
+    setShortcuts(getShortcuts());
+  };
+
+  const handleResetOne = (id: string) => {
+    resetShortcut(id);
+    setShortcuts(getShortcuts());
+  };
+
+  const shortcutCategories: Array<{ id: ShortcutDef['category']; label: string }> = [
+    { id: 'navigation', label: '导航' },
+    { id: 'notes', label: '笔记操作' },
+    { id: 'editor', label: '编辑器' },
+    { id: 'view', label: '视图' },
+    { id: 'search', label: '搜索' },
+  ];
 
   if (!open) return null;
 
@@ -75,6 +155,8 @@ export function ManageModal({ open, onClose }: { open: boolean; onClose: () => v
           <button className={tab === 'notebooks' ? 'tab active' : 'tab'} onClick={() => setTab('notebooks')}>笔记本</button>
           <button className={tab === 'tags' ? 'tab active' : 'tab'} onClick={() => setTab('tags')}>标签</button>
           <button className={tab === 'security' ? 'tab active' : 'tab'} onClick={() => setTab('security')}>安全</button>
+          <button className={tab === 'appearance' ? 'tab active' : 'tab'} onClick={() => setTab('appearance')}>外观</button>
+          <button className={tab === 'shortcuts' ? 'tab active' : 'tab'} onClick={() => setTab('shortcuts')}>快捷键</button>
         </div>
         <div className="manage-modal-body">
           {tab === 'notebooks' && (
@@ -143,6 +225,110 @@ export function ManageModal({ open, onClose }: { open: boolean; onClose: () => v
                 >
                   管理加密设置
                 </button>
+              </div>
+            </div>
+          )}
+          {tab === 'appearance' && (
+            <div className="manage-list appearance-settings">
+              {/* Theme Mode */}
+              <div className="appearance-section">
+                <h4 className="appearance-section-title">主题模式</h4>
+                <div className="theme-mode-options">
+                  {([
+                    { id: 'light' as ThemeMode, icon: '☀️', label: '浅色' },
+                    { id: 'dark' as ThemeMode, icon: '🌙', label: '深色' },
+                    { id: 'system' as ThemeMode, icon: '💻', label: '跟随系统' },
+                  ]).map((opt) => (
+                    <button
+                      key={opt.id}
+                      className={`theme-mode-card${theme === opt.id ? ' active' : ''}`}
+                      onClick={() => setTheme(opt.id)}
+                    >
+                      <span className="theme-mode-icon">{opt.icon}</span>
+                      <span className="theme-mode-label">{opt.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Accent Color */}
+              <div className="appearance-section">
+                <h4 className="appearance-section-title">强调色</h4>
+                <div className="accent-color-picker">
+                  {ACCENT_PRESETS.map((color) => (
+                    <button
+                      key={color}
+                      className={`accent-color-swatch${accentColor === color ? ' active' : ''}`}
+                      style={{ backgroundColor: color }}
+                      onClick={() => setAccentColor(color)}
+                      title={color}
+                    />
+                  ))}
+                </div>
+                <div className="accent-custom-row">
+                  <label className="accent-custom-label">自定义颜色</label>
+                  <input
+                    type="color"
+                    className="accent-custom-input"
+                    value={accentColor}
+                    onChange={(e) => setAccentColor(e.target.value)}
+                  />
+                  <span className="accent-hex-value">{accentColor}</span>
+                </div>
+              </div>
+            </div>
+          )}
+          {tab === 'shortcuts' && (
+            <div className="manage-list shortcuts-settings" ref={captureRef}>
+              <div className="shortcuts-header">
+                <span className="shortcuts-header-title">自定义快捷键</span>
+                <button className="shortcuts-reset-btn" onClick={handleResetAll}>重置全部</button>
+              </div>
+              {shortcutCategories.map((cat) => {
+                const catShortcuts = shortcuts.filter((s) => s.category === cat.id);
+                if (catShortcuts.length === 0) return null;
+                return (
+                  <div key={cat.id} className="shortcuts-category">
+                    <h4 className="shortcuts-category-title">{cat.label}</h4>
+                    {catShortcuts.map((s) => {
+                      const isCapturing = capturingId === s.id;
+                      const displayCombo = isCapturing
+                        ? (captureKey || '按下快捷键...')
+                        : formatKeyCombo(s.keys);
+                      const isEdited = JSON.stringify(s.keys) !== JSON.stringify(s.defaultKeys);
+                      return (
+                        <div key={s.id} className={`shortcuts-row${isCapturing ? ' capturing' : ''}`}>
+                          <div className="shortcuts-row-info">
+                            <span className="shortcuts-row-label">{s.label}</span>
+                            <span className="shortcuts-row-desc">{s.description}</span>
+                          </div>
+                          <div className="shortcuts-row-actions">
+                            <button
+                              className={`shortcuts-key-btn${isEdited ? ' edited' : ''}`}
+                              onClick={() => handleStartCapture(s.id)}
+                              disabled={capturingId !== null}
+                              title="点击修改快捷键"
+                            >
+                              <kbd>{displayCombo}</kbd>
+                            </button>
+                            {isEdited && capturingId !== s.id && (
+                              <button
+                                className="shortcuts-reset-one-btn"
+                                onClick={() => handleResetOne(s.id)}
+                                title="重置为默认"
+                              >
+                                ↺
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+              <div className="shortcuts-footer">
+                <p>点击快捷键进行修改，按下 Esc 取消修改。</p>
               </div>
             </div>
           )}

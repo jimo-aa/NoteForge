@@ -47,6 +47,8 @@ export function Editor() {
     loadCursor,
     selectNote,
     searchQuery,
+    saveStatus,
+    lastSavedAt,
   } = useStore();
 
   const note = currentNote;
@@ -521,8 +523,11 @@ export function Editor() {
       <footer className="document-statusbar">
         <span>字数 {meta.wordCount}</span>
         <span>行 {note.content.split('\n').length}</span>
-        <span className="status-saved">● 已保存{jumpLine ? ` · 跳转到第 ${jumpLine} 行` : ''}</span>
-        <span>最后编辑：{new Date(meta.updatedAt).toLocaleString('zh-CN')}</span>
+        <span className={`status-saved status-${saveStatus}`}>
+          {saveStatus === 'saving' ? '○ 保存中...' : saveStatus === 'unsaved' ? '● 未保存' : '● 已保存'}
+          {jumpLine ? ` · 跳转到第 ${jumpLine} 行` : ''}
+        </span>
+        {lastSavedAt ? <span>最后保存：{new Date(lastSavedAt).toLocaleString('zh-CN')}</span> : <span>最后编辑：{new Date(meta.updatedAt).toLocaleString('zh-CN')}</span>}
       </footer>
       <VersionControlModal
         open={versionControlOpen}

@@ -49,6 +49,7 @@ export function useNoteStore() {
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved');
   const [showWelcomeGuide, setShowWelcomeGuide] = useState(false);
+  const [selectedNoteIds, setSelectedNoteIds] = useState<string[]>([]);
   const toastIdRef = useRef(0);
   const autosaveTimerRef = useRef<Record<string, number | null>>({});
   const lastSyncVersionRef = useRef(0);
@@ -288,6 +289,7 @@ export function useNoteStore() {
         contentPlain: nextContentPlain,
       };
       if (updates.content !== undefined) {
+        setSaveStatus('unsaved');
         safeWrite(draftKey(id), nextContent);
         scheduleAutosave(id, updates.title ?? n.meta.title, nextContent);
       }
@@ -509,7 +511,49 @@ export function useNoteStore() {
   const favoriteCount = notes.filter((n) => n.meta.isFavorite).length;
   const searchResultCount = null;
 
-  return { notes, filteredNotes, currentNote, currentNoteId, notebooks: notebooksWithCounts, activeNotebook, currentFilter, searchQuery, sortBy, activeTags, isPreviewVisible, isGraphOpen, isPropertiesOpen, toasts, contextMenu, settingsOpen, isLoading, entityModal, totalCount, favoriteCount, searchResultCount, tags, setActiveNotebook, setCurrentFilter, setSearchQuery, setSortBy, setActiveTags, setIsPreviewVisible, setIsGraphOpen, setIsPropertiesOpen, setContextMenu, setSettingsOpen, openEntityModal, closeEntityModal, selectNote, createNote, updateNote, deleteNote, duplicateNote, toggleFavorite, togglePin, createNotebook, renameNotebook, deleteNotebook, refreshNotes, refreshNotebooks, showToast, setCurrentNoteId, saveDraft, loadDraft, clearDraft, loadVersions, restoreVersion, checkoutBranch, createBranch, createVersion, saveCursor, loadCursor, loadRecovery, recoveryDrafts, clearRecovery, lastSavedAt, saveStatus, showWelcomeGuide, setShowWelcomeGuide };
+  // === Batch operations ===
+  const toggleNoteSelection = useCallback((id: string) => {
+    setSelectedNoteIds((prev) =>
+      prev.includes(id) ? prev.filter((nid) => nid !== id) : [...prev, id],
+    );
+  }, []);
+
+  const selectAllFiltered = useCallback(() => {
+    setSelectedNoteIds(filteredNotes.map((n) => n.meta.id));
+  }, [filteredNotes]);
+
+  const clearSelection = useCallback(() => {
+    setSelectedNoteIds([]);
+  }, []);
+
+  const batchDeleteNotes = useCallback(() => {
+    for (const id of selectedNoteIds) {
+      deleteNote(id);
+    }
+    setSelectedNoteIds([]);
+    showToast('success', `已删除 ${selectedNoteIds.length} 条笔记`);
+  }, [selectedNoteIds, deleteNote, showToast]);
+
+  const batchMoveNotes = useCallback((targetNotebookId: string) => {
+    for (const id of selectedNoteIds) {
+      updateNote(id, { notebookId: targetNotebookId });
+    }
+    setSelectedNoteIds([]);
+    showToast('success', `已移动 ${selectedNoteIds.length} 条笔记`);
+  }, [selectedNoteIds, updateNote, showToast]);
+
+  const batchTagNotes = useCallback((tag: string) => {
+    for (const id of selectedNoteIds) {
+      const note = notes.find((n) => n.meta.id === id);
+      if (note && !note.meta.tags.includes(tag)) {
+        updateNote(id, { tags: [...note.meta.tags, tag] });
+      }
+    }
+    setSelectedNoteIds([]);
+    showToast('success', `已为 ${selectedNoteIds.length} 条笔记添加标签「${tag}」`);
+  }, [selectedNoteIds, notes, updateNote, showToast]);
+
+  return { notes, filteredNotes, currentNote, currentNoteId, notebooks: notebooksWithCounts, activeNotebook, currentFilter, searchQuery, sortBy, activeTags, isPreviewVisible, isGraphOpen, isPropertiesOpen, toasts, contextMenu, settingsOpen, isLoading, entityModal, totalCount, favoriteCount, searchResultCount, tags, selectedNoteIds, setActiveNotebook, setCurrentFilter, setSearchQuery, setSortBy, setActiveTags, setIsPreviewVisible, setIsGraphOpen, setIsPropertiesOpen, setContextMenu, setSettingsOpen, openEntityModal, closeEntityModal, selectNote, createNote, updateNote, deleteNote, duplicateNote, toggleFavorite, togglePin, createNotebook, renameNotebook, deleteNotebook, refreshNotes, refreshNotebooks, showToast, setCurrentNoteId, saveDraft, loadDraft, clearDraft, loadVersions, restoreVersion, checkoutBranch, createBranch, createVersion, saveCursor, loadCursor, loadRecovery, recoveryDrafts, clearRecovery, lastSavedAt, saveStatus, showWelcomeGuide, setShowWelcomeGuide, toggleNoteSelection, selectAllFiltered, clearSelection, batchDeleteNotes, batchMoveNotes, batchTagNotes };
 }
 
 export const NoteContext = createContext<NoteStore | null>(null);

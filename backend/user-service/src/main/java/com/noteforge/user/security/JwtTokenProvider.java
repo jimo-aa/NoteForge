@@ -1,5 +1,6 @@
 package com.noteforge.user.security;
 
+import com.noteforge.user.entity.UserRole;
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;
 import jakarta.annotation.PostConstruct;
@@ -29,11 +30,12 @@ public class JwtTokenProvider {
         key = Keys.hmacShaKeyFor(jwtSecret.getBytes(StandardCharsets.UTF_8));
     }
 
-    public String generateAccessToken(String userId, String email) {
+    public String generateAccessToken(String userId, String email, UserRole role) {
         Date now = new Date();
         return Jwts.builder()
                 .subject(userId)
                 .claim("email", email)
+                .claim("role", role.name())
                 .issuedAt(now)
                 .expiration(new Date(now.getTime() + accessTokenExpiration))
                 .signWith(key)
@@ -68,6 +70,15 @@ public class JwtTokenProvider {
                 .getPayload()
                 .getExpiration()
                 .getTime();
+    }
+
+    public String getRoleFromToken(String token) {
+        return Jwts.parser()
+                .verifyWith(key)
+                .build()
+                .parseSignedClaims(token)
+                .getPayload()
+                .get("role", String.class);
     }
 
     public boolean validateToken(String token) {

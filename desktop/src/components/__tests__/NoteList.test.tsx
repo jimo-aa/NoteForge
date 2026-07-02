@@ -18,6 +18,8 @@ const emptyStore = {
   filteredNotes: [],
   searchQuery: '',
   currentNoteId: null,
+  selectedNoteIds: [],
+  lastSavedAt: null,
   selectNote: vi.fn(),
   setContextMenu: vi.fn(),
 };
@@ -33,7 +35,7 @@ const noteStore = {
       content: 'Hello world', contentPlain: 'Hello world',
     },
   ],
-  searchQuery: '', currentNoteId: null,
+  searchQuery: '', currentNoteId: null, selectedNoteIds: [], lastSavedAt: null,
   selectNote: vi.fn(), setContextMenu: vi.fn(),
 };
 

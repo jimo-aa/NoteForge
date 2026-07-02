@@ -44,7 +44,7 @@ public class AuthService {
         userRepository.save(entity);
 
         UserResponse userResp = UserResponse.fromEntity(entity);
-        String accessToken = jwtTokenProvider.generateAccessToken(entity.getId(), entity.getEmail());
+        String accessToken = jwtTokenProvider.generateAccessToken(entity.getId(), entity.getEmail(), entity.getRole());
         String refreshToken = jwtTokenProvider.generateRefreshToken(entity.getId());
 
         activeRefreshTokens.put(refreshToken, entity.getId());
@@ -61,7 +61,7 @@ public class AuthService {
         }
 
         UserResponse userResp = UserResponse.fromEntity(entity);
-        String accessToken = jwtTokenProvider.generateAccessToken(entity.getId(), entity.getEmail());
+        String accessToken = jwtTokenProvider.generateAccessToken(entity.getId(), entity.getEmail(), entity.getRole());
         String refreshToken = jwtTokenProvider.generateRefreshToken(entity.getId());
 
         activeRefreshTokens.put(refreshToken, entity.getId());
@@ -85,7 +85,7 @@ public class AuthService {
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
         UserResponse userResp = UserResponse.fromEntity(entity);
-        String newAccessToken = jwtTokenProvider.generateAccessToken(entity.getId(), entity.getEmail());
+        String newAccessToken = jwtTokenProvider.generateAccessToken(entity.getId(), entity.getEmail(), entity.getRole());
         String newRefreshToken = jwtTokenProvider.generateRefreshToken(entity.getId());
 
         // Store new refresh token

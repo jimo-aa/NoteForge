@@ -46,6 +46,8 @@ pub fn run() {
             commands::search_in_note,
             commands::search_notes_advanced,
             commands::init_encryption,
+            commands::has_stored_encryption,
+            commands::try_unlock_encryption,
             commands::is_encryption_enabled,
             commands::disable_encryption,
             commands::create_notebook,
@@ -89,6 +91,8 @@ pub fn run() {
             commands::search_versions_cached,
             commands::clear_cache,
             commands::get_cache_stats,
+            // Crash Recovery
+            commands::write_crash_log,
             // Wiki Link Backlinks
             commands::get_backlinks_with_titles,
             // Sync Queue

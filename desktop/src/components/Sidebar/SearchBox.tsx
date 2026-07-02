@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useStore } from '@/stores/context';
 import { Icon } from '@/components/Common/Icon';
@@ -28,6 +28,71 @@ type SearchResultItem = {
   noteId?: string;
 };
 
+interface SearchDirective {
+  kind: 'tag' | 'notebook' | 'pinned' | 'favorite';
+  raw: string;
+  value: string;
+}
+
+const HISTORY_KEY = 'noteforge:search:history';
+const MAX_HISTORY = 10;
+
+function loadHistory(): string[] {
+  try {
+    const raw = window.localStorage.getItem(HISTORY_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.slice(0, MAX_HISTORY) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveHistory(history: string[]) {
+  try {
+    window.localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, MAX_HISTORY)));
+  } catch { /* ignore */ }
+}
+
+function pushHistory(query: string) {
+  const trimmed = query.trim();
+  if (!trimmed) return;
+  const prev = loadHistory().filter((q) => q !== trimmed);
+  saveHistory([trimmed, ...prev]);
+}
+
+/** Parse search directives from query; returns { textOnly, directives }. */
+function parseDirectives(raw: string): { textOnly: string; directives: SearchDirective[] } {
+  const dirs: SearchDirective[] = [];
+  const parts: string[] = [];
+  for (const token of raw.split(/\s+/)) {
+    const tagMatch = token.match(/^tag:(\S+)$/i);
+    if (tagMatch?.[1]) {
+      dirs.push({ kind: 'tag', raw: token, value: tagMatch[1] });
+      continue;
+    }
+    const nbMatch = token.match(/^notebook:(\S+)$/i);
+    if (nbMatch?.[1]) {
+      dirs.push({ kind: 'notebook', raw: token, value: nbMatch[1] });
+      continue;
+    }
+    const isMatch = token.match(/^is:(\S+)$/i);
+    if (isMatch?.[1]) {
+      const val = isMatch[1].toLowerCase();
+      if (val === 'pinned') {
+        dirs.push({ kind: 'pinned', raw: token, value: 'pinned' });
+        continue;
+      }
+      if (val === 'favorite' || val === 'fav') {
+        dirs.push({ kind: 'favorite', raw: token, value: 'favorite' });
+        continue;
+      }
+    }
+    parts.push(token);
+  }
+  return { textOnly: parts.join(' ').trim(), directives: dirs };
+}
+
 export function SearchBox() {
   const store = useStore();
   const [open, setOpen] = useState(false);
@@ -39,13 +104,19 @@ export function SearchBox() {
   const [currentPage, setCurrentPage] = useState(0);
   const [totalResults, setTotalResults] = useState(0);
   const [fuzzyFallback, setFuzzyFallback] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [searchHistory, setSearchHistory] = useState<string[]>(() => loadHistory());
   const inputRef = useRef<HTMLInputElement>(null);
   const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const pageSize = 5;
 
+  const directives = useMemo(() => parseDirectives(query), [query]);
+  const textQuery = directives.textOnly;
+
   const close = () => {
     setOpen(false);
+    setShowHistory(false);
   };
 
   const openSearch = () => {
@@ -54,9 +125,50 @@ export function SearchBox() {
     setResults([]);
     setTotalResults(0);
     setFuzzyFallback(false);
+    setShowHistory(true);
+    setSearchHistory(loadHistory());
     setOpen(true);
     window.setTimeout(() => inputRef.current?.focus(), 0);
   };
+
+  /** Apply parsed directives to the store as local filters. */
+  const applyDirectives = useCallback((dirs: SearchDirective[]) => {
+    for (const d of dirs) {
+      switch (d.kind) {
+        case 'tag': {
+          const cur = store.tags;
+          if (cur.includes(d.value)) {
+            store.setActiveTags((prev: string[]) =>
+              prev.includes(d.value) ? prev : [...prev, d.value],
+            );
+          }
+          break;
+        }
+        case 'notebook': {
+          const found = store.notebooks.find(
+            (nb: { name: string }) => nb.name.toLowerCase() === d.value.toLowerCase(),
+          );
+          if (found) store.setActiveNotebook(found.id);
+          break;
+        }
+        case 'pinned':
+          store.setCurrentFilter('pinned');
+          break;
+        case 'favorite':
+          store.setCurrentFilter('favorites');
+          break;
+      }
+    }
+  }, [store]);
+
+  const removeDirective = useCallback((kind: SearchDirective['kind']) => {
+    switch (kind) {
+      case 'tag': break; // tags are managed individually
+      case 'notebook': store.setActiveNotebook('all'); break;
+      case 'pinned': store.setCurrentFilter('all'); break;
+      case 'favorite': store.setCurrentFilter('all'); break;
+    }
+  }, [store]);
 
   useEffect(() => {
     if (!open || !query) {
@@ -67,9 +179,22 @@ export function SearchBox() {
       return;
     }
 
+    // Apply directives to store as side-effect
+    if (directives.directives.length > 0) {
+      applyDirectives(directives.directives);
+    }
+
+    // If no text query after stripping directives, skip backend search
+    if (!textQuery) {
+      setResults([]);
+      setTotalResults(0);
+      setLoading(false);
+      return;
+    }
+
     const t = window.setTimeout(async () => {
       // Check cache first
-      const cached = searchCache.get<SearchPage>('adv', query, 0);
+      const cached = searchCache.get<SearchPage>('adv', textQuery, 0);
       if (cached) {
         setTotalResults(cached.total_hits);
         setResults(
@@ -93,13 +218,13 @@ export function SearchBox() {
       const t0 = performance.now();
       try {
         const page = await tauriInvoke<SearchPage>('search_notes_advanced', {
-          query,
+          query: textQuery,
           limit: pageSize,
           offset: 0,
         });
 
         if (page && page.results.length > 0) {
-          searchCache.set('adv', query, 0, page);
+          searchCache.set('adv', textQuery, 0, page);
           setTotalResults(page.total_hits);
           setResults(
             page.results.map((hit: SearchResult) => ({
@@ -114,7 +239,7 @@ export function SearchBox() {
           setCurrentPage(0);
         } else {
           const fuzzyResults = await tauriInvoke<SearchResult[]>('search_notes_fuzzy', {
-            query,
+            query: textQuery,
           });
           if (fuzzyResults && fuzzyResults.length > 0) {
             setTotalResults(fuzzyResults.length);
@@ -141,30 +266,29 @@ export function SearchBox() {
       } finally {
         const elapsed = performance.now() - t0;
         if (elapsed > 100) {
-          console.debug(`[Perf] search "${query}" took ${elapsed.toFixed(0)}ms`);
+          console.debug(`[Perf] search "${textQuery}" took ${elapsed.toFixed(0)}ms`);
         }
         setLoading(false);
         setActiveIndex(0);
       }
-    }, 200); // Reduced from 300ms for snappier feel
+    }, 200);
 
     return () => window.clearTimeout(t);
-  }, [open, query]);
+  }, [open, textQuery, directives.directives, applyDirectives]);
 
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault();
-        openSearch();
-        return;
-      }
-      if (e.key === 'Escape' && open) {
-        close();
-        return;
-      }
+    const handler = () => openSearch();
+    window.addEventListener('noteforge:open-search', handler);
+    return () => window.removeEventListener('noteforge:open-search', handler);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!open) return;
+    const onEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') close();
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener('keydown', onEscape);
+    return () => window.removeEventListener('keydown', onEscape);
   }, [open]);  
 
   useEffect(() => {
@@ -176,12 +300,13 @@ export function SearchBox() {
   }, []);
 
   const loadPage = async (pageNum: number) => {
-    if (!query) return;
+    const useQuery = textQuery || query;
+    if (!useQuery) return;
 
     try {
       setLoading(true);
       const page = await tauriInvoke<SearchPage>('search_notes_advanced', {
-        query,
+        query: useQuery,
         limit: pageSize,
         offset: pageNum * pageSize,
       });
@@ -212,6 +337,9 @@ export function SearchBox() {
     const item = results[index];
     if (!item?.noteId) return;
 
+    pushHistory(textQuery || query);
+    setSearchHistory(loadHistory());
+
     setHighlightedId(item.noteId);
     store.selectNote(item.noteId);
     close();
@@ -222,6 +350,25 @@ export function SearchBox() {
     highlightTimeoutRef.current = setTimeout(() => {
       setHighlightedId(null);
     }, 2000);
+  };
+
+  const handleHistorySelect = (q: string) => {
+    setQuery(q);
+    setShowHistory(false);
+    setActiveIndex(0);
+    inputRef.current?.focus();
+  };
+
+  const clearHistory = () => {
+    saveHistory([]);
+    setSearchHistory([]);
+  };
+
+  const removeFilterChip = (d: SearchDirective) => {
+    // Remove directive from query
+    const parts = query.split(/\s+/).filter((t) => t !== d.raw);
+    setQuery(parts.join(' ').trim());
+    removeDirective(d.kind);
   };
 
   const totalPages = totalResults > 0 ? Math.ceil(totalResults / pageSize) : 0;
@@ -240,15 +387,19 @@ export function SearchBox() {
                 autoFocus
                 className="search-modal__input"
                 value={query}
+                onFocus={() => {
+                  if (!query) setShowHistory(true);
+                }}
                 onChange={(e) => {
                   const newValue = e.target.value;
                   setQuery(newValue);
                   setActiveIndex(0);
+                  setShowHistory(false);
                   if (newValue) {
                     setHighlightedId(null);
                   }
                 }}
-                placeholder="输入关键词搜索笔记..."
+                placeholder="搜索笔记... (支持 tag:  notebook:  is: 语法)"
                 onKeyDown={(e) => {
                   if (e.key === 'Escape') close();
                   if (e.key === 'ArrowDown') {
@@ -272,7 +423,42 @@ export function SearchBox() {
               </button>
             </div>
 
+            {/* Filter chips */}
+            {directives.directives.length > 0 && (
+              <div className="search-filter-chips">
+                {directives.directives.map((d) => (
+                  <span key={d.raw} className={`search-chip search-chip--${d.kind}`}>
+                    {d.kind === 'tag' && <>标签: {d.value}</>}
+                    {d.kind === 'notebook' && <>笔记本: {d.value}</>}
+                    {d.kind === 'pinned' && <>已固定</>}
+                    {d.kind === 'favorite' && <>收藏</>}
+                    <button className="search-chip__remove" onClick={() => removeFilterChip(d)}>×</button>
+                  </span>
+                ))}
+              </div>
+            )}
+
             <div className="search-modal__body">
+              {/* Search history dropdown */}
+              {!query && showHistory && searchHistory.length > 0 && (
+                <div className="search-history-dropdown">
+                  <div className="search-history-header">
+                    <span>最近搜索</span>
+                    <button className="search-history-clear" onClick={clearHistory}>清除</button>
+                  </div>
+                  {searchHistory.map((hq, i) => (
+                    <button
+                      key={hq}
+                      className="search-history-item"
+                      onClick={() => handleHistorySelect(hq)}
+                    >
+                      <span className="search-history-icon">⌕</span>
+                      <span className="search-history-query">{hq}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
               <div className="search-modal__section-header">
                 <span>
                   搜索结果 {loading && <span className="loading">搜索中...</span>}
@@ -286,11 +472,13 @@ export function SearchBox() {
               </div>
 
               {!query ? (
-                <div className="search-empty">
-                  <div className="search-empty__icon">⌕</div>
-                  <strong>输入关键词开始搜索</strong>
-                  <p>支持中文分词，自动模糊匹配</p>
-                </div>
+                searchHistory.length > 0 && !showHistory ? (
+                  <div className="search-empty">
+                    <div className="search-empty__icon">⌕</div>
+                    <strong>输入关键词开始搜索</strong>
+                    <p>支持中文分词，自动模糊匹配。支持 tag:name / notebook:name / is:pinned 语法。</p>
+                  </div>
+                ) : null
               ) : results.length === 0 && !loading ? (
                 <div className="search-empty">
                   <div className="search-empty__icon">⌕</div>
