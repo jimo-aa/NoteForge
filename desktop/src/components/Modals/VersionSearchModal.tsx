@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import '../../../styles/modals.css';
 import { tauriInvoke as invoke } from '@/utils/invoke';
 
@@ -22,6 +23,7 @@ export function VersionSearchModal({
   onClose: () => void;
   onSelect?: (result: VersionSearchResult) => void;
 }) {
+  const { t } = useTranslation();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<VersionSearchResult[]>([]);
   const [loading, setLoading] = useState(false);
@@ -65,7 +67,7 @@ export function VersionSearchModal({
     <div className="modal-backdrop" onClick={onClose}>
       <div className="version-search-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>搜索版本</h2>
+          <h2>{t('versionSearch.title')}</h2>
           <button className="modal-close" onClick={onClose}>×</button>
         </div>
 
@@ -75,7 +77,7 @@ export function VersionSearchModal({
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="搜索版本标题、摘要或笔记内容..."
+              placeholder={t('versionSearch.inputPlaceholder')}
               autoFocus
             />
             {query && (
@@ -93,20 +95,20 @@ export function VersionSearchModal({
               className={`tab ${searchMode === 'versions' ? 'active' : ''}`}
               onClick={() => setSearchMode('versions')}
             >
-              本笔记版本
+              {t('versionSearch.tabVersions')}
             </button>
             <button 
               className={`tab ${searchMode === 'global' ? 'active' : ''}`}
               onClick={() => setSearchMode('global')}
             >
-              全局搜索
+              {t('versionSearch.tabGlobal')}
             </button>
           </div>
         </div>
 
         <div className="modal-content-large">
           {loading ? (
-            <div className="loading-state">搜索中...</div>
+            <div className="loading-state">{t('versionSearch.searching')}</div>
           ) : query.trim() ? (
             results.length > 0 ? (
               <div className="search-results">
@@ -122,22 +124,22 @@ export function VersionSearchModal({
                     <div className="result-header">
                       <h4>{result.title}</h4>
                       {result.version_count && (
-                        <span className="version-count">{result.version_count} 个版本</span>
+                        <span className="version-count">{t('versionSearch.versionCount', { count: result.version_count })}</span>
                       )}
                     </div>
                     <p className="result-snippet">{result.snippet}</p>
                     <div className="result-meta">
-                      <span className="score">相关度: {(result.score * 100).toFixed(0)}%</span>
-                      <span className="time">{new Date(result.updated_at).toLocaleString('zh-CN')}</span>
+                      <span className="score">{t('versionSearch.relevance', { score: (result.score * 100).toFixed(0) })}</span>
+                      <span className="time">{new Date(result.updated_at).toLocaleString()}</span>
                     </div>
                   </div>
                 ))}
               </div>
             ) : (
-              <div className="empty-state">未找到匹配结果</div>
+              <div className="empty-state">{t('versionSearch.noResults')}</div>
             )
           ) : (
-            <div className="placeholder-state">输入关键词开始搜索</div>
+            <div className="placeholder-state">{t('versionSearch.startTyping')}</div>
           )}
         </div>
       </div>

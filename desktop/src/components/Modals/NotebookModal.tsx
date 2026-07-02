@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 
 export interface NotebookModalState {
   open: boolean;
@@ -28,6 +29,7 @@ interface NotebookModalProps {
 }
 
 export function NotebookModal({ state, onClose, onConfirm }: NotebookModalProps) {
+  const { t } = useTranslation();
   const [name, setName] = useState(state.value);
   const [selectedIcon, setSelectedIcon] = useState(NOTEBOOK_ICONS[0]!);
   const [selectedColor, setSelectedColor] = useState(NOTEBOOK_COLORS[0]!.value);
@@ -75,26 +77,26 @@ export function NotebookModal({ state, onClose, onConfirm }: NotebookModalProps)
         <div className="new-note-title">
           <span>{selectedIcon}</span>
           <h3>{state.title}</h3>
-          <button className="modal-close" onClick={onClose} type="button" aria-label="关闭">✕</button>
+          <button className="modal-close" onClick={onClose} type="button" aria-label={t('common.close')}>✕</button>
         </div>
 
         <label className="new-note-field new-note-field--full">
-          <span>名称</span>
+          <span>{t('notebook.name')}</span>
           <input
             ref={inputRef}
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder={isCreate ? '给笔记本起个名字吧' : '输入新名称'}
+            placeholder={isCreate ? t('notebook.namePlaceholderCreate') : t('notebook.namePlaceholderRename')}
             disabled={isLoading}
           />
           {!trimmedName && (
-            <span className="nb-field-hint nb-hint-error">名称不能为空</span>
+            <span className="nb-field-hint nb-hint-error">{t('notebook.nameRequired')}</span>
           )}
         </label>
 
         <div className="new-note-grid">
           <div className="new-note-field">
-            <span>图标</span>
+            <span>{t('notebook.icon')}</span>
             <div className="nb-icon-grid">
               {NOTEBOOK_ICONS.map((icon) => (
                 <button
@@ -111,7 +113,7 @@ export function NotebookModal({ state, onClose, onConfirm }: NotebookModalProps)
           </div>
 
           <div className="new-note-field">
-            <span>颜色</span>
+            <span>{t('notebook.color')}</span>
             <div className="nb-color-grid">
               {NOTEBOOK_COLORS.map((c) => (
                 <button
@@ -135,26 +137,26 @@ export function NotebookModal({ state, onClose, onConfirm }: NotebookModalProps)
 
         <div className="nb-preview-card">
           <span className="nb-preview-icon">{selectedIcon}</span>
-          <span className="nb-preview-name">{name.trim() || '笔记本名称'}</span>
+          <span className="nb-preview-name">{name.trim() || t('notebook.previewTitle')}</span>
           <span className="nb-preview-color-dot" style={{ backgroundColor: selectedColor }} />
-          <span className="nb-preview-count">0 条笔记</span>
+          <span className="nb-preview-count">{t('notebook.noteCount', { count: 0 })}</span>
         </div>
 
         <div className="nb-keyboard-hint">
-          <span>按 <kbd>Enter</kbd> {isCreate ? '创建' : '确认'}</span>
-          <span>按 <kbd>Esc</kbd> 取消</span>
+          <span>{t('notebook.hintEnterCreate')}</span>
+          <span>{t('notebook.hintEsc')}</span>
         </div>
 
         <div className="modal-actions new-note-actions">
           <button className="ghost-btn" onClick={onClose} disabled={isLoading}>
-            取消
+            {t('common.cancel')}
           </button>
           <button
             className="primary-btn"
             onClick={handleConfirm}
             disabled={!name.trim() || isLoading}
           >
-            {isLoading ? '处理中...' : isCreate ? '创建笔记本' : '确认'}
+            {isLoading ? t('notebook.processing') : isCreate ? t('notebook.confirmCreate') : t('notebook.confirmRename')}
           </button>
         </div>
       </div>

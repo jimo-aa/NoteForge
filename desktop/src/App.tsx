@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useStore } from '@/stores/context';
 import { tauriInvoke } from '@/utils/invoke';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
@@ -17,11 +18,13 @@ import { ErrorBoundary } from '@/components/Common/ErrorBoundary';
 import { ManageModal } from '@/components/Modals/ManageModal';
 import { DraftRecoveryModal } from '@/components/Modals/DraftRecoveryModal';
 import { EncryptionModal } from '@/components/Modals/EncryptionModal';
+import { AboutModal } from '@/components/Modals/AboutModal';
 import { WelcomeGuide } from '@/components/Modals/WelcomeGuide';
 import type { NotebookModalState } from '@/components/Modals/NotebookModal';
 
 export default function App() {
   const store = useStore();
+  const { t } = useTranslation();
   const storeRef = useRef(store);
   useEffect(() => { storeRef.current = store; });
   const [newNoteOpen, setNewNoteOpen] = useState(false);
@@ -38,7 +41,7 @@ export default function App() {
   // Centralized keyboard shortcuts via configurable system
   useKeyboardShortcuts({
     'new-note': () => setNewNoteOpen(true),
-    'new-notebook': () => setNotebookModal({ open: true, mode: 'create' as const, title: '新建笔记本', value: '' }),
+    'new-notebook': () => setNotebookModal({ open: true, mode: 'create' as const, title: t('notebook.create'), value: '' }),
     'search': () => window.dispatchEvent(new CustomEvent('noteforge:open-search')),
     'search-advanced': () => setAdvancedVersioningOpen(true),
     'settings': () => setManageOpen(true),
@@ -49,7 +52,7 @@ export default function App() {
     'toggle-graph': () => store.setIsGraphOpen(!store.isGraphOpen),
     'toggle-favorite': () => { if (store.currentNote) store.toggleFavorite(store.currentNote.meta.id); },
     'toggle-properties': () => store.setIsPropertiesOpen(!store.isPropertiesOpen),
-    'save-draft': () => { if (store.currentNote) { store.saveDraft(store.currentNote.meta.id, store.currentNote.content); store.showToast('success', '已手动保存'); } },
+    'save-draft': () => { if (store.currentNote) { store.saveDraft(store.currentNote.meta.id, store.currentNote.content); store.showToast('success', t('note.savedManually')); } },
     'toggle-sidebar': () => { /* sidebar always visible in current layout */ },
   });
 
@@ -77,7 +80,7 @@ export default function App() {
         // Try to show a toast through the store if available
         const s = storeRef.current;
         if (s && s.showToast) {
-          s.showToast('error', `发生错误: ${crashData.error.slice(0, 60)}`);
+          s.showToast('error', t('note.errorWithMsg', { error: crashData.error.slice(0, 60) }));
         }
       } catch { /* ignore storage errors */ }
       event.preventDefault();
@@ -106,6 +109,7 @@ export default function App() {
   }, []);
 
   const [encryptionLockOpen, setEncryptionLockOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
   const encryptionCheckRef = useRef(false);
 
   // 启动时检测是否需要输入加密密码解锁
@@ -146,7 +150,7 @@ export default function App() {
           if (payload?.noteId) {
             storeRef.current.selectNote(payload.noteId);
             const note = await tauriInvoke<{ meta: { id: string }; content: string }>('get_note', { id: payload.noteId });
-            if (note) storeRef.current.showToast('success', `已跳转到第 ${payload.line} 行`);
+            if (note) storeRef.current.showToast('success', t('note.jumpToLine', { line: payload.line }));
           }
         });
       } catch {
@@ -160,7 +164,7 @@ export default function App() {
     setNotebookModal({
       open: true,
       mode: 'create',
-      title: '新建笔记本',
+      title: t('notebook.create'),
       value: '',
     });
   };
@@ -182,29 +186,29 @@ export default function App() {
   return (
     <ErrorBoundary>
       <div className="app-shell">
-        <Sidebar onNewNote={() => setNewNoteOpen(true)} onNewNotebook={handleOpenNotebookModal} onManage={() => setManageOpen(true)} onDraftRecovery={() => setDraftRecoveryOpen(true)} />
+        <Sidebar onNewNote={() => setNewNoteOpen(true)} onNewNotebook={handleOpenNotebookModal} onManage={() => setManageOpen(true)} onDraftRecovery={() => setDraftRecoveryOpen(true)} onAbout={() => setAboutOpen(true)} />
         <main className="main-panel"><div className="main-surface"><div className="content-layout"><section className="note-list-column"><NoteList /></section><section className="preview-column"><Editor /></section></div></div></main>
-        <NewNoteModal open={newNoteOpen} notebooks={store.notebooks} onClose={() => setNewNoteOpen(false)} onCreate={async ({ title, content, notebookId, tags }) => { const result = await store.createNote(title, content, notebookId, tags); if (result) { store.showToast('success', '✓ 已创建笔记'); setNewNoteOpen(false); } else { store.showToast('error', '创建笔记失败，请重试'); } }} />
+        <NewNoteModal open={newNoteOpen} notebooks={store.notebooks} onClose={() => setNewNoteOpen(false)} onCreate={async ({ title, content, notebookId, tags }) => { const result = await store.createNote(title, content, notebookId, tags); if (result) { store.showToast('success', t('note.created')); setNewNoteOpen(false); } else { store.showToast('error', t('note.createFailed')); } }} />
         <NotebookModal state={notebookModal} onClose={() => setNotebookModal({ open: false, mode: null, title: '', value: '' })} onConfirm={handleConfirmNotebook} />
         <EntityModal state={store.entityModal} onClose={store.closeEntityModal} onConfirm={async (value) => {
           if (!value) {
-            store.showToast('error', '输入内容不能为空');
+            store.showToast('error', t('note.inputRequired'));
             return;
           }
           const targetId = store.entityModal.targetId;
           if (store.entityModal.mode === 'create-notebook') {
             const result = await store.createNotebook(value);
             if (!result) {
-              store.showToast('error', '创建笔记本失败，请检查后端服务');
+              store.showToast('error', t('note.createNotebookFailed'));
             }
           } else if (store.entityModal.mode === 'rename-notebook' && targetId) {
             const result = await store.renameNotebook(targetId, value);
             if (!result) {
-              store.showToast('error', '重命名笔记本失败');
+              store.showToast('error', t('note.renameNotebookFailed'));
             }
           } else if (store.entityModal.mode === 'rename-note' && targetId) {
             store.updateNote(targetId, { title: value });
-            store.showToast('success', '✏️ 已重命名笔记');
+            store.showToast('success', t('note.renameSuccess'));
           }
           store.closeEntityModal();
         }} />
@@ -219,6 +223,7 @@ export default function App() {
         <ManageModal open={manageOpen} onClose={() => setManageOpen(false)} />
         <DraftRecoveryModal open={draftRecoveryOpen} onClose={() => setDraftRecoveryOpen(false)} />
         <EncryptionModal open={encryptionLockOpen} onClose={() => setEncryptionLockOpen(false)} />
+        <AboutModal open={aboutOpen} onClose={() => setAboutOpen(false)} />
         <WelcomeGuide open={store.showWelcomeGuide} onClose={() => store.setShowWelcomeGuide(false)} />
         {store.toasts.map((t) => (<Toast key={t.id} message={t.message} />))}
       </div>

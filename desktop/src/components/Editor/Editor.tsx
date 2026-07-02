@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useStore } from '../../stores/context';
 import { renderMarkdown, formatTable, TABLE_CELL_KEYS } from '@/utils/markdown';
 import { VersionControlModal } from '@/components/Modals/VersionControlModal';
@@ -9,23 +10,24 @@ import hljs from 'highlight.js';
 import 'highlight.js/styles/github.css';
 
 
-const MARKDOWN_ACTIONS = [
-  { label: 'B', title: '粗体', before: '**', after: '**' },
-  { label: 'I', title: '斜体', before: '*', after: '*' },
-  { label: 'S', title: '删除线', before: '~~', after: '~~' },
-  { label: '`', title: '行内代码', before: '`', after: '`' },
-  { label: 'H', title: '标题', before: '## ', after: '' },
-  { label: '•', title: '无序列表', before: '- ', after: '' },
-  { label: '1.', title: '有序列表', before: '1. ', after: '' },
-  { label: '□', title: '任务', before: '- [ ] ', after: '' },
-  { label: '“', title: '引用', before: '> ', after: '' },
-  { label: '</>', title: '代码块', before: '```\n', after: '\n```' },
-  { label: '🔗', title: '链接', before: '[', after: '](https://)' },
-  { label: '▦', title: '表格', before: '\n| 列1 | 列2 | 列3 |\n|---|---|---|\n| | | |\n', after: '' },
-  { label: '—', title: '分割线', before: '\n---\n', after: '' },
+const MARKDOWN_ACTIONS_BASE = [
+  { label: 'B', before: '**', after: '**' },
+  { label: 'I', before: '*', after: '*' },
+  { label: 'S', before: '~~', after: '~~' },
+  { label: '`', before: '`', after: '`' },
+  { label: 'H', before: '## ', after: '' },
+  { label: '•', before: '- ', after: '' },
+  { label: '1.', before: '1. ', after: '' },
+  { label: '□', before: '- [ ] ', after: '' },
+  { label: '“', before: '> ', after: '' },
+  { label: '</>', before: '```\n', after: '\n```' },
+  { label: '🔗', before: '[', after: '](https://)' },
+  { label: '▦', before: '\n| 列1 | 列2 | 列3 |\n|---|---|---|\n| | | |\n', after: '' },
+  { label: '—', before: '\n---\n', after: '' },
 ];
 
 export function Editor() {
+  const { t } = useTranslation();
   const {
     notes,
     currentNote,
@@ -52,6 +54,22 @@ export function Editor() {
     lastSavedAt,
   } = useStore();
 
+  const actionTitles: Record<string, string> = useMemo(() => ({
+    'B': t('note.bold'),
+    'I': t('note.italic'),
+    'S': t('note.strikethrough'),
+    '`': t('note.inlineCode'),
+    'H': t('note.heading'),
+    '•': t('note.unorderedList'),
+    '1.': t('note.orderedList'),
+    '□': t('note.taskList'),
+    '“': t('note.blockquote'),
+    '</>': t('note.codeBlock'),
+    '🔗': t('note.link'),
+    '▦': t('note.table'),
+    '—': t('note.horizontalRule'),
+  }), [t]);
+
   const note = currentNote;
   const cmRef = useRef<CodeMirrorHandle>(null);
   const autosaveTimerRef = useRef<number | null>(null);
@@ -77,7 +95,7 @@ export function Editor() {
     const draft = loadDraft(note.meta.id);
     if (draft && draft !== note.content) {
       updateNote(note.meta.id, { content: draft });
-      showToast('info', '已恢复草稿');
+      showToast('info', t('note.draftRestored'));
     }
   }, [loadCursor, loadDraft, note, showToast, updateNote]);
 
@@ -211,7 +229,7 @@ export function Editor() {
                   lines[i] = toggled;
                   updateContent(lines.join('\n'));
                   cmRef.current?.setContent(lines.join('\n'));
-                  showToast('success', isChecked ? '已标记未完成' : '已标记完成');
+                  showToast('success', isChecked ? t('note.taskIncompleted') : t('note.taskCompleted'));
                 }
                 return;
               }
@@ -228,9 +246,9 @@ export function Editor() {
       e.preventDefault();
       const code = copyBtn.getAttribute('data-code') || '';
       void navigator.clipboard.writeText(code).then(() => {
-        showToast('success', '代码已复制');
+        showToast('success', t('note.codeCopied'));
       }).catch(() => {
-        showToast('error', '复制失败');
+        showToast('error', t('note.copyFailed'));
       });
       return;
     }
@@ -335,7 +353,7 @@ export function Editor() {
     link.download = `${note.meta.title || 'note'}.md`;
     link.click();
     URL.revokeObjectURL(url);
-    showToast('success', '已下载 Markdown 文件');
+    showToast('success', t('note.markdownDownloaded'));
   };
 
   const insertImage = (file: File) => {
@@ -343,7 +361,7 @@ export function Editor() {
     reader.onload = () => {
       const dataUrl = String(reader.result || '');
       cmRef.current?.insertTextAtCursor(`![${file.name}](${dataUrl})`);
-      showToast('success', '已插入图片');
+      showToast('success', t('note.imageInserted'));
     };
     reader.readAsDataURL(file);
   };
@@ -371,11 +389,11 @@ export function Editor() {
           const next = content.slice(0, sel.from) + formatted + content.slice(sel.to);
           updateContent(next);
           cmRef.current.setContent(next);
-          showToast('success', '表格已格式化');
+          showToast('success', t('note.tableFormatted'));
         }
         return;
       }
-      showToast('info', '请将光标放在表格行上');
+      showToast('info', t('note.tableCursorHint'));
       return;
     }
     for (let i = tableStart; i < lines.length; i++) {
@@ -389,9 +407,9 @@ export function Editor() {
       const next = before + (before ? '\n' : '') + formatted + (after ? '\n' : '') + after;
       updateContent(next);
       cmRef.current.setContent(next);
-      showToast('success', '表格已格式化');
+      showToast('success', t('note.tableFormatted'));
     } else {
-      showToast('info', '表格已经对齐');
+      showToast('info', t('note.tableAligned'));
     }
   };
 
@@ -414,8 +432,8 @@ export function Editor() {
     return (
       <section className="editor-workspace">
         <div className="empty-state">
-          <h2>请选择左侧笔记开始编辑</h2>
-          <p>这里会呈现标签、Markdown 编辑、实时预览与属性信息。</p>
+          <h2>{t('note.selectNoteHint')}</h2>
+          <p>{t('note.selectNoteDesc')}</p>
         </div>
       </section>
     );
@@ -428,37 +446,37 @@ export function Editor() {
     <section className={isResizing ? 'editor-workspace is-resizing' : 'editor-workspace'}>
       <div className="editor-tabs">
         {currentTags.map((tag) => (
-          <button key={tag} className="editor-tab" onClick={() => updateNote(meta.id, { tags: currentTags.filter((item) => item !== tag) })} title="点击移除标签">
+          <button key={tag} className="editor-tab" onClick={() => updateNote(meta.id, { tags: currentTags.filter((item) => item !== tag) })} title={t('note.tagRemoveHint')}>
             <span>{tag}</span><span>×</span>
           </button>
         ))}
-        <button className="editor-tab add" onClick={() => setTagModalOpen(true)}>＋ 添加标签</button>
-        <button className="editor-tab add" onClick={() => setVersionControlOpen(true)}>⏱ 版本控制</button>
+        <button className="editor-tab add" onClick={() => setTagModalOpen(true)}>{t('manage.tabTags')}</button>
+        <button className="editor-tab add" onClick={() => setVersionControlOpen(true)}>⏱ {t('version.title')}</button>
       </div>
       <header className="document-header">
         <input className="document-title" value={meta.title} onChange={(event) => updateNote(meta.id, { title: event.target.value })} />
         <div className="document-actions">
-          <button className={meta.isFavorite ? 'state-button active' : 'state-button'} onClick={() => toggleFavorite(meta.id)} title={meta.isFavorite ? '取消收藏' : '收藏'}><Icon type="shoucang" /></button>
-          <button className={meta.isPinned ? 'state-button active' : 'state-button'} onClick={() => togglePin(meta.id)} title={meta.isPinned ? '取消固定' : '固定'}><Icon type="gudin" /></button>
+          <button className={meta.isFavorite ? 'state-button active' : 'state-button'} onClick={() => toggleFavorite(meta.id)} title={meta.isFavorite ? t('note.unfavorite') : t('note.favorite')}><Icon type="shoucang" /></button>
+          <button className={meta.isPinned ? 'state-button active' : 'state-button'} onClick={() => togglePin(meta.id)} title={meta.isPinned ? t('note.unpin') : t('note.pin')}><Icon type="gudin" /></button>
           <span className="document-divider" />
-          <button className="plain-action" onClick={() => setIsPropertiesOpen(true)} title="属性">i</button>
-          <button className="plain-action" onClick={() => { clearDraft(meta.id); showToast('success', '草稿已清除'); }} title="清除草稿">↺</button>
-          <button className="plain-action" onClick={exportedFile} title="下载">⬇</button>
-          <button className={attachmentPanelOpen ? 'state-button active' : 'plain-action'} onClick={() => setAttachmentPanelOpen((v) => !v)} title="附件">📎</button>
+          <button className="plain-action" onClick={() => setIsPropertiesOpen(true)} title={t('note.properties')}>i</button>
+          <button className="plain-action" onClick={() => { clearDraft(meta.id); showToast('success', t('note.draftCleared')); }} title={t('note.clearDraft')}>↺</button>
+          <button className="plain-action" onClick={exportedFile} title={t('note.download')}>⬇</button>
+          <button className={attachmentPanelOpen ? 'state-button active' : 'plain-action'} onClick={() => setAttachmentPanelOpen((v) => !v)} title={t('attachment.title')}>📎</button>
         </div>
       </header>
       <div className="markdown-toolbar">
         <div className="markdown-buttons">
-          {MARKDOWN_ACTIONS.map((action) => (
-            <button key={action.title} className="markdown-button" title={action.title} onClick={() => insertMarkdown(action.before, action.after)}>
+          {MARKDOWN_ACTIONS_BASE.map((action) => (
+            <button key={action.label} className="markdown-button" title={actionTitles[action.label]} onClick={() => insertMarkdown(action.before, action.after)}>
               {action.label}
             </button>
           ))}
-          <button className="markdown-button" title="格式化表格（对齐列宽）" onClick={handleFormatTable}>
-            ⊞ 表格
+          <button className="markdown-button" title={t('note.formatTable')} onClick={handleFormatTable}>
+            ⊞ {t('note.table')}
           </button>
         </div>
-        <button className={isPreviewVisible ? 'preview-toggle active' : 'preview-toggle'} onClick={() => setIsPreviewVisible(!isPreviewVisible)}>👁 预览</button>
+        <button className={isPreviewVisible ? 'preview-toggle active' : 'preview-toggle'} onClick={() => setIsPreviewVisible(!isPreviewVisible)}>👁 {t('editor.preview')}</button>
       </div>
       <div className={isPreviewVisible ? 'split-editor' : 'split-editor no-preview'}>
         <div className="markdown-editor-pane" style={{ flexBasis: isPreviewVisible ? `${editorWidth}%` : '100%' }}>
@@ -467,14 +485,14 @@ export function Editor() {
               <span className="editor-search-label">🔍 {searchQuery}</span>
               {searchMatchInfo ? (
                 <span className="editor-search-count">
-                  {searchMatchInfo.current}/{searchMatchInfo.total} 个匹配
+                  {searchMatchInfo.current}/{searchMatchInfo.total} {t('search.searchResults')}
                 </span>
               ) : (
-                <span className="editor-search-count">0 个匹配</span>
+                <span className="editor-search-count">0 {t('search.searchResults')}</span>
               )}
               <button
                 className="editor-search-nav"
-                title="上一个匹配 (Shift+Enter)"
+                title={t('note.prevMatch')}
                 onClick={() => {
                   cmRef.current?.highlightPrev();
                   setSearchMatchInfo(cmRef.current?.getMatchInfo() ?? null);
@@ -482,7 +500,7 @@ export function Editor() {
               >▲</button>
               <button
                 className="editor-search-nav"
-                title="下一个匹配 (Enter)"
+                title={t('note.nextMatch')}
                 onClick={() => {
                   cmRef.current?.highlightNext();
                   setSearchMatchInfo(cmRef.current?.getMatchInfo() ?? null);
@@ -490,7 +508,7 @@ export function Editor() {
               >▼</button>
               <button
                 className="editor-search-close"
-                title="清除搜索"
+                title={t('note.clearSearch')}
                 onClick={() => setSearchQuery('')}
               >✕</button>
             </div>
@@ -509,6 +527,15 @@ export function Editor() {
             }}
             onImagePaste={handleImagePaste}
             onImageDrop={handleImageDrop}
+            onWikiLinkClick={(title) => {
+              const found = notes.find((n) => n.meta.title.toLowerCase() === title.toLowerCase());
+              if (found) {
+                selectNote(found.meta.id);
+        showToast('info', t('note.jumpedToNote', { title: found.meta.title }));
+              } else {
+        showToast('error', t('note.noteNotFound', { title }));
+              }
+            }}
           />
           {wikiOpen && (
             <div className="wiki-autocomplete" onKeyDown={handleEditorKeyDown}>
@@ -517,8 +544,8 @@ export function Editor() {
                 <button key={title} className={index === wikiActiveIndex ? 'wiki-autocomplete-item active' : 'wiki-autocomplete-item'} onMouseDown={(event) => { event.preventDefault(); commitWikiLink(title); }}>
                   {title}
                 </button>
-              )) : <div className="wiki-autocomplete-empty">没有匹配结果</div>}
-              <div className="wiki-autocomplete-empty">提示：输入 [[标题 触发补全，Esc 关闭</div>
+              )) : <div className="wiki-autocomplete-empty">{t('note.noWikiMatch')}</div>}
+              <div className="wiki-autocomplete-empty">{t('note.wikiHint')}</div>
             </div>
           )}
         </div>
@@ -544,7 +571,7 @@ export function Editor() {
                 {hoverPreviewContent ? (
                   <div className="wiki-link-preview-content">{hoverPreviewContent}</div>
                 ) : (
-                  <div className="wiki-link-preview-empty">未找到笔记</div>
+                  <div className="wiki-link-preview-empty">{t('note.noteNotFoundSimple')}</div>
                 )}
               </div>
             )}
@@ -557,17 +584,17 @@ export function Editor() {
         </div>
       )}
       <footer className="document-statusbar">
-        <span>字数 {meta.wordCount}</span>
-        <span>行 {note.content.split('\n').length}</span>
-        <span className={`editor-status-indicator status-${saveStatus}`} title={saveStatus === 'saving' ? '正在保存...' : saveStatus === 'unsaved' ? '有未保存的修改' : '已保存'}>
+        <span>{t('editor.chars')} {meta.wordCount}</span>
+        <span>{t('editor.lines')} {note.content.split('\n').length}</span>
+        <span className={`editor-status-indicator status-${saveStatus}`} title={saveStatus === 'saving' ? t('editor.saveStatus_saving') : saveStatus === 'unsaved' ? t('note.unsavedChanges') : t('editor.saveStatus_saved')}>
           <span className="status-dot" />
-          <span className="status-text">{saveStatus === 'saving' ? '保存中...' : saveStatus === 'unsaved' ? '未保存' : '已保存'}</span>
+          <span className="status-text">{saveStatus === 'saving' ? t('editor.saveStatus_saving') : saveStatus === 'unsaved' ? t('editor.saveStatus_unsaved') : t('editor.saveStatus_saved')}</span>
         </span>
-        {jumpLine ? <span>跳转到第 {jumpLine} 行</span> : null}
+        {jumpLine ? <span>{t('note.jumpToLine', { line: jumpLine })}</span> : null}
         <span className="status-timestamp">
           {lastSavedAt
-            ? (Date.now() - lastSavedAt < 3000 ? '刚刚保存' : `最后保存：${new Date(lastSavedAt).toLocaleString('zh-CN')}`)
-            : `最后编辑：${new Date(meta.updatedAt).toLocaleString('zh-CN')}`}
+            ? (Date.now() - lastSavedAt < 3000 ? t('note.savedJustNow') : `${t('note.lastSavedAt')}${new Date(lastSavedAt).toLocaleString()}`)
+            : `${t('note.lastEditedAt')}${new Date(meta.updatedAt).toLocaleString()}`}
         </span>
       </footer>
       <VersionControlModal
@@ -582,25 +609,25 @@ export function Editor() {
       {isPropertiesOpen && (
         <aside className="note-properties-drawer">
           <div className="drawer-header">
-            <h3>笔记属性</h3>
+            <h3>{t('note.properties')}</h3>
             <button onClick={() => setIsPropertiesOpen(false)}>×</button>
           </div>
           <section>
-            <div className="property-row"><span>标题</span><strong>{meta.title}</strong></div>
-            <div className="property-row"><span>创建时间</span><strong>{new Date(meta.createdAt).toLocaleString('zh-CN')}</strong></div>
-            <div className="property-row"><span>更新时间</span><strong>{new Date(meta.updatedAt).toLocaleString('zh-CN')}</strong></div>
-            <div className="property-row"><span>字数</span><strong>{meta.wordCount}</strong></div>
-            <div className="property-row"><span>标签</span><strong>{currentTags.length ? currentTags.join('、') : '无'}</strong></div>
-            <div className="property-row"><span>收藏</span><strong>{meta.isFavorite ? '是' : '否'}</strong></div>
-            <div className="property-row"><span>固定</span><strong>{meta.isPinned ? '是' : '否'}</strong></div>
+            <div className="property-row"><span>{t('noteModal.titleLabel')}</span><strong>{meta.title}</strong></div>
+            <div className="property-row"><span>{t('note.createdAt')}</span><strong>{new Date(meta.createdAt).toLocaleString()}</strong></div>
+            <div className="property-row"><span>{t('note.updatedAt')}</span><strong>{new Date(meta.updatedAt).toLocaleString()}</strong></div>
+            <div className="property-row"><span>{t('editor.chars')}</span><strong>{meta.wordCount}</strong></div>
+            <div className="property-row"><span>{t('manage.tabTags')}</span><strong>{currentTags.length ? currentTags.join(', ') : t('common.no')}</strong></div>
+            <div className="property-row"><span>{t('note.favorite')}</span><strong>{meta.isFavorite ? t('common.yes') : t('common.no')}</strong></div>
+            <div className="property-row"><span>{t('note.pin')}</span><strong>{meta.isPinned ? t('common.yes') : t('common.no')}</strong></div>
           </section>
-          {/* 反向链接面板 */}
+          {/* Backlinks */}
           <div className="backlinks-section">
-            <h4>反向链接 ({backlinks.length})</h4>
+            <h4>{t('note.backlinks')} ({backlinks.length})</h4>
             {backlinksLoading ? (
-              <div className="backlinks-loading">加载中...</div>
+              <div className="backlinks-loading">{t('common.loading')}</div>
             ) : backlinks.length === 0 ? (
-              <div className="backlinks-empty">没有笔记引用此笔记</div>
+              <div className="backlinks-empty">{t('note.noBacklinks')}</div>
             ) : (
               <ul className="backlinks-list">
                 {backlinks.map((bl) => (
@@ -621,21 +648,21 @@ export function Editor() {
       {tagModalOpen && (
         <div className="tag-modal-backdrop" onClick={() => setTagModalOpen(false)}>
           <div className="tag-modal" onClick={(event) => event.stopPropagation()}>
-            <div className="tag-modal-header"><h3>添加标签</h3><button onClick={() => setTagModalOpen(false)}>×</button></div>
-            <input value={tagDraft} onChange={(event) => setTagDraft(event.target.value)} placeholder="输入新标签名称" autoFocus />
+            <div className="tag-modal-header"><h3>{t('manage.tabTags')}</h3><button onClick={() => setTagModalOpen(false)}>×</button></div>
+            <input value={tagDraft} onChange={(event) => setTagDraft(event.target.value)} placeholder={t('tag.inputPlaceholder')} autoFocus />
             <div className="tag-modal-actions">
-              <button className="ghost-btn" onClick={() => setTagModalOpen(false)}>取消</button>
+              <button className="ghost-btn" onClick={() => setTagModalOpen(false)}>{t('common.cancel')}</button>
               <button className="primary-btn" onClick={() => {
                 const cleanTag = tagDraft.trim().replace(/^#/, '');
                 if (!cleanTag) return;
                 if (currentTags.includes(cleanTag)) {
-                  showToast('info', '标签已存在');
+                  showToast('info', t('tag.tagExists'));
                   return;
                 }
                 updateNote(meta.id, { tags: [...currentTags, cleanTag] });
                 setTagDraft('');
                 setTagModalOpen(false);
-              }}>添加</button>
+              }}>{t('tag.addTag')}</button>
             </div>
           </div>
         </div>

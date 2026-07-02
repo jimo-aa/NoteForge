@@ -11,6 +11,7 @@ import type {
 
 const AUTH_TOKEN_KEY = 'noteforge:auth:access-token';
 const SYNC_API_BASE = 'http://localhost:8081/api/v1/sync';
+const PENDING_QUEUE_KEY = 'noteforge:sync:pending-queue';
 
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 1000;
@@ -50,14 +51,36 @@ export class SyncService {
     void this.loadPendingQueue();
   }
 
-  // ── Pending queue persistence (SQLite via Tauri) ──
+  // ── Pending queue persistence (SQLite via Tauri + localStorage fallback) ──
+
+  /** Load queue from localStorage (browser-only mode fallback) */
+  private loadFromLocalStorage(): SyncChangeItem[] {
+    try {
+      const raw = window.localStorage.getItem(PENDING_QUEUE_KEY);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+
+  /** Save queue to localStorage */
+  private saveToLocalStorage(): void {
+    try {
+      window.localStorage.setItem(PENDING_QUEUE_KEY, JSON.stringify(this.pendingQueue));
+    } catch { /* localStorage full or unavailable */ }
+  }
 
   private async loadPendingQueue(): Promise<void> {
+    // Try Tauri SQLite first
     try {
       const items = await invoke<SyncQueueItem[]>('get_pending_sync_changes');
       this.pendingQueue = items.map((item) => JSON.parse(item.payload) as SyncChangeItem);
+      return;
     } catch {
-      this.pendingQueue = [];
+      // Tauri invoke failed (browser-only mode) — fall back to localStorage
+      this.pendingQueue = this.loadFromLocalStorage();
     }
   }
 
@@ -172,6 +195,8 @@ export class SyncService {
         if (pushResult) {
           // Remove accepted changes from queue
           this.pendingQueue = this.pendingQueue.slice(pushResult.accepted);
+          // Update localStorage immediately
+          this.saveToLocalStorage();
           // Clear the SQLite queue and re-add remaining items
           if (pushResult.accepted > 0) {
             try {
@@ -197,7 +222,7 @@ export class SyncService {
     }
   }
 
-  // ── Change queue (persisted to SQLite) ──
+  // ── Change queue (persisted to SQLite + localStorage fallback) ──
 
   queueChange(change: SyncChangeItem) {
     // Replace existing pending change for same noteId in memory
@@ -207,7 +232,9 @@ export class SyncService {
     } else {
       this.pendingQueue.push(change);
     }
-    // Persist to SQLite
+    // Always persist to localStorage (works in browser-only mode)
+    this.saveToLocalStorage();
+    // Also persist to Tauri SQLite if available
     const operation = change.isDeleted ? 'delete' : 'update';
     void invoke('enqueue_sync_change', {
       noteId: change.noteId,

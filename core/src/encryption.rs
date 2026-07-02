@@ -160,7 +160,7 @@ impl EncryptionManager {
     pub fn generate_salt() -> String {
         let mut rng = rand::thread_rng();
         let salt_bytes: [u8; 16] = rng.gen();
-        hex::encode(&salt_bytes)
+        hex::encode(salt_bytes)
     }
 }
 

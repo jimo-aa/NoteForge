@@ -33,6 +33,22 @@ services:
     networks:
       - noteforge-net
 
+  # === Elasticsearch (可选 — 全文搜索升级) ===
+  elasticsearch:
+    image: elasticsearch:8.12.0
+    container_name: noteforge-es
+    environment:
+      discovery.type: single-node
+      ES_JAVA_OPTS: -Xms512m -Xmx512m
+      xpack.security.enabled: "false"
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    volumes:
+      - esdata:/usr/share/elasticsearch/data
+    networks:
+      - noteforge-net
+
   # === MinIO (对象存储) ===
   minio:
     image: minio/minio
@@ -122,6 +138,34 @@ services:
     networks:
       - noteforge-net
 
+  # === Prometheus ===
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: noteforge-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - promdata:/prometheus
+    networks:
+      - noteforge-net
+
+  # === Grafana ===
+  grafana:
+    image: grafana/grafana:latest
+    container_name: noteforge-grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./grafana/datasources:/etc/grafana/provisioning/datasources
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - grafanadata:/var/lib/grafana
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: "Viewer"
+    networks:
+      - noteforge-net
+
 networks:
   noteforge-net:
     driver: bridge
@@ -129,4 +173,7 @@ networks:
 volumes:
   pgdata:
   redisdata:
+  esdata:
   miniodata:
+  promdata:
+  grafanadata:

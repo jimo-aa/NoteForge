@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import '../../../styles/modals.css';
 import { tauriInvoke as invoke } from '@/utils/invoke';
 
@@ -24,6 +25,7 @@ export function MilestoneModal({
   onClose: () => void;
   onCheckout?: (milestoneId: string) => Promise<void>;
 }) {
+  const { t } = useTranslation();
   const [milestones, setMilestones] = useState<Milestone[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedMilestone, setSelectedMilestone] = useState<Milestone | null>(null);
@@ -87,7 +89,7 @@ export function MilestoneModal({
   };
 
   const handleDelete = async (milestoneId: string) => {
-    if (!confirm('确定要删除此里程碑吗？')) return;
+    if (!confirm(t('milestone.confirmDelete'))) return;
 
     const result = await invoke<boolean>('delete_milestone', {
       note_id: noteId,
@@ -130,13 +132,13 @@ export function MilestoneModal({
     <div className="modal-backdrop" onClick={onClose}>
       <div className="milestone-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>里程碑管理</h2>
+          <h2>{t('milestone.manage')}</h2>
           <button className="modal-close" onClick={onClose}>×</button>
         </div>
 
         {loading ? (
           <div className="modal-content-large">
-            <div className="loading-state">加载中...</div>
+            <div className="loading-state">{t('common.loading')}</div>
           </div>
         ) : (
           <>
@@ -151,7 +153,7 @@ export function MilestoneModal({
                     >
                       <div className="milestone-header">
                         <h4>{milestone.name}</h4>
-                        <span className="version-badge">v{milestone.version_number}</span>
+                        <span className="version-badge">{t('milestone.version', { number: milestone.version_number })}</span>
                       </div>
                       {milestone.description && (
                         <p className="milestone-description">{milestone.description}</p>
@@ -164,27 +166,27 @@ export function MilestoneModal({
                         </div>
                       )}
                       <div className="milestone-meta">
-                        {new Date(milestone.created_at).toLocaleString('zh-CN')}
+                        {new Date(milestone.created_at).toLocaleString()}
                       </div>
                       <div className="milestone-actions">
                         <button 
                           className="action-btn checkout"
                           onClick={(e) => { e.stopPropagation(); void handleCheckout(milestone.id); }}
-                          title="切换到此里程碑"
+                          title={t('milestone.checkoutHint')}
                         >
-                          ↩ 回到
+                          ↩ {t('milestone.back')}
                         </button>
                         <button 
                           className="action-btn edit"
                           onClick={(e) => { e.stopPropagation(); startEdit(milestone); }}
-                          title="编辑里程碑"
+                          title={t('milestone.edit')}
                         >
                           ✎
                         </button>
                         <button 
                           className="action-btn delete"
                           onClick={(e) => { e.stopPropagation(); void handleDelete(milestone.id); }}
-                          title="删除里程碑"
+                          title={t('milestone.delete')}
                         >
                           🗑
                         </button>
@@ -192,7 +194,7 @@ export function MilestoneModal({
                     </div>
                   ))
                 ) : (
-                  <div className="empty-state">暂无里程碑</div>
+                  <div className="empty-state">{t('milestone.empty')}</div>
                 )}
               </div>
             </div>
@@ -208,26 +210,26 @@ export function MilestoneModal({
                   }
                 }}
               >
-                {editingId ? '保存修改' : showCreateForm ? '取消' : '+ 新建里程碑'}
+                {editingId ? t('milestone.saveEdit') : showCreateForm ? t('common.cancel') : t('milestone.createNew')}
               </button>
             </div>
 
             {(showCreateForm || editingId) && (
               <div className="milestone-form">
                 <div className="form-group">
-                  <label>名称 *</label>
+                  <label>{t('milestone.nameRequired')}</label>
                   <input 
                     type="text"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    placeholder="例如：v1.0-Release"
+                    placeholder={t('milestone.namePlaceholder')}
                     autoFocus
                   />
                 </div>
 
                 {!editingId && (
                   <div className="form-group">
-                    <label>版本号</label>
+                    <label>{t('milestone.versionNumber')}</label>
                     <input 
                       type="number"
                       value={formData.version_number}
@@ -238,22 +240,22 @@ export function MilestoneModal({
                 )}
 
                 <div className="form-group">
-                  <label>描述</label>
+                  <label>{t('milestone.description')}</label>
                   <textarea 
                     value={formData.description}
                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    placeholder="记录此里程碑的关键特性..."
+                    placeholder={t('milestone.descriptionPlaceholder')}
                     rows={3}
                   />
                 </div>
 
                 <div className="form-group">
-                  <label>标签 (逗号分隔)</label>
+                  <label>{t('milestone.tagsLabel')}</label>
                   <input 
                     type="text"
                     value={formData.tags}
                     onChange={(e) => setFormData({ ...formData, tags: e.target.value })}
-                    placeholder="例如：stable, production, beta"
+                    placeholder={t('milestone.tagsPlaceholder')}
                   />
                 </div>
 
@@ -265,14 +267,14 @@ export function MilestoneModal({
                       if (!editingId) setShowCreateForm(false);
                     }}
                   >
-                    取消
+                    {t('common.cancel')}
                   </button>
                   <button 
                     className="primary-btn"
                     onClick={editingId ? handleUpdate : handleCreate}
                     disabled={!formData.name.trim()}
                   >
-                    {editingId ? '保存' : '创建'}
+                    {editingId ? t('milestone.save') : t('milestone.create')}
                   </button>
                 </div>
               </div>

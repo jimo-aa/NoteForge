@@ -1,0 +1,97 @@
+{
+  "__inputs": [],
+  "__requires": [],
+  "title": "NoteForge — Note Service",
+  "uid": "noteforge-note-service",
+  "schemaVersion": 38,
+  "version": 1,
+  "tags": ["noteforge", "spring"],
+  "panels": [
+    {
+      "title": "JVM Heap Memory",
+      "type": "graph",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        { "expr": "jvm_memory_used_bytes{area=\"heap\"}", "legendFormat": "Used" },
+        { "expr": "jvm_memory_max_bytes{area=\"heap\"}", "legendFormat": "Max" }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "bytes" }
+      }
+    },
+    {
+      "title": "JVM Non-Heap Memory",
+      "type": "graph",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        { "expr": "jvm_memory_used_bytes{area=\"nonheap\"}", "legendFormat": "Used" },
+        { "expr": "jvm_memory_max_bytes{area=\"nonheap\"}", "legendFormat": "Max" }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "bytes" }
+      }
+    },
+    {
+      "title": "HTTP Request Rate",
+      "type": "graph",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        { "expr": "rate(http_server_requests_seconds_count[1m])", "legendFormat": "Requests/s" }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "reqps" }
+      }
+    },
+    {
+      "title": "P99 Latency",
+      "type": "graph",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        { "expr": "histogram_quantile(0.99, rate(http_server_requests_seconds_bucket[1m]))", "legendFormat": "P99" }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "s" }
+      }
+    },
+    {
+      "title": "HTTP Error Rate (5xx)",
+      "type": "graph",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "targets": [
+        { "expr": "rate(http_server_requests_seconds_count{status=~\"5..\"}[1m])", "legendFormat": "5xx/s" }
+      ]
+    },
+    {
+      "title": "GC Pause Duration",
+      "type": "graph",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "targets": [
+        { "expr": "rate(jvm_gc_pause_seconds_sum[1m])", "legendFormat": "GC pause" }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "s" }
+      }
+    },
+    {
+      "title": "CPU Usage",
+      "type": "graph",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "targets": [
+        { "expr": "system_cpu_usage", "legendFormat": "System" },
+        { "expr": "process_cpu_usage", "legendFormat": "Process" }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "percentunit" }
+      }
+    },
+    {
+      "title": "Active Threads",
+      "type": "graph",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "targets": [
+        { "expr": "jvm_threads_live_threads", "legendFormat": "Live" },
+        { "expr": "jvm_threads_daemon_threads", "legendFormat": "Daemon" }
+      ]
+    }
+  ]
+}

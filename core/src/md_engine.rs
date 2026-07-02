@@ -117,7 +117,7 @@ impl MarkdownEngine {
         AstNode::Document { children }
     }
 
-    fn push_node(node: AstNode, stack: &mut Vec<(AstNode, Vec<AstNode>)>, root: &mut Vec<AstNode>) {
+    fn push_node(node: AstNode, stack: &mut [(AstNode, Vec<AstNode>)], root: &mut Vec<AstNode>) {
         if let Some((_, children)) = stack.last_mut() {
             children.push(node);
         } else {
@@ -125,7 +125,7 @@ impl MarkdownEngine {
         }
     }
 
-    fn push_text_nodes(text: &str, stack: &mut Vec<(AstNode, Vec<AstNode>)>, root: &mut Vec<AstNode>) {
+    fn push_text_nodes(text: &str, stack: &mut [(AstNode, Vec<AstNode>)], root: &mut Vec<AstNode>) {
         let wiki_re = Self::wiki_link_regex();
         let mut last = 0;
         for cap in wiki_re.captures_iter(text) {

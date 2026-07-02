@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { tauriInvoke as invoke } from '@/utils/invoke';
 import type { GitVersionEntry, GitBranchEntry } from '@/types';
 
@@ -15,6 +16,7 @@ export function VersionControlModal({ open, noteId, onClose, onCheckoutVersion, 
   onCreateBranch: (branch: string, fromCommit?: string) => Promise<boolean>;
   onRestore: () => void;
 }) {
+  const { t } = useTranslation();
   const [versions, setVersions] = useState<GitVersionEntry[]>([]);
   const [branches, setBranches] = useState<GitBranchEntry[]>([]);
   const [branchCommits, setBranchCommits] = useState<Record<string, GitVersionEntry[]>>({});
@@ -192,19 +194,19 @@ export function VersionControlModal({ open, noteId, onClose, onCheckoutVersion, 
     <div className="modal-backdrop" onClick={onClose}>
       <div className="version-control-modal fixed-size" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>版本控制</h2>
+          <h2>{t('version.controlTitle')}</h2>
           <button className="modal-close" onClick={onClose}>×</button>
         </div>
 
         <div className="modal-tabs horizontal">
           <button className={`modal-tab ${tab === 'tree' ? 'active' : ''}`} onClick={() => setTab('tree')}>
-            🌳 分支树
+            {t('version.treeTab')}
           </button>
           <button className={`modal-tab ${tab === 'versions' ? 'active' : ''}`} onClick={() => setTab('versions')}>
-            ⏱ 版本历史 {versions.length > 0 ? `(${versions.length})` : ''}
+            {t('version.versionsTab')} {versions.length > 0 ? `(${versions.length})` : ''}
           </button>
           <button className={`modal-tab ${tab === 'branches' ? 'active' : ''}`} onClick={() => setTab('branches')}>
-            🔀 分支管理 {branches.length > 0 ? `(${branches.length})` : ''}
+            {t('version.branchesTab')} {branches.length > 0 ? `(${branches.length})` : ''}
           </button>
         </div>
 
@@ -212,12 +214,12 @@ export function VersionControlModal({ open, noteId, onClose, onCheckoutVersion, 
           {tab === 'tree' && (
             <div className="tree-tab">
               <div className="tree-header">
-                <button className="primary-btn small" onClick={() => setShowCreateVersion(true)}>
-                  + 新建版本
-                </button>
-              </div>
-              {loadingBranches ? (
-                <div className="tab-loading">加载中...</div>
+                  <button className="primary-btn small" onClick={() => setShowCreateVersion(true)}>
+                    {t('version.newVersion')}
+                  </button>
+                </div>
+                {loadingBranches ? (
+                  <div className="tab-loading">{t('common.loading')}</div>
               ) : branches.length > 0 ? (
                 <div className="branch-tree">
                   {branches.map((branch) => (
@@ -235,7 +237,7 @@ export function VersionControlModal({ open, noteId, onClose, onCheckoutVersion, 
                               <div className="commit-dot" />
                               <div className="commit-info">
                                 <div className="commit-title">{version.title}</div>
-                                <div className="commit-meta">{new Date(version.updatedAt).toLocaleString('zh-CN')}</div>
+                                 <div className="commit-meta">{relativeTime(version.updatedAt)}</div>
                               </div>
                               <button 
                                 className="commit-action" 
@@ -263,18 +265,18 @@ export function VersionControlModal({ open, noteId, onClose, onCheckoutVersion, 
                 <div className="list-header">
                   <div className="list-header-row">
                     <button className="primary-btn small" onClick={() => setShowCreateVersion(true)}>
-                      + 新建版本
+                      {t('version.newVersion')}
                     </button>
                     <input
                       className="version-filter-input"
                       value={versionFilter}
                       onChange={(e) => setVersionFilter(e.target.value)}
-                      placeholder="搜索版本..."
+                      placeholder={t('version.searchVersions')}
                     />
                   </div>
                 </div>
                 {loadingVersions ? (
-                  <div className="tab-loading">加载版本中...</div>
+                  <div className="tab-loading">{t('version.loadingVersions')}</div>
                 ) : filteredVersions.length > 0 ? (
                   <div className="versions-list">
                     {filteredVersions.map((version) => (
@@ -289,26 +291,26 @@ export function VersionControlModal({ open, noteId, onClose, onCheckoutVersion, 
                           <button 
                             className="version-restore"
                             onClick={(e) => { e.stopPropagation(); void handleCheckoutVersion(version.id); }}
-                            disabled={checkingOut}
-                            title="恢复此版本"
-                          >
-                            ↩
-                          </button>
-                          <button
-                            className="version-delete"
-                            onClick={(e) => { e.stopPropagation(); void handleDeleteVersion(version.id); }}
-                            disabled={deletingVersion === version.id}
-                            title="删除此版本"
-                          >
-                            🗑
-                          </button>
+                               disabled={checkingOut}
+                               title={t('version.restoreHint')}
+                             >
+                               ↩
+                             </button>
+                             <button
+                               className="version-delete"
+                               onClick={(e) => { e.stopPropagation(); void handleDeleteVersion(version.id); }}
+                               disabled={deletingVersion === version.id}
+                                title={t('version.deleteHint')}
+                              >
+                                🗑
+                              </button>
                         </div>
                       </div>
                     ))}
                   </div>
                 ) : (
                   <div className="tab-empty">
-                    {versionFilter ? '没有匹配的版本' : '暂无版本历史'}
+                    {versionFilter ? t('version.noMatch') : t('version.noVersions')}
                   </div>
                 )}
               </div>
@@ -317,7 +319,7 @@ export function VersionControlModal({ open, noteId, onClose, onCheckoutVersion, 
                   <div className="preview-panel">
                     <div className="preview-header">
                       <h3>{selectedVersion.title}</h3>
-                      <span className="preview-time">{new Date(selectedVersion.updatedAt).toLocaleString('zh-CN')}</span>
+                      <span className="preview-time">{relativeTime(selectedVersion.updatedAt)}</span>
                     </div>
                     <div className="preview-header-actions">
                       <button
@@ -328,13 +330,13 @@ export function VersionControlModal({ open, noteId, onClose, onCheckoutVersion, 
                             detail: { noteId, commitId: selectedVersion.id, content: previewContent },
                           }));
                         }}
-                        title="对比当前笔记内容"
+                        title={t('version.diffHint')}
                       >
-                        ↔ Diff
+                        ↔ {t('version.diff')}
                       </button>
                     </div>
                     {loadingPreview ? (
-                      <div className="preview-loading">加载内容中...</div>
+                      <div className="preview-loading">{t('version.loadingContent')}</div>
                     ) : (
                       <div className="preview-content">
                         <pre>{previewContent}</pre>
@@ -342,13 +344,13 @@ export function VersionControlModal({ open, noteId, onClose, onCheckoutVersion, 
                     )}
                     {selectedVersion.summary && (
                       <div className="preview-footer">
-                        <p><strong>描述：</strong></p>
+                        <p><strong>{t('version.versionDesc')}：</strong></p>
                         <p>{selectedVersion.summary}</p>
                       </div>
                     )}
                   </div>
                 ) : (
-                  <div className="preview-empty">选择版本查看内容</div>
+                  <div className="preview-empty">{t('version.selectVersion')}</div>
                 )}
               </div>
             </div>
@@ -357,7 +359,7 @@ export function VersionControlModal({ open, noteId, onClose, onCheckoutVersion, 
           {tab === 'branches' && (
             <div className="branches-tab">
               {loadingBranches ? (
-                <div className="tab-loading">加载分支中...</div>
+                <div className="tab-loading">{t('version.loadingBranches')}</div>
               ) : branches.length > 0 ? (
                     <div className="branches-list">
                   {branches.map((branch) => (
@@ -371,8 +373,8 @@ export function VersionControlModal({ open, noteId, onClose, onCheckoutVersion, 
                       </div>
                       <div className="branch-actions">
                         {!branch.isCurrent && (
-                          <button className="branch-action" onClick={() => void handleCheckoutBranch(branch.name)} disabled={checkingOut} title="切换到此分支">
-                            切换
+                          <button className="branch-action" onClick={() => void handleCheckoutBranch(branch.name)} disabled={checkingOut} title={t('version.switchHint')}>
+                            {t('version.switchBranch')}
                           </button>
                         )}
                         {branch.name !== 'main' && (
@@ -380,7 +382,7 @@ export function VersionControlModal({ open, noteId, onClose, onCheckoutVersion, 
                             className="branch-action delete" 
                             onClick={() => void handleDeleteBranch(branch.name)}
                             disabled={deletingBranch === branch.name}
-                            title="删除此分支"
+                            title={t('version.deleteBranchHint')}
                           >
                             🗑
                           </button>
@@ -389,36 +391,36 @@ export function VersionControlModal({ open, noteId, onClose, onCheckoutVersion, 
                     </div>
                   ))}
                   <button className="create-branch-btn" onClick={() => setShowCreateBranch(true)}>
-                    + 新建分支
+                    {t('version.newBranch')}
                   </button>
                 </div>
               ) : (
-                <div className="tab-empty">暂无分支</div>
+                <div className="tab-empty">{t('version.noBranches')}</div>
               )}
 
               {showCreateBranch && (
                 <div className="create-branch-form">
                   <div className="form-group">
-                    <label>分支名称</label>
-                    <input value={newBranchName} onChange={(e) => setNewBranchName(e.target.value)} placeholder="输入新分支名" autoFocus />
+                    <label>{t('version.branchName')}</label>
+                    <input value={newBranchName} onChange={(e) => setNewBranchName(e.target.value)} placeholder={t('version.branchNamePlaceholder')} autoFocus />
                   </div>
                   <div className="form-group">
-                    <label>基于版本 (可选)</label>
+                    <label>{t('version.branchBaseVersion')}</label>
                     <select value={selectedVersionForBranch || ''} onChange={(e) => setSelectedVersionForBranch(e.target.value || null)}>
-                      <option value="">使用当前版本</option>
+                      <option value="">{t('version.branchBaseCurrent')}</option>
                       {versions.map((v) => (
                         <option key={v.id} value={v.id}>
-                          {v.title} - {new Date(v.updatedAt).toLocaleString('zh-CN')}
+                          {v.title} - {relativeTime(v.updatedAt)}
                         </option>
                       ))}
                     </select>
                   </div>
                   <div className="form-actions">
                     <button className="ghost-btn" onClick={() => { setShowCreateBranch(false); setSelectedVersionForBranch(null); setNewBranchName(''); }}>
-                      取消
+                      {t('version.cancel')}
                     </button>
                     <button className="primary-btn" onClick={() => void handleCreateBranch()} disabled={!newBranchName.trim() || checkingOut}>
-                      创建
+                      {t('version.create')}
                     </button>
                   </div>
                 </div>
@@ -430,34 +432,34 @@ export function VersionControlModal({ open, noteId, onClose, onCheckoutVersion, 
             <div className="modal-backdrop-inner" onClick={() => setShowCreateVersion(false)}>
               <div className="create-version-modal" onClick={(e) => e.stopPropagation()}>
                 <div className="modal-header">
-                  <h3>新建版本</h3>
+                  <h3>{t('version.newVersionTitle')}</h3>
                   <button className="modal-close" onClick={() => setShowCreateVersion(false)}>×</button>
                 </div>
                 <div className="create-version-form">
                   <div className="form-group">
-                    <label>版本标题</label>
+                    <label>{t('version.versionTitle')}</label>
                     <input 
                       value={newVersionTitle} 
                       onChange={(e) => setNewVersionTitle(e.target.value)} 
-                      placeholder="例如：重构介绍段落" 
+                      placeholder={t('version.versionTitlePlaceholder')} 
                       autoFocus 
                     />
                   </div>
                   <div className="form-group">
-                    <label>版本描述 (可选)</label>
+                    <label>{t('version.versionDesc')}</label>
                     <textarea 
                       value={newVersionDesc} 
                       onChange={(e) => setNewVersionDesc(e.target.value)} 
-                      placeholder="记录此版本的改动内容"
+                      placeholder={t('version.versionDescPlaceholder')}
                       rows={3}
                     />
                   </div>
                   <div className="form-actions">
                     <button className="ghost-btn" onClick={() => { setShowCreateVersion(false); setNewVersionTitle(''); setNewVersionDesc(''); }}>
-                      取消
+                      {t('version.cancel')}
                     </button>
                     <button className="primary-btn" onClick={() => void handleCreateVersion()} disabled={!newVersionTitle.trim() || creatingVersion}>
-                      {creatingVersion ? '创建中...' : '创建'}
+                      {creatingVersion ? t('version.creating') : t('version.create')}
                     </button>
                   </div>
                 </div>

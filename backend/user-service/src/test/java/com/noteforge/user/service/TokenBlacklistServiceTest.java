@@ -2,48 +2,76 @@ package com.noteforge.user.service;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.ValueOperations;
 
 import java.time.Instant;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 
+@ExtendWith(MockitoExtension.class)
 class TokenBlacklistServiceTest {
+
+    @Mock
+    private StringRedisTemplate redisTemplate;
+
+    @Mock
+    private ValueOperations<String, String> valueOps;
 
     private TokenBlacklistService service;
 
     @BeforeEach
     void setUp() {
-        service = new TokenBlacklistService();
+        lenient().when(redisTemplate.opsForValue()).thenReturn(valueOps);
+        service = new TokenBlacklistService(redisTemplate);
     }
 
     @Test
-    void blacklist_shouldMarkTokenAsBlacklisted() {
+    void blacklist_shouldStoreTokenInRedisWithTtl() {
         String token = "test-jwt-token";
         long futureExpiry = Instant.now().toEpochMilli() + 60_000;
+
         service.blacklist(token, futureExpiry);
+
+        verify(valueOps).set(eq("token:blacklist:" + token), eq("1"), longThat(ttl -> ttl > 0 && ttl <= 60_000), eq(TimeUnit.MILLISECONDS));
+    }
+
+    @Test
+    void blacklist_shouldSkip_whenTokenAlreadyExpired() {
+        String token = "expired-token";
+        long pastExpiry = Instant.now().toEpochMilli() - 1;
+
+        service.blacklist(token, pastExpiry);
+
+        verify(valueOps, never()).set(anyString(), anyString(), anyLong(), any(TimeUnit.class));
+    }
+
+    @Test
+    void isBlacklisted_shouldReturnTrue_whenTokenExists() {
+        String token = "blacklisted-token";
+        when(redisTemplate.hasKey("token:blacklist:" + token)).thenReturn(true);
+
         assertTrue(service.isBlacklisted(token));
     }
 
     @Test
-    void isBlacklisted_shouldReturnFalseForUnknownToken() {
-        assertFalse(service.isBlacklisted("unknown-token"));
+    void isBlacklisted_shouldReturnFalse_forUnknownToken() {
+        String token = "unknown-token";
+        when(redisTemplate.hasKey("token:blacklist:" + token)).thenReturn(false);
+
+        assertFalse(service.isBlacklisted(token));
     }
 
     @Test
-    void isBlacklisted_shouldReturnFalseForExpiredBlacklistEntry() throws InterruptedException {
-        // Blacklist with a 0ms expiry (immediately expired)
-        service.blacklist("expired-token", Instant.now().toEpochMilli());
-        // Ensure the expiry has passed
-        Thread.sleep(10);
-        assertFalse(service.isBlacklisted("expired-token"));
-    }
-
-    @Test
-    void evictExpired_shouldRemoveExpiredEntries() {
-        service.blacklist("token-1", Instant.now().toEpochMilli() + 10_000);
-        service.blacklist("token-2", Instant.now().toEpochMilli() - 1); // already expired
+    void evictExpired_shouldBeNoOp() {
+        // Redis handles TTL eviction; this method should not throw
         service.evictExpired();
-        assertTrue(service.isBlacklisted("token-1"));
-        assertFalse(service.isBlacklisted("token-2"));
+        verifyNoInteractions(redisTemplate);
     }
 }

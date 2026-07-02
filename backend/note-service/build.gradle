@@ -33,6 +33,9 @@ dependencies {
     // Redis (conditional — used only when spring.cache.type=redis)
     implementation 'org.springframework.boot:spring-boot-starter-data-redis'
 
+    // Elasticsearch (conditional — used only when spring.elasticsearch.enabled=true)
+    implementation 'org.springframework.boot:spring-boot-starter-data-elasticsearch'
+
     // Database
     runtimeOnly 'org.postgresql:postgresql'
 
@@ -46,6 +49,9 @@ dependencies {
 
     // API Documentation (SpringDoc OpenAPI)
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0'
+
+    // Monitoring (Prometheus)
+    implementation 'io.micrometer:micrometer-registry-prometheus'
 
     // Utils
     compileOnly 'org.projectlombok:lombok'

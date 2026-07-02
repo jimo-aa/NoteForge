@@ -12,9 +12,12 @@ pub mod storage;
 pub mod search;
 pub mod types;
 pub mod encryption;
+pub mod metrics;
+pub mod error;
 
 use std::path::Path;
 use tracing::info;
+use error::CoreError;
 
 /// NoteForge 核心引擎
 pub struct NoteForge {
@@ -24,7 +27,7 @@ pub struct NoteForge {
 
 impl NoteForge {
     /// 打开（或创建）一个笔记本仓库
-    pub fn open<P: AsRef<Path>>(data_dir: P) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn open<P: AsRef<Path>>(data_dir: P) -> Result<Self, CoreError> {
         let data_dir = data_dir.as_ref();
         std::fs::create_dir_all(data_dir)?;
 

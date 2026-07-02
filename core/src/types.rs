@@ -147,7 +147,7 @@ fn uuid_v4() -> String {
     format!(
         "{:08x}-{:04x}-4{:03x}-{:04x}-{:012x}",
         (now >> 32) as u32,
-        (now >> 16) as u16 & 0xFFFF,
+        (now >> 16) as u16,
         (now & 0xFFFF) as u16,
         ((now >> 48) as u16 & 0x3FFF) | 0x8000,
         (now as u64 >> 8) & 0xFFFFFFFFFFFF

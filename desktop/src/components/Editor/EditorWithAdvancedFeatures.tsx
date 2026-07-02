@@ -1,5 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { tauriInvoke as invoke } from '@/utils/invoke';
+import { useStore } from '@/stores/context';
 import type { Note } from '@/types';
 import { DiffViewerModal } from '../Modals/DiffViewerModal';
 import { MilestoneModal } from '../Modals/MilestoneModal';
@@ -19,6 +21,8 @@ export function EditorWithAdvancedFeatures({
   onSave: (content: string) => Promise<void>;
   onRefresh: () => Promise<void>;
 }) {
+  const { t } = useTranslation();
+  const { notebooks } = useStore();
   // ============================================================
   // 状态管理
   // ============================================================
@@ -110,7 +114,7 @@ export function EditorWithAdvancedFeatures({
   if (!note) {
     return (
       <div className="editor-empty">
-        <p>选择一个笔记来开始编辑</p>
+        <p>{t('editorAdvanced.selectNote')}</p>
       </div>
     );
   }
@@ -120,19 +124,17 @@ export function EditorWithAdvancedFeatures({
       {/* 高级功能工具栏 */}
       <div className="advanced-features-toolbar">
         <div className="toolbar-section">
-          <span className="section-label">🚀 高级功能</span>
+          <span className="section-label">{t('editorAdvanced.title')}</span>
 
-          {/* Diff对比 */}
           <button
             className="toolbar-btn"
             onClick={() => void handleOpenDiffViewer()}
-            title="对比两个版本的差异"
+            title={t('editorAdvanced.diffTitle')}
             disabled={loadingVersions}
           >
-            📊 Diff
+            {t('editorAdvanced.diff')}
           </button>
 
-          {/* 版本选择 */}
           {selectedVersions.from && selectedVersions.to && (
             <div className="version-select-group">
               <select
@@ -141,7 +143,7 @@ export function EditorWithAdvancedFeatures({
                   setSelectedVersions({ ...selectedVersions, from: e.target.value })
                 }
                 className="version-select mini"
-                title="选择源版本"
+                title={t('editorAdvanced.sourceVersion')}
               >
                 {versions.map((v) => (
                   <option key={v.id} value={v.id}>
@@ -156,7 +158,7 @@ export function EditorWithAdvancedFeatures({
                   setSelectedVersions({ ...selectedVersions, to: e.target.value })
                 }
                 className="version-select mini"
-                title="选择目标版本"
+                title={t('editorAdvanced.targetVersion')}
               >
                 {versions.map((v) => (
                   <option key={v.id} value={v.id}>
@@ -169,49 +171,45 @@ export function EditorWithAdvancedFeatures({
         </div>
 
         <div className="toolbar-section">
-          {/* 里程碑 */}
           <button
             className="toolbar-btn"
             onClick={() => setShowMilestones(true)}
-            title="管理版本里程碑"
+            title={t('editorAdvanced.milestoneTitle')}
           >
-            🎯 里程碑
+            {t('editorAdvanced.milestone')}
           </button>
 
-          {/* 版本搜索 */}
           <button
             className="toolbar-btn"
             onClick={() => setShowVersionSearch(true)}
-            title="搜索版本历史"
+            title={t('editorAdvanced.versionSearchTitle')}
           >
-            🔍 搜索
+            {t('editorAdvanced.versionSearch')}
           </button>
 
-          {/* 导出/备份 */}
           <button
             className="toolbar-btn"
             onClick={() => setShowExportBackup(true)}
-            title="导出或备份笔记"
+            title={t('editorAdvanced.exportTitle')}
           >
-            📤 导出/备份
+            {t('editorAdvanced.export')}
           </button>
         </div>
 
-        {/* 编辑/预览切换 */}
         <div className="toolbar-section">
           <button
             className={`toolbar-btn ${editorMode === 'edit' ? 'active' : ''}`}
             onClick={() => setEditorMode('edit')}
-            title="编辑模式"
+            title={t('editorAdvanced.editModeTitle')}
           >
-            ✎ 编辑
+            {t('editorAdvanced.editMode')}
           </button>
           <button
             className={`toolbar-btn ${editorMode === 'preview' ? 'active' : ''}`}
             onClick={() => setEditorMode('preview')}
-            title="预览模式"
+            title={t('editorAdvanced.previewModeTitle')}
           >
-            👁️ 预览
+            {t('editorAdvanced.previewMode')}
           </button>
         </div>
       </div>
@@ -224,7 +222,7 @@ export function EditorWithAdvancedFeatures({
             onChange={(e) => setContent(e.target.value)}
             onBlur={() => void onSave(content)}
             className="editor-textarea"
-            placeholder="开始编写笔记..."
+            placeholder={t('editor.placeholder')}
             spellCheck="false"
           />
         ) : (
@@ -240,13 +238,13 @@ export function EditorWithAdvancedFeatures({
       {/* 底部状态栏 */}
       <div className="editor-statusbar">
         <span className="status-item">
-          {content.length} 字符
+          {content.length} {t('editorAdvanced.chars')}
         </span>
         <span className="status-item">
-          {content.split('\n').length} 行
+          {content.split('\n').length} {t('editorAdvanced.lines')}
         </span>
         <span className="status-item">
-          {Math.ceil(content.split(/\s+/).length)} 词
+          {Math.ceil(content.split(/\s+/).length)} {t('editorAdvanced.words')}
         </span>
       </div>
 
@@ -277,7 +275,7 @@ export function EditorWithAdvancedFeatures({
         noteId={note.meta.id}
         noteTitle={note.meta.title}
         notebookId={note.meta.notebookId ?? undefined}
-        notebookName="笔记本"
+        notebookName={notebooks.find((nb) => nb.id === note.meta.notebookId)?.name ?? ''}
         onClose={() => setShowExportBackup(false)}
       />
     </div>

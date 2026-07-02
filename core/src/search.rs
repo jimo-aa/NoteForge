@@ -12,6 +12,7 @@ use jieba_rs::Jieba;
 use lazy_static::lazy_static;
 
 use crate::types::{SearchResult, now_ms};
+use crate::error::CoreError;
 
 lazy_static! {
     static ref JIEBA: Jieba = Jieba::new();
@@ -45,7 +46,7 @@ impl SearchEngine {
         words.join(" ")
     }
 
-    pub fn open<P: AsRef<Path>>(index_dir: P) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn open<P: AsRef<Path>>(index_dir: P) -> Result<Self, CoreError> {
         let schema = Self::build_schema();
         let index = if index_dir.as_ref().exists() {
             Index::open_in_dir(&index_dir)?
@@ -58,7 +59,7 @@ impl SearchEngine {
         Ok(Self { index, schema, writer })
     }
 
-    pub fn add_note(&mut self, id: &str, title: &str, content: &str, tags: &[String], updated_at: u64) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn add_note(&mut self, id: &str, title: &str, content: &str, tags: &[String], updated_at: u64) -> Result<(), CoreError> {
         let id_field = self.schema.get_field("id").unwrap();
         let title_field = self.schema.get_field("title").unwrap();
         let content_field = self.schema.get_field("content").unwrap();
@@ -82,12 +83,12 @@ impl SearchEngine {
         Ok(())
     }
 
-    pub fn commit(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn commit(&mut self) -> Result<(), CoreError> {
         self.writer.commit()?;
         Ok(())
     }
 
-    pub fn remove_note(&mut self, id: &str) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn remove_note(&mut self, id: &str) -> Result<(), CoreError> {
         let id_field = self.schema.get_field("id").unwrap();
         self.writer.delete_term(Term::from_field_text(id_field, id));
         Ok(())
@@ -130,7 +131,7 @@ impl SearchEngine {
         }
     }
 
-    pub fn search(&self, query_str: &str, limit: usize) -> Result<Vec<SearchResult>, Box<dyn std::error::Error>> {
+    pub fn search(&self, query_str: &str, limit: usize) -> Result<Vec<SearchResult>, CoreError> {
         let title_field = self.schema.get_field("title").unwrap();
         let content_field = self.schema.get_field("content").unwrap();
         let tags_field = self.schema.get_field("tags").unwrap();
@@ -192,7 +193,7 @@ impl SearchEngine {
         Ok(results)
     }
 
-    pub fn search_paginated(&self, query_str: &str, options: SearchOptions) -> Result<SearchPage, Box<dyn std::error::Error>> {
+    pub fn search_paginated(&self, query_str: &str, options: SearchOptions) -> Result<SearchPage, CoreError> {
         let title_field = self.schema.get_field("title").unwrap();
         let content_field = self.schema.get_field("content").unwrap();
         let tags_field = self.schema.get_field("tags").unwrap();
@@ -257,7 +258,7 @@ impl SearchEngine {
         Ok(SearchPage { results, total_hits })
     }
 
-    pub fn search_in_note(&self, note_id: &str, query_str: &str, limit: usize) -> Result<Vec<SearchResult>, Box<dyn std::error::Error>> {
+    pub fn search_in_note(&self, note_id: &str, query_str: &str, limit: usize) -> Result<Vec<SearchResult>, CoreError> {
         let id_field = self.schema.get_field("id").unwrap();
         let title_field = self.schema.get_field("title").unwrap();
         let content_field = self.schema.get_field("content").unwrap();
@@ -327,7 +328,7 @@ impl SearchEngine {
         Ok(results)
     }
 
-    pub fn search_fuzzy(&self, query_str: &str, limit: usize) -> Result<Vec<SearchResult>, Box<dyn std::error::Error>> {
+    pub fn search_fuzzy(&self, query_str: &str, limit: usize) -> Result<Vec<SearchResult>, CoreError> {
         let title_field = self.schema.get_field("title").unwrap();
         let content_field = self.schema.get_field("content").unwrap();
         let tags_field = self.schema.get_field("tags").unwrap();
@@ -408,7 +409,7 @@ impl SearchEngine {
         Ok(results)
     }
 
-    pub fn get_trending_queries(&self, _limit: usize) -> Result<Vec<(String, u32)>, Box<dyn std::error::Error>> {
+    pub fn get_trending_queries(&self, _limit: usize) -> Result<Vec<(String, u32)>, CoreError> {
         Ok(Vec::new())
     }
 }

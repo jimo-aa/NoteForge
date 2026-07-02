@@ -69,6 +69,12 @@ jobs:
         run: cargo test
         working-directory: core
 
+      - name: cargo audit
+        run: |
+          cargo install cargo-audit
+          cargo audit
+        working-directory: core
+
       - name: Backend build & tests
         run: ./gradlew build
         working-directory: backend

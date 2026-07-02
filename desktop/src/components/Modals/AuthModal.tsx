@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/stores/authStore';
 
 type AuthTab = 'login' | 'register';
@@ -12,6 +13,7 @@ interface AuthModalProps {
 }
 
 export function AuthModal({ open, onClose }: AuthModalProps) {
+  const { t } = useTranslation();
   const { login, register, isLoading } = useAuth();
   const [tab, setTab] = useState<AuthTab>('login');
   const [loginEmail, setLoginEmail] = useState('');
@@ -45,29 +47,29 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
     setError('');
 
     if (tab === 'login') {
-      if (!loginEmail.trim()) { setError('请输入邮箱'); return; }
-      if (!password) { setError('请输入密码'); return; }
+      if (!loginEmail.trim()) { setError(t('auth.error_required')); return; }
+      if (!password) { setError(t('auth.error_required')); return; }
 
       const result = await login(loginEmail.trim(), password);
       if (result.success) {
         resetForm();
         onClose();
       } else {
-        setError(result.message || '登录失败');
+        setError(result.message || t('auth.error_invalid'));
       }
     } else {
-      if (!registerName.trim()) { setError('请输入昵称'); return; }
-      if (!registerEmail.trim()) { setError('请输入邮箱'); return; }
-      if (!registerPassword) { setError('请输入密码'); return; }
-      if (registerPassword.length < 6) { setError('密码至少6个字符'); return; }
-      if (registerPassword !== confirmPassword) { setError('两次密码输入不一致'); return; }
+      if (!registerName.trim()) { setError(t('auth.error_required')); return; }
+      if (!registerEmail.trim()) { setError(t('auth.error_required')); return; }
+      if (!registerPassword) { setError(t('auth.error_required')); return; }
+      if (registerPassword.length < 6) { setError(t('auth.error_required')); return; }
+      if (registerPassword !== confirmPassword) { setError(t('auth.error_passwordMismatch')); return; }
 
       const result = await register(registerName.trim(), registerEmail.trim(), registerPassword);
       if (result.success) {
         resetForm();
         onClose();
       } else {
-        setError(result.message || '注册失败');
+        setError(result.message || t('auth.error_invalid'));
       }
     }
   };
@@ -76,13 +78,13 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
     <div className="modal-backdrop auth-backdrop" onClick={onClose}>
       <div className="modal auth-modal" onClick={(e) => e.stopPropagation()}>
         <div className="auth-modal-header">
-          <h3>{tab === 'login' ? '登录' : '注册'}</h3>
-          <button className="modal-close" onClick={onClose} type="button" aria-label="关闭">✕</button>
+          <h3>{tab === 'login' ? t('auth.login') : t('auth.register')}</h3>
+          <button className="modal-close" onClick={onClose} type="button" aria-label={t('common.close')}>✕</button>
         </div>
 
         <div className="modal-tabs">
-          <button className={tab === 'login' ? 'modal-tab active' : 'modal-tab'} onClick={() => switchTab('login')}>登录</button>
-          <button className={tab === 'register' ? 'modal-tab active' : 'modal-tab'} onClick={() => switchTab('register')}>注册</button>
+          <button className={tab === 'login' ? 'modal-tab active' : 'modal-tab'} onClick={() => switchTab('login')}>{t('auth.login')}</button>
+          <button className={tab === 'register' ? 'modal-tab active' : 'modal-tab'} onClick={() => switchTab('register')}>{t('auth.register')}</button>
         </div>
 
         <form className="auth-modal-form" onSubmit={handleSubmit}>
@@ -91,23 +93,23 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
           {tab === 'login' && (
             <>
               <label className="auth-field">
-                <span>邮箱</span>
+                <span>{t('auth.email')}</span>
                 <input
                   type="email"
                   value={loginEmail}
                   onChange={(e) => setLoginEmail(e.target.value)}
-                  placeholder="输入邮箱地址"
+                  placeholder={t('auth.email')}
                   autoFocus
                   disabled={isLoading}
                 />
               </label>
               <label className="auth-field">
-                <span>密码</span>
+                <span>{t('auth.password')}</span>
                 <input
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="输入密码"
+                  placeholder={t('auth.password')}
                   disabled={isLoading}
                 />
               </label>
@@ -117,42 +119,42 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
           {tab === 'register' && (
             <>
               <label className="auth-field">
-                <span>昵称</span>
+                <span>{t('auth.username')}</span>
                 <input
                   value={registerName}
                   onChange={(e) => setRegisterName(e.target.value)}
-                  placeholder="输入昵称"
+                  placeholder={t('auth.username')}
                   autoFocus
                   disabled={isLoading}
                 />
               </label>
               <label className="auth-field">
-                <span>邮箱</span>
+                <span>{t('auth.email')}</span>
                 <input
                   type="email"
                   value={registerEmail}
                   onChange={(e) => setRegisterEmail(e.target.value)}
-                  placeholder="输入邮箱地址"
+                  placeholder={t('auth.email')}
                   disabled={isLoading}
                 />
               </label>
               <label className="auth-field">
-                <span>密码</span>
+                <span>{t('auth.password')}</span>
                 <input
                   type="password"
                   value={registerPassword}
                   onChange={(e) => setRegisterPassword(e.target.value)}
-                  placeholder="输入密码（至少6位）"
+                  placeholder={t('auth.password')}
                   disabled={isLoading}
                 />
               </label>
               <label className="auth-field">
-                <span>确认密码</span>
+                <span>{t('auth.confirmPassword')}</span>
                 <input
                   type="password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  placeholder="再次输入密码"
+                  placeholder={t('auth.confirmPassword')}
                   disabled={isLoading}
                 />
               </label>
@@ -160,9 +162,9 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
           )}
 
           <div className="auth-modal-actions">
-            <button className="ghost-btn" type="button" onClick={onClose} disabled={isLoading}>取消</button>
+            <button className="ghost-btn" type="button" onClick={onClose} disabled={isLoading}>{t('common.cancel')}</button>
             <button className="primary-btn" type="submit" disabled={isLoading}>
-              {isLoading ? '处理中...' : tab === 'login' ? '登录' : '注册'}
+              {isLoading ? t('common.loading') : tab === 'login' ? t('auth.loginBtn') : t('auth.registerBtn')}
             </button>
           </div>
         </form>

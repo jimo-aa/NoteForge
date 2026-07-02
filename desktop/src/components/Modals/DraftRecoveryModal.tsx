@@ -1,17 +1,19 @@
 import { useState, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
+import i18n from '@/i18n';
 import { useStore } from '@/stores/context';
 import { formatTime } from '@/utils/markdown';
 
 function relativeTime(ts: number): string {
   const diff = Date.now() - ts;
   const mins = Math.floor(diff / 60000);
-  if (mins < 1) return '刚刚';
-  if (mins < 60) return `${mins} 分钟前`;
+  if (mins < 1) return i18n.t('draftRecovery.justNow');
+  if (mins < 60) return i18n.t('draftRecovery.minutesAgo', { count: mins });
   const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours} 小时前`;
+  if (hours < 24) return i18n.t('draftRecovery.hoursAgo', { count: hours });
   const days = Math.floor(hours / 24);
-  if (days === 1) return '昨天';
-  if (days < 7) return `${days} 天前`;
+  if (days === 1) return i18n.t('draftRecovery.yesterday');
+  if (days < 7) return i18n.t('draftRecovery.daysAgo', { count: days });
   return formatTime(ts);
 }
 
@@ -20,18 +22,17 @@ function getDateGroup(ts: number): string {
   const date = new Date(ts);
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
   const yesterday = today - 86400000;
-  if (ts >= today) return '今天';
-  if (ts >= yesterday) return '昨天';
+  if (ts >= today) return i18n.t('draftRecovery.groupToday');
+  if (ts >= yesterday) return i18n.t('draftRecovery.groupYesterday');
   const weekAgo = today - 6 * 86400000;
-  if (ts >= weekAgo) return '最近 7 天';
-  return '更早';
+  if (ts >= weekAgo) return i18n.t('draftRecovery.groupWeek');
+  return i18n.t('draftRecovery.groupEarlier');
 }
 
 export function DraftRecoveryModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { t } = useTranslation();
   const { recoveryDrafts, notes, clearRecovery, selectNote, showToast } = useStore();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-
-  if (!open) return null;
 
   const safeNotes = notes || [];
   const safeDrafts = recoveryDrafts || [];
@@ -47,7 +48,7 @@ export function DraftRecoveryModal({ open, onClose }: { open: boolean; onClose: 
 
   const getNoteTitle = (id: string) => {
     const note = safeNotes.find((n) => n.meta.id === id);
-    return note?.meta.title || '(已删除的笔记)';
+    return note?.meta.title || t('draftRecovery.deletedNote');
   };
 
   const getNoteStatus = (id: string): 'existing' | 'deleted' => {
@@ -68,13 +69,13 @@ export function DraftRecoveryModal({ open, onClose }: { open: boolean; onClose: 
   const handleClear = (id: string) => {
     clearRecovery(id);
     setSelectedIds((prev) => { const next = new Set(prev); next.delete(id); return next; });
-    showToast('success', '已清除草稿');
+    showToast('success', t('draftRecovery.cleared'));
   };
 
   const handleClearAll = () => {
     safeDrafts.forEach((draft) => clearRecovery(draft.id));
     setSelectedIds(new Set());
-    showToast('success', '已清除全部草稿');
+    showToast('success', t('draftRecovery.clearedAll'));
   };
 
   const handleDismissCrash = () => {
@@ -82,7 +83,7 @@ export function DraftRecoveryModal({ open, onClose }: { open: boolean; onClose: 
       window.localStorage.removeItem('noteforge:crash:last');
       window.localStorage.removeItem('noteforge:crash:recovered');
     } catch { /* ignore */ }
-    showToast('info', '已清除崩溃记录');
+    showToast('info', t('draftRecovery.clearedCrash'));
   };
 
   const toggleSelect = (id: string) => {
@@ -99,7 +100,7 @@ export function DraftRecoveryModal({ open, onClose }: { open: boolean; onClose: 
       selectNote(id);
     }
     setSelectedIds(new Set());
-    showToast('success', `已恢复 ${selectedIds.size} 个草稿`);
+    showToast('success', t('draftRecovery.restored', { count: selectedIds.size }));
     onClose();
   };
 
@@ -108,16 +109,18 @@ export function DraftRecoveryModal({ open, onClose }: { open: boolean; onClose: 
       clearRecovery(id);
     }
     setSelectedIds(new Set());
-    showToast('success', `已清除 ${selectedIds.size} 个草稿`);
+    showToast('success', t('draftRecovery.clearedSelected', { count: selectedIds.size }));
   };
 
   const allSelected = safeDrafts.length > 0 && selectedIds.size === safeDrafts.length;
+
+  if (!open) return null;
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal draft-recovery-modal" onClick={(e) => e.stopPropagation()}>
         <div className="draft-recovery-header">
-          <h3>📝 恢复草稿</h3>
+          <h3>{t('draftRecovery.title')}</h3>
           <button className="modal-close" onClick={onClose}>×</button>
         </div>
         <div className="draft-recovery-body">
@@ -125,16 +128,16 @@ export function DraftRecoveryModal({ open, onClose }: { open: boolean; onClose: 
             <div className="draft-recovery-crash-banner">
               <div className="draft-recovery-crash-banner-icon">💥</div>
               <div className="draft-recovery-crash-banner-text">
-                <strong>检测到上次崩溃</strong>
+                <strong>{t('draftRecovery.crashBannerTitle')}</strong>
                 <span>{crashInfo.error} · {formatTime(crashInfo.crashedAt)}</span>
               </div>
-              <button className="ghost-btn" onClick={handleDismissCrash}>忽略</button>
+              <button className="ghost-btn" onClick={handleDismissCrash}>{t('draftRecovery.dismissCrash')}</button>
             </div>
           )}
           {safeDrafts.length === 0 && (
             <div className="draft-recovery-empty">
               <div className="draft-recovery-empty-icon">✓</div>
-              <p>没有需要恢复的草稿</p>
+              <p>{t('draftRecovery.empty')}</p>
             </div>
           )}
           {safeDrafts.length > 0 && (
@@ -148,15 +151,15 @@ export function DraftRecoveryModal({ open, onClose }: { open: boolean; onClose: 
                     else setSelectedIds(new Set(safeDrafts.map((d) => d.id)));
                   }}
                 />
-                <span>全选 ({safeDrafts.length})</span>
+                <span>{t('draftRecovery.selectAll', { count: safeDrafts.length })}</span>
               </label>
               {selectedIds.size > 1 && (
                 <div className="draft-recovery-bulk-btns">
-                  <button className="primary-btn" onClick={handleBatchRestore}>恢复 {selectedIds.size} 项</button>
-                  <button className="ghost-btn" onClick={handleBatchClear}>清除 {selectedIds.size} 项</button>
+                  <button className="primary-btn" onClick={handleBatchRestore}>{t('draftRecovery.restoreCount', { count: selectedIds.size })}</button>
+                  <button className="ghost-btn" onClick={handleBatchClear}>{t('draftRecovery.clearCount', { count: selectedIds.size })}</button>
                 </div>
               )}
-              <button className="ghost-btn" onClick={handleClearAll}>清除全部</button>
+              <button className="ghost-btn" onClick={handleClearAll}>{t('draftRecovery.clearAll')}</button>
             </div>
           )}
           {Object.entries(grouped).map(([groupName, drafts]) => (
@@ -175,16 +178,16 @@ export function DraftRecoveryModal({ open, onClose }: { open: boolean; onClose: 
                       />
                     </label>
                     <div className="draft-recovery-info">
-                      <strong>{getNoteTitle(draft.id)}{isDeleted ? ' (已删除)' : ''}</strong>
+                      <strong>{getNoteTitle(draft.id)}{isDeleted ? ` ${t('draftRecovery.deleted')}` : ''}</strong>
                       <span className="draft-recovery-snippet">{draft.content.slice(0, 100)}{draft.content.length > 100 ? '...' : ''}</span>
                       <span className="draft-recovery-meta">
                         <span className="draft-recovery-time">{relativeTime(draft.updatedAt)}</span>
-                        <span>{Math.max(1, draft.content.length)} 字</span>
+                        <span>{Math.max(1, draft.content.length)} {t('editor.words')}</span>
                       </span>
                     </div>
                     <div className="draft-recovery-actions">
-                      <button className="primary-btn" onClick={() => { selectNote(draft.id); onClose(); showToast('info', '已打开草稿笔记'); }}>打开</button>
-                      <button className="ghost-btn" onClick={() => handleClear(draft.id)}>删除</button>
+                      <button className="primary-btn" onClick={() => { selectNote(draft.id); onClose(); showToast('info', t('draftRecovery.opened')); }}>{t('draftRecovery.open')}</button>
+                      <button className="ghost-btn" onClick={() => handleClear(draft.id)}>{t('draftRecovery.delete')}</button>
                     </div>
                   </div>
                 );

@@ -11,10 +11,16 @@ pub fn run() {
     tauri::Builder::<Wry>::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
+            let app_data = app.path().app_data_dir().map_err(|e| e.to_string())?;
             let core = commands::init_core(app.handle()).map_err(|e| e.to_string())?;
             let git = app.path().app_data_dir().ok().and_then(|dir| git_history::GitHistory::open(dir).ok());
             app.manage(commands::AppState { core: std::sync::Mutex::new(core), git: std::sync::Mutex::new(git) });
+
+            // Init usage metrics & record launch
+            commands::init_metrics(&app_data);
+            commands::record_launch();
 
             let app_handle = app.handle().clone();
             let window = app.get_webview_window("main").ok_or("main window missing")?;
@@ -101,6 +107,9 @@ pub fn run() {
             commands::count_pending_sync_changes,
             commands::remove_sync_changes,
             commands::clear_sync_queue,
+            // Usage Metrics
+            commands::record_metric,
+            commands::get_metrics,
         ])
         .run(tauri::generate_context!())
         .expect("启动 NoteForge 失败");

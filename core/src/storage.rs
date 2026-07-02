@@ -9,6 +9,7 @@ use tracing::info;
 
 use crate::types::{self, Note, NoteMeta, Notebook, Tag, CreateNoteRequest, UpdateNoteRequest, SyncQueueItem, BacklinkEntry};
 use crate::encryption::EncryptionManager;
+use crate::error::CoreError;
 
 /// 本地存储引擎
 pub struct LocalStorage {
@@ -18,7 +19,7 @@ pub struct LocalStorage {
 
 impl LocalStorage {
     /// 打开（或创建）SQLite 数据库
-    pub fn open<P: AsRef<Path>>(path: P) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn open<P: AsRef<Path>>(path: P) -> Result<Self, CoreError> {
         let conn = Connection::open(&path)?;
         let storage = Self { conn, encryption: None };
         storage.initialize_tables()?;
@@ -48,7 +49,7 @@ impl LocalStorage {
     // ============================================================
 
     /// 存储加密盐值到数据库
-    pub fn store_encryption_salt(&self, salt: &str) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn store_encryption_salt(&self, salt: &str) -> Result<(), CoreError> {
         self.conn.execute(
             "INSERT OR REPLACE INTO encryption_meta (key, value) VALUES ('encryption_salt', ?1)",
             params![salt],
@@ -58,7 +59,7 @@ impl LocalStorage {
     }
 
     /// 获取存储的加密盐值
-    pub fn get_encryption_salt(&self) -> Result<Option<String>, Box<dyn std::error::Error>> {
+    pub fn get_encryption_salt(&self) -> Result<Option<String>, CoreError> {
         let mut stmt = self.conn.prepare(
             "SELECT value FROM encryption_meta WHERE key = 'encryption_salt'"
         )?;
@@ -67,7 +68,7 @@ impl LocalStorage {
     }
 
     /// 检查数据库中是否存在加密盐值
-    pub fn has_encryption_salt(&self) -> Result<bool, Box<dyn std::error::Error>> {
+    pub fn has_encryption_salt(&self) -> Result<bool, CoreError> {
         let mut stmt = self.conn.prepare(
             "SELECT COUNT(*) FROM encryption_meta WHERE key = 'encryption_salt'"
         )?;
@@ -76,7 +77,7 @@ impl LocalStorage {
     }
 
     /// 清除所有加密元数据
-    pub fn clear_encryption_metadata(&self) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn clear_encryption_metadata(&self) -> Result<(), CoreError> {
         self.conn.execute(
             "DELETE FROM encryption_meta WHERE key = 'encryption_salt'",
             [],
@@ -86,7 +87,7 @@ impl LocalStorage {
     }
 
     /// 初始化数据库表
-    fn initialize_tables(&self) -> Result<(), Box<dyn std::error::Error>> {
+    fn initialize_tables(&self) -> Result<(), CoreError> {
         self.conn.execute_batch(
             "PRAGMA journal_mode=WAL;
              PRAGMA foreign_keys=ON;
@@ -154,7 +155,7 @@ impl LocalStorage {
         Ok(())
     }
 
-    fn ensure_indexes(&self) -> Result<(), Box<dyn std::error::Error>> {
+    fn ensure_indexes(&self) -> Result<(), CoreError> {
         let mut stmt = self.conn.prepare("PRAGMA table_info(notes)")?;
         let existing = stmt
             .query_map([], |row| row.get::<_, String>(1))?
@@ -167,7 +168,7 @@ impl LocalStorage {
         Ok(())
     }
 
-    fn ensure_note_columns(&self) -> Result<(), Box<dyn std::error::Error>> {
+    fn ensure_note_columns(&self) -> Result<(), CoreError> {
         let mut stmt = self.conn.prepare("PRAGMA table_info(notes)")?;
         let existing = stmt
             .query_map([], |row| row.get::<_, String>(1))?
@@ -216,7 +217,7 @@ impl LocalStorage {
     // 笔记本 CRUD
     // ============================================================
 
-    pub fn create_notebook(&self, name: &str, icon: Option<&str>, color: Option<&str>) -> Result<Notebook, Box<dyn std::error::Error>> {
+    pub fn create_notebook(&self, name: &str, icon: Option<&str>, color: Option<&str>) -> Result<Notebook, CoreError> {
         let id = types::generate_id();
         let now = types::now_ms();
         let icon_val = icon.unwrap_or("📓");
@@ -228,7 +229,7 @@ impl LocalStorage {
         self.get_notebook(&id)
     }
 
-    pub fn get_notebook(&self, id: &str) -> Result<Notebook, Box<dyn std::error::Error>> {
+    pub fn get_notebook(&self, id: &str) -> Result<Notebook, CoreError> {
         self.conn.query_row(
             "SELECT n.id, n.name, n.icon, n.color, COUNT(nt.id) as note_count, n.created_at, n.updated_at
              FROM notebooks n
@@ -252,7 +253,7 @@ impl LocalStorage {
         ).map_err(|e| e.into())
     }
 
-    pub fn list_notebooks(&self) -> Result<Vec<Notebook>, Box<dyn std::error::Error>> {
+    pub fn list_notebooks(&self) -> Result<Vec<Notebook>, CoreError> {
         let mut stmt = self.conn.prepare(
             "SELECT n.id, n.name, n.icon, n.color, COUNT(nt.id) as note_count, n.created_at, n.updated_at
              FROM notebooks n
@@ -278,7 +279,7 @@ impl LocalStorage {
         Ok(notebooks)
     }
 
-    pub fn rename_notebook(&self, id: &str, name: &str) -> Result<Notebook, Box<dyn std::error::Error>> {
+    pub fn rename_notebook(&self, id: &str, name: &str) -> Result<Notebook, CoreError> {
         let now = types::now_ms();
         self.conn.execute(
             "UPDATE notebooks SET name = ?1, updated_at = ?2 WHERE id = ?3",
@@ -287,7 +288,7 @@ impl LocalStorage {
         self.get_notebook(id)
     }
 
-    pub fn delete_notebook(&self, id: &str) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn delete_notebook(&self, id: &str) -> Result<(), CoreError> {
         self.conn.execute(
             "DELETE FROM notebooks WHERE id = ?1",
             params![id],
@@ -299,7 +300,7 @@ impl LocalStorage {
     // 加密辅助函数
     // ============================================================
 
-    fn encrypt_content(&self, content: &str) -> Result<String, Box<dyn std::error::Error>> {
+    fn encrypt_content(&self, content: &str) -> Result<String, CoreError> {
         if let Some(ref em) = self.encryption {
             em.encrypt(content).map_err(|e| format!("加密失败: {}", e).into())
         } else {
@@ -307,7 +308,7 @@ impl LocalStorage {
         }
     }
 
-    fn decrypt_content(&self, encrypted: &str) -> Result<String, Box<dyn std::error::Error>> {
+    fn decrypt_content(&self, encrypted: &str) -> Result<String, CoreError> {
         if let Some(ref em) = self.encryption {
             em.decrypt(encrypted).map_err(|e| format!("解密失败: {}", e).into())
         } else {
@@ -319,7 +320,7 @@ impl LocalStorage {
     // 笔记 CRUD
     // ============================================================
 
-    pub fn create_note(&self, req: &CreateNoteRequest) -> Result<Note, Box<dyn std::error::Error>> {
+    pub fn create_note(&self, req: &CreateNoteRequest) -> Result<Note, CoreError> {
         let id = types::generate_id();
         let now = types::now_ms();
         let plain = crate::md_engine::MarkdownEngine::extract_plain_text(&req.content);
@@ -360,7 +361,7 @@ impl LocalStorage {
         self.get_note(&id)
     }
 
-    pub fn get_note(&self, id: &str) -> Result<Note, Box<dyn std::error::Error>> {
+    pub fn get_note(&self, id: &str) -> Result<Note, CoreError> {
         let note = self.conn.query_row(
             "SELECT id, notebook_id, title, content, content_plain, is_pinned,
                     is_favorite, word_count, version, created_at, updated_at
@@ -397,7 +398,7 @@ impl LocalStorage {
         })
     }
 
-    pub fn get_notes_batch(&self, ids: &[&str]) -> Result<Vec<Note>, Box<dyn std::error::Error>> {
+    pub fn get_notes_batch(&self, ids: &[&str]) -> Result<Vec<Note>, CoreError> {
         if ids.is_empty() { return Ok(Vec::new()); }
         let placeholders: Vec<String> = ids.iter().enumerate().map(|(i, _)| format!("?{}", i + 1)).collect();
         let sql = format!(
@@ -451,7 +452,7 @@ impl LocalStorage {
         &self,
         id: &str,
         req: &UpdateNoteRequest,
-    ) -> Result<Note, Box<dyn std::error::Error>> {
+    ) -> Result<Note, CoreError> {
         let mut fields = Vec::new();
         let mut values: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
 
@@ -501,7 +502,7 @@ impl LocalStorage {
         self.get_note(id)
     }
 
-    pub fn delete_note(&self, id: &str) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn delete_note(&self, id: &str) -> Result<(), CoreError> {
         let now = types::now_ms();
         self.conn.execute(
             "UPDATE notes SET is_deleted = 1, updated_at = ?1 WHERE id = ?2",
@@ -515,7 +516,7 @@ impl LocalStorage {
         notebook_id: Option<&str>,
         limit: usize,
         offset: usize,
-    ) -> Result<Vec<NoteMeta>, Box<dyn std::error::Error>> {
+    ) -> Result<Vec<NoteMeta>, CoreError> {
         let (where_clause, params_vec): (String, Vec<Box<dyn rusqlite::types::ToSql>>) =
             if let Some(nbid) = notebook_id {
                 ("WHERE is_deleted = 0 AND notebook_id = ?".into(),
@@ -564,7 +565,7 @@ impl LocalStorage {
     // 同步队列持久化
     // ============================================================
 
-    pub fn enqueue_sync_change(&self, note_id: &str, operation: &str, payload: &str) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn enqueue_sync_change(&self, note_id: &str, operation: &str, payload: &str) -> Result<(), CoreError> {
         let id = types::generate_id();
         let now = types::now_ms() as i64;
         self.conn.execute(
@@ -574,7 +575,7 @@ impl LocalStorage {
         Ok(())
     }
 
-    pub fn get_pending_sync_changes(&self) -> Result<Vec<SyncQueueItem>, Box<dyn std::error::Error>> {
+    pub fn get_pending_sync_changes(&self) -> Result<Vec<SyncQueueItem>, CoreError> {
         let mut stmt = self.conn.prepare(
             "SELECT id, note_id, operation, payload, created_at FROM sync_queue ORDER BY created_at ASC"
         )?;
@@ -590,14 +591,14 @@ impl LocalStorage {
         Ok(items)
     }
 
-    pub fn count_pending_sync_changes(&self) -> Result<i64, Box<dyn std::error::Error>> {
+    pub fn count_pending_sync_changes(&self) -> Result<i64, CoreError> {
         let count: i64 = self.conn.query_row(
             "SELECT COUNT(*) FROM sync_queue", [], |row| row.get(0)
         )?;
         Ok(count)
     }
 
-    pub fn remove_sync_changes(&self, ids: &[&str]) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn remove_sync_changes(&self, ids: &[&str]) -> Result<(), CoreError> {
         if ids.is_empty() { return Ok(()); }
         let placeholders: Vec<String> = ids.iter().enumerate().map(|(i, _)| format!("?{}", i + 1)).collect();
         let sql = format!("DELETE FROM sync_queue WHERE id IN ({})", placeholders.join(","));
@@ -606,7 +607,7 @@ impl LocalStorage {
         Ok(())
     }
 
-    pub fn clear_sync_queue(&self) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn clear_sync_queue(&self) -> Result<(), CoreError> {
         self.conn.execute("DELETE FROM sync_queue", [])?;
         Ok(())
     }
@@ -616,7 +617,7 @@ impl LocalStorage {
     // ============================================================
 
     /// 获取链接到指定笔记标题的反向链接（哪些笔记引用了此标题）
-    pub fn get_backlinks(&self, title: &str) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+    pub fn get_backlinks(&self, title: &str) -> Result<Vec<String>, CoreError> {
         let mut stmt = self.conn.prepare(
             "SELECT source_id FROM note_links WHERE target = ?1"
         )?;
@@ -628,7 +629,7 @@ impl LocalStorage {
     }
 
     /// 获取指定笔记发出的所有 Wiki Link 目标
-    pub fn get_note_outgoing_links(&self, note_id: &str) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+    pub fn get_note_outgoing_links(&self, note_id: &str) -> Result<Vec<String>, CoreError> {
         let mut stmt = self.conn.prepare(
             "SELECT target FROM note_links WHERE source_id = ?1"
         )?;
@@ -640,7 +641,7 @@ impl LocalStorage {
     }
 
     /// 获取笔记的反向链接（包含源笔记的标题）
-    pub fn get_backlinks_with_titles(&self, note_id: &str) -> Result<Vec<BacklinkEntry>, Box<dyn std::error::Error>> {
+    pub fn get_backlinks_with_titles(&self, note_id: &str) -> Result<Vec<BacklinkEntry>, CoreError> {
         let mut stmt = self.conn.prepare(
             "SELECT n.id, n.title FROM note_links nl
              JOIN notes n ON n.id = nl.source_id AND n.is_deleted = 0
@@ -662,7 +663,7 @@ impl LocalStorage {
     // 标签
     // ============================================================
 
-    fn ensure_tag(&self, name: &str) -> Result<(), Box<dyn std::error::Error>> {
+    fn ensure_tag(&self, name: &str) -> Result<(), CoreError> {
         self.conn.execute(
             "INSERT OR IGNORE INTO tags (id, name) VALUES (?1, ?2)",
             params![types::generate_id(), name],
@@ -670,7 +671,7 @@ impl LocalStorage {
         Ok(())
     }
 
-    fn get_tag_by_name(&self, name: &str) -> Result<Tag, Box<dyn std::error::Error>> {
+    fn get_tag_by_name(&self, name: &str) -> Result<Tag, CoreError> {
         self.conn.query_row(
             "SELECT id, name, color FROM tags WHERE name = ?1",
             params![name],
@@ -683,7 +684,7 @@ impl LocalStorage {
         ).map_err(|e| e.into())
     }
 
-    pub fn list_tags(&self) -> Result<Vec<Tag>, Box<dyn std::error::Error>> {
+    pub fn list_tags(&self) -> Result<Vec<Tag>, CoreError> {
         let mut stmt = self.conn.prepare(
             "SELECT t.id, t.name, t.color, COUNT(nt.note_id) as note_count
              FROM tags t

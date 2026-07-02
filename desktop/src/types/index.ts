@@ -187,6 +187,16 @@ export interface SyncPushResponse {
   }>;
 }
 
+// === Usage Metrics types ===
+export interface MetricsData {
+  launchCount: number;
+  totalNotesCreated: number;
+  totalEditSeconds: number;
+  totalSearches: number;
+  firstLaunchAt: number;
+  lastLaunchAt: number;
+}
+
 // === Attachment types ===
 export interface Attachment {
   id: string;

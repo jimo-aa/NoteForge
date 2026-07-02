@@ -1,4 +1,6 @@
-import { memo, useMemo, useState } from 'react';
+import { memo, useMemo, useRef, useState } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
+import { useTranslation } from 'react-i18next';
 import { useStore } from '@/stores/context';
 import { formatTime } from '@/utils/markdown';
 import { Icon } from '@/components/Common/Icon';
@@ -12,6 +14,7 @@ function NoteCard({ note, isActive, searchQuery, onSelect, onContextMenu, isSele
   isSelected: boolean;
   onToggleSelect: (id: string) => void;
 }) {
+  const { t } = useTranslation();
   const titleEl = useMemo(() => {
     if (!searchQuery) return note.meta.title;
     const escaped = searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -44,7 +47,7 @@ function NoteCard({ note, isActive, searchQuery, onSelect, onContextMenu, isSele
         <div className="preview">{note.content.slice(0, 120)}</div>
         <div className="note-card__meta">
           <span>{formatTime(note.meta.updatedAt)}</span>
-          <span>{note.meta.wordCount} 字</span>
+          <span>{note.meta.wordCount} {t('editor.words')}</span>
           {note.meta.tags.length > 0 && <span>#{note.meta.tags[0]}</span>}
         </div>
       </div>
@@ -56,6 +59,7 @@ const NoteCardMemo = memo(NoteCard);
 
 export function NoteList() {
   const store = useStore();
+  const { t } = useTranslation();
   const [batchTagInput, setBatchTagInput] = useState('');
   const [showBatchTag, setShowBatchTag] = useState(false);
   const [showBatchMove, setShowBatchMove] = useState(false);
@@ -70,25 +74,34 @@ export function NoteList() {
     setShowBatchTag(false);
   };
 
+  const parentRef = useRef<HTMLDivElement>(null);
+
+  const virtualizer = useVirtualizer({
+    count: store.filteredNotes.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 72,
+    overscan: 5,
+  });
+
   if (store.filteredNotes.length === 0) {
     return (
       <div className="note-list-empty">
         <div className="empty-state empty-state--notes">
           <div className="empty-state__icon">⌘</div>
-          <h2>暂无笔记</h2>
-          <p>当前筛选条件下没有可显示的笔记。</p>
-          <div className="empty-state__hint">可以尝试切换筛选、清空搜索或新建一条笔记。</div>
+          <h2>{t('noteList.emptyTitle')}</h2>
+          <p>{t('noteList.emptyDesc')}</p>
+          <div className="empty-state__hint">{t('noteList.emptyHint')}</div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="editor-view" style={{ gap: 12 }}>
+    <div ref={parentRef} className="editor-view" style={{ overflow: 'auto', position: 'relative', gap: 12 }}>
       {/* Batch action toolbar */}
       {numSelected > 0 && (
         <div className="batch-toolbar">
-          <span className="batch-toolbar__count">已选 {numSelected} 项</span>
+          <span className="batch-toolbar__count">{t('sidebar.selected', { count: numSelected })}</span>
           <div className="batch-toolbar__actions">
             {showBatchMove ? (
               <div className="batch-move-dropdown">
@@ -101,11 +114,11 @@ export function NoteList() {
                     {nb.icon} {nb.name}
                   </button>
                 ))}
-                <button className="batch-move-option batch-move-cancel" onClick={() => setShowBatchMove(false)}>✕ 取消</button>
+                <button className="batch-move-option batch-move-cancel" onClick={() => setShowBatchMove(false)}>{t('sidebar.cancel')}</button>
               </div>
             ) : (
-              <button className="batch-btn" onClick={() => setShowBatchMove(true)} title="批量移动">
-                <Icon type="rename" /> 移动
+              <button className="batch-btn" onClick={() => setShowBatchMove(true)} title={t('sidebar.batchMove')}>
+                <Icon type="rename" /> {t('sidebar.batchMove')}
               </button>
             )}
             {showBatchTag ? (
@@ -115,46 +128,56 @@ export function NoteList() {
                   value={batchTagInput}
                   onChange={(e) => setBatchTagInput(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') handleBatchTag(); if (e.key === 'Escape') setShowBatchTag(false); }}
-                  placeholder="输入标签名..."
+                  placeholder={t('sidebar.tagInputPlaceholder')}
                   autoFocus
                 />
                 <button className="batch-btn batch-btn--confirm" onClick={handleBatchTag}>✓</button>
                 <button className="batch-btn" onClick={() => setShowBatchTag(false)}>✕</button>
               </div>
             ) : (
-              <button className="batch-btn" onClick={() => setShowBatchTag(true)} title="批量打标签">
-                <Icon type="shoucang" /> 标签
+              <button className="batch-btn" onClick={() => setShowBatchTag(true)} title={t('sidebar.batchTag')}>
+                <Icon type="shoucang" /> {t('sidebar.batchTag')}
               </button>
             )}
-            <button className="batch-btn batch-btn--danger" onClick={() => { if (window.confirm(`确认删除 ${numSelected} 条笔记？`)) store.batchDeleteNotes(); }} title="批量删除">
-              <Icon type="delete" /> 删除
+            <button className="batch-btn batch-btn--danger" onClick={() => { if (window.confirm(t('sidebar.batchDeleteConfirm', { count: numSelected }))) store.batchDeleteNotes(); }} title={t('sidebar.batchDelete')}>
+              <Icon type="delete" /> {t('sidebar.batchDelete')}
             </button>
-            <button className="batch-btn" onClick={store.clearSelection} title="取消选择">
-              ✕ 取消
+            <button className="batch-btn" onClick={store.clearSelection} title={t('sidebar.batchCancel')}>
+              {t('sidebar.batchCancel')}
             </button>
           </div>
         </div>
       )}
       {numSelected === 0 && (
         <div className="batch-select-all-bar">
-          <button className="batch-btn batch-btn--select-all" onClick={store.selectAllFiltered}>☐ 全选</button>
+          <button className="batch-btn batch-btn--select-all" onClick={store.selectAllFiltered}>{t('sidebar.selectAll')}</button>
         </div>
       )}
-      {store.filteredNotes.map(note => (
-        <NoteCardMemo
-          key={note.meta.id}
-          note={note}
-          isActive={note.meta.id === store.currentNoteId}
-          searchQuery={store.searchQuery}
-          onSelect={store.selectNote}
-          onContextMenu={(e, id) => {
-            e.preventDefault();
-            store.setContextMenu({ visible: true, x: e.clientX, y: e.clientY, noteId: id, notebookId: null, kind: 'note' });
-          }}
-          isSelected={store.selectedNoteIds.includes(note.meta.id)}
-          onToggleSelect={store.toggleNoteSelection}
-        />
-      ))}
+      <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
+        {virtualizer.getVirtualItems().map((virtualItem) => {
+          const note = store.filteredNotes[virtualItem.index];
+          if (!note) return null;
+          return (
+            <div
+              key={note.meta.id}
+              style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${virtualItem.start}px)` }}
+            >
+              <NoteCardMemo
+                note={note}
+                isActive={note.meta.id === store.currentNoteId}
+                searchQuery={store.searchQuery}
+                onSelect={store.selectNote}
+                onContextMenu={(e, id) => {
+                  e.preventDefault();
+                  store.setContextMenu({ visible: true, x: e.clientX, y: e.clientY, noteId: id, notebookId: null, kind: 'note' });
+                }}
+                isSelected={store.selectedNoteIds.includes(note.meta.id)}
+                onToggleSelect={store.toggleNoteSelection}
+              />
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useStore } from '@/stores/context';
+import { useTranslation } from 'react-i18next';
 import { Icon } from '@/components/Common/Icon';
 import { tauriInvoke } from '@/utils/invoke';
 import { searchCache } from '@/utils/searchCache';
@@ -95,6 +96,7 @@ function parseDirectives(raw: string): { textOnly: string; directives: SearchDir
 
 export function SearchBox() {
   const store = useStore();
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
@@ -192,7 +194,7 @@ export function SearchBox() {
       return;
     }
 
-    const t = window.setTimeout(async () => {
+    const timer = window.setTimeout(async () => {
       // Check cache first
       const cached = searchCache.get<SearchPage>('adv', textQuery, 0);
       if (cached) {
@@ -201,7 +203,7 @@ export function SearchBox() {
           cached.results.map((hit: SearchResult) => ({
             id: hit.note_id,
             title: hit.title,
-            snippet: hit.snippet || '暂无内容预览',
+            snippet: hit.snippet || t('search.noPreview'),
             score: hit.score,
             updatedAt: new Date(hit.updated_at).toLocaleString(),
             noteId: hit.note_id,
@@ -230,7 +232,7 @@ export function SearchBox() {
             page.results.map((hit: SearchResult) => ({
               id: hit.note_id,
               title: hit.title,
-              snippet: hit.snippet || '暂无内容预览',
+              snippet: hit.snippet || t('search.noPreview'),
               score: hit.score,
               updatedAt: new Date(hit.updated_at).toLocaleString(),
               noteId: hit.note_id,
@@ -247,7 +249,7 @@ export function SearchBox() {
               fuzzyResults.slice(0, pageSize).map((hit: SearchResult) => ({
                 id: hit.note_id,
                 title: hit.title,
-                snippet: hit.snippet || '暂无内容预览',
+                snippet: hit.snippet || t('search.noPreview'),
                 score: hit.score,
                 updatedAt: new Date(hit.updated_at).toLocaleString(),
                 noteId: hit.note_id,
@@ -273,7 +275,7 @@ export function SearchBox() {
       }
     }, 200);
 
-    return () => window.clearTimeout(t);
+    return () => window.clearTimeout(timer);
   }, [open, textQuery, directives.directives, applyDirectives]);
 
   useEffect(() => {
@@ -316,7 +318,7 @@ export function SearchBox() {
           page.results.map((hit: SearchResult) => ({
             id: hit.note_id,
             title: hit.title,
-            snippet: hit.snippet || '暂无内容预览',
+            snippet: hit.snippet || t('search.noPreview'),
             score: hit.score,
             updatedAt: new Date(hit.updated_at).toLocaleString(),
             noteId: hit.note_id,
@@ -399,7 +401,7 @@ export function SearchBox() {
                     setHighlightedId(null);
                   }
                 }}
-                placeholder="搜索笔记... (支持 tag:  notebook:  is: 语法)"
+                placeholder={t('search.placeholder')}
                 onKeyDown={(e) => {
                   if (e.key === 'Escape') close();
                   if (e.key === 'ArrowDown') {
@@ -428,10 +430,10 @@ export function SearchBox() {
               <div className="search-filter-chips">
                 {directives.directives.map((d) => (
                   <span key={d.raw} className={`search-chip search-chip--${d.kind}`}>
-                    {d.kind === 'tag' && <>标签: {d.value}</>}
-                    {d.kind === 'notebook' && <>笔记本: {d.value}</>}
-                    {d.kind === 'pinned' && <>已固定</>}
-                    {d.kind === 'favorite' && <>收藏</>}
+                    {d.kind === 'tag' && <>{t('search.filterTag', { value: d.value })}</>}
+                    {d.kind === 'notebook' && <>{t('search.filterNotebook', { value: d.value })}</>}
+                    {d.kind === 'pinned' && <>{t('search.filterPinned')}</>}
+                    {d.kind === 'favorite' && <>{t('search.filterFavorite')}</>}
                     <button className="search-chip__remove" onClick={() => removeFilterChip(d)}>×</button>
                   </span>
                 ))}
@@ -443,8 +445,8 @@ export function SearchBox() {
               {!query && showHistory && searchHistory.length > 0 && (
                 <div className="search-history-dropdown">
                   <div className="search-history-header">
-                    <span>最近搜索</span>
-                    <button className="search-history-clear" onClick={clearHistory}>清除</button>
+                    <span>{t('search.recentSearches')}</span>
+                    <button className="search-history-clear" onClick={clearHistory}>{t('search.clear')}</button>
                   </div>
                   {searchHistory.map((hq, i) => (
                     <button
@@ -461,12 +463,12 @@ export function SearchBox() {
 
               <div className="search-modal__section-header">
                 <span>
-                  搜索结果 {loading && <span className="loading">搜索中...</span>}
-                  {fuzzyFallback && !loading && <span className="loading" style={{color:'var(--warning)'}}> 已启用模糊匹配</span>}
+                  {t('search.searchResults')} {loading && <span className="loading">{t('search.searching')}</span>}
+                  {fuzzyFallback && !loading && <span className="loading" style={{color:'var(--warning)'}}> {t('search.fuzzyActive')}</span>}
                 </span>
                 <span>
                   {totalResults > 0
-                    ? `${currentPageNum}/${totalPages} 页 (共 ${totalResults} 条)`
+                    ? t('search.pagination', { current: currentPageNum, total: totalPages, count: totalResults })
                     : ''}
                 </span>
               </div>
@@ -475,15 +477,15 @@ export function SearchBox() {
                 searchHistory.length > 0 && !showHistory ? (
                   <div className="search-empty">
                     <div className="search-empty__icon">⌕</div>
-                    <strong>输入关键词开始搜索</strong>
-                    <p>支持中文分词，自动模糊匹配。支持 tag:name / notebook:name / is:pinned 语法。</p>
+                    <strong>{t('search.startTyping')}</strong>
+                    <p>{t('search.startTypingDesc')}</p>
                   </div>
                 ) : null
               ) : results.length === 0 && !loading ? (
                 <div className="search-empty">
                   <div className="search-empty__icon">⌕</div>
-                  <strong>没有找到相关内容</strong>
-                  <p>尝试更换关键词，搜索会自动启用模糊匹配。</p>
+                  <strong>{t('search.noResults')}</strong>
+                  <p>{t('search.noResultsDesc')}</p>
                 </div>
               ) : results.length === 0 ? null : (
                 <>
@@ -499,7 +501,7 @@ export function SearchBox() {
                         <div className="search-result__top">
                           <div className="search-result__title-row">
                             <span className="search-result__type search-result__type--note">
-                              笔记
+                               {t('search.typeNote')}
                             </span>
                             <strong>{item.title}</strong>
                           </div>
@@ -507,7 +509,7 @@ export function SearchBox() {
                         </div>
                         <p className="search-result__snippet">{item.snippet}</p>
                         <div className="search-result__footer">
-                          <span>{index === activeIndex ? '回车打开' : '点击打开'}</span>
+                          <span>{index === activeIndex ? t('search.openEnter') : t('search.openClick')}</span>
                         </div>
                       </button>
                     ))}
@@ -520,7 +522,7 @@ export function SearchBox() {
                         onClick={() => void loadPage(currentPage - 1)}
                         disabled={currentPage === 0 || loading}
                       >
-                        ← 上一页
+                        {t('search.prevPage')}
                       </button>
                       <span className="search-pagination__info">
                         {currentPageNum} / {totalPages}
@@ -531,7 +533,7 @@ export function SearchBox() {
                         onClick={() => void loadPage(currentPage + 1)}
                         disabled={currentPage >= totalPages - 1 || loading}
                       >
-                        下一页 →
+                        {t('search.nextPage')}
                       </button>
                     </div>
                   )}
@@ -554,7 +556,7 @@ export function SearchBox() {
         <span className="icon">
           <Icon type="search" />
         </span>
-        <span className="search-trigger__text">搜索笔记...</span>
+        <span className="search-trigger__text">{t('search.triggerText')}</span>
         <span className="search-shortcut">⌘K</span>
       </button>
       {modal}

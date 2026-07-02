@@ -1,42 +1,36 @@
 package com.noteforge.user.service;
 
-import jakarta.annotation.PostConstruct;
-import org.springframework.scheduling.annotation.Scheduled;
+import lombok.RequiredArgsConstructor;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 /**
- * In-memory token blacklist for logged-out / revoked access tokens.
- * Tokens are evicted automatically after their natural expiry.
- * Upgrade to Redis-backed when scaling beyond single instance.
+ * Redis-backed token blacklist for logged-out / revoked access tokens.
+ * Tokens are auto-evicted by Redis TTL; no manual eviction needed.
  */
 @Service
+@RequiredArgsConstructor
 public class TokenBlacklistService {
 
-    /** token -> expiry epoch millis */
-    private final ConcurrentHashMap<String, Long> blacklist = new ConcurrentHashMap<>();
+    private static final String KEY_PREFIX = "token:blacklist:";
+
+    private final StringRedisTemplate redisTemplate;
 
     public void blacklist(String token, long expiryEpochMillis) {
-        blacklist.put(token, expiryEpochMillis);
+        long ttl = expiryEpochMillis - Instant.now().toEpochMilli();
+        if (ttl <= 0) return;
+        redisTemplate.opsForValue().set(KEY_PREFIX + token, "1", ttl, TimeUnit.MILLISECONDS);
     }
 
     public boolean isBlacklisted(String token) {
-        Long expiry = blacklist.get(token);
-        if (expiry == null) return false;
-        if (Instant.now().toEpochMilli() >= expiry) {
-            blacklist.remove(token);
-            return false;
-        }
-        return true;
+        return Boolean.TRUE.equals(redisTemplate.hasKey(KEY_PREFIX + token));
     }
 
-    /** Evict expired entries every 5 minutes */
-    @Scheduled(fixedRate = 300_000)
+    /** No-op — Redis handles TTL eviction automatically */
     public void evictExpired() {
-        long now = Instant.now().toEpochMilli();
-        blacklist.values().removeIf(expiry -> now >= expiry);
+        // Redis TTL handles eviction
     }
 }

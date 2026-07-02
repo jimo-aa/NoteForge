@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { tauriInvoke } from '@/utils/invoke';
+import i18n from '@/i18n';
 
 interface Props { children: ReactNode; }
 interface State { hasError: boolean; error: Error | null; crashCount: number; showDetails: boolean; }
@@ -93,12 +94,12 @@ export class ErrorBoundary extends Component<Props, State> {
           <div className="error-boundary-card">
             <div className="error-boundary-icon">{isSevere ? '⚠️' : '💥'}</div>
             <h2 className="error-boundary-title">
-              {isSevere ? '应用多次崩溃' : '应用出错了'}
+              {isSevere ? i18n.t('error.crashTitle') : i18n.t('error.title')}
             </h2>
             <p className="error-boundary-message">
               {isSevere
-                ? '应用连续崩溃多次。您可以尝试重置应用或重新加载。'
-                : this.state.error?.message || '发生了意外错误'}
+                ? i18n.t('error.crashMessage')
+                : this.state.error?.message || i18n.t('error.message')}
             </p>
             {this.state.error?.stack && (
               <>
@@ -106,7 +107,7 @@ export class ErrorBoundary extends Component<Props, State> {
                   className="error-boundary-details-toggle"
                   onClick={() => this.toggleDetails()}
                 >
-                  {this.state.showDetails ? '隐藏详情' : '显示错误详情'}
+                  {this.state.showDetails ? i18n.t('error.hideDetails') : i18n.t('error.showDetails')}
                 </button>
                 {this.state.showDetails && (
                   <pre className="error-boundary-stack">{this.state.error.stack}</pre>
@@ -115,15 +116,15 @@ export class ErrorBoundary extends Component<Props, State> {
             )}
             <div className="error-boundary-actions">
               <button className="error-boundary-btn error-boundary-btn--primary" onClick={() => this.handleReload()}>
-                重新加载
+                {i18n.t('error.reload')}
               </button>
               {isSevere && (
                 <button className="error-boundary-btn error-boundary-btn--danger" onClick={() => this.handleResetApp()}>
-                  重置应用
+                  {i18n.t('error.resetApp')}
                 </button>
               )}
               <button className="error-boundary-btn error-boundary-btn--ghost" onClick={() => this.handleExportLog()}>
-                导出错误日志
+                {i18n.t('error.exportLog')}
               </button>
             </div>
           </div>

@@ -13,6 +13,7 @@ import com.noteforge.note.repository.NoteRepository;
 import com.noteforge.note.repository.NoteVersionRepository;
 import com.noteforge.note.repository.SyncLogRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
@@ -35,6 +36,9 @@ public class NoteService {
     private final AuditService auditService;
     private final ObjectMapper objectMapper;
 
+    @Autowired(required = false)
+    private NoteIndexService noteIndexService;
+
     @CacheEvict(value = "notes:list", key = "#userId")
     public NoteResponse createNote(String userId, NoteCreateRequest req) {
         NoteEntity entity = new NoteEntity();
@@ -50,6 +54,7 @@ public class NoteService {
         recordSyncLog(entity, "CREATE");
         syncNotificationService.notifyNoteChanged(userId, entity.getId(), entity.getTitle(), entity.getVersion());
         auditService.record(userId, "CREATE", "NOTE", entity.getId(), "创建笔记: " + entity.getTitle());
+        if (noteIndexService != null) noteIndexService.indexNote(entity);
         return NoteResponse.fromEntity(entity);
     }
 
@@ -88,6 +93,7 @@ public class NoteService {
         recordSyncLog(entity, "UPDATE");
         syncNotificationService.notifyNoteChanged(userId, entity.getId(), entity.getTitle(), entity.getVersion());
         auditService.record(userId, "UPDATE", "NOTE", noteId, "更新笔记: " + entity.getTitle());
+        if (noteIndexService != null) noteIndexService.indexNote(entity);
         return NoteResponse.fromEntity(entity);
     }
 
@@ -100,6 +106,7 @@ public class NoteService {
         recordSyncLog(entity, "DELETE");
         syncNotificationService.notifyNoteDeleted(userId, noteId);
         auditService.record(userId, "DELETE", "NOTE", noteId, "删除笔记: " + entity.getTitle());
+        if (noteIndexService != null) noteIndexService.removeNote(noteId, userId);
     }
 
     @Cacheable(value = "notes:list", key = "#userId + ':' + #notebookId + ':' + #page + ':' + #size",

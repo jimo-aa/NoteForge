@@ -1,6 +1,8 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useStore } from '@/stores/context';
 import { useTheme, type ThemeMode } from '@/hooks/useTheme';
+import type { MetricsData } from '@/types';
 import { NotebookModal, type NotebookModalState } from './NotebookModal';
 import { ConfirmDialog } from '@/components/Common/ConfirmDialog';
 import { EncryptionModal } from './EncryptionModal';
@@ -29,9 +31,10 @@ const ACCENT_PRESETS = [
   '#a855f7', // violet
 ];
 
-type Tab = 'notebooks' | 'tags' | 'security' | 'appearance' | 'shortcuts';
+type Tab = 'notebooks' | 'tags' | 'security' | 'appearance' | 'shortcuts' | 'stats';
 
 export function ManageModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { t } = useTranslation();
   const { notebooks, tags, notes, deleteNotebook, renameNotebook, setActiveNotebook, updateNote, showToast } = useStore();
   const { theme, setTheme, accentColor, setAccentColor } = useTheme();
   const [tab, setTab] = useState<Tab>('appearance');
@@ -40,6 +43,19 @@ export function ManageModal({ open, onClose }: { open: boolean; onClose: () => v
   const [renameValue, setRenameValue] = useState('');
   const [confirmDel, setConfirmDel] = useState<{ kind: 'notebook' | 'tag'; id: string; name: string } | null>(null);
   const [encryptionOpen, setEncryptionOpen] = useState(false);
+  const [metrics, setMetrics] = useState<MetricsData | null>(null);
+  const [metricsLoading, setMetricsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!open || tab !== 'stats') return;
+    setMetricsLoading(true);
+    import('@tauri-apps/api/core').then(({ invoke }) => {
+      invoke<MetricsData>('get_metrics')
+        .then(setMetrics)
+        .catch(() => setMetrics(null))
+        .finally(() => setMetricsLoading(false));
+    });
+  }, [open, tab]);
 
   // ── Shortcut editing state ──
   const [shortcuts, setShortcuts] = useState<ShortcutDef[]>(() => getShortcuts());
@@ -62,9 +78,9 @@ export function ManageModal({ open, onClose }: { open: boolean; onClose: () => v
       setShortcuts(getShortcuts());
       setCapturingId(null);
       if (conflict) {
-        // The conflict will be auto-resolved (the other shortcut now uses default)
-        // Show a brief visual hint via the captureKey message
-        setCaptureKey(`已绑定 ${formatKeyCombo(combo)}` + (conflict ? `（${conflict.label} 已重置为默认）` : ''));
+        setCaptureKey(t('manage.shortcutsResetConflict', { combo: formatKeyCombo(combo), label: conflict.label }));
+      } else {
+        setCaptureKey(t('manage.shortcutsBound', { combo: formatKeyCombo(combo) }));
       }
       setTimeout(() => setCaptureKey(null), 2000);
     };
@@ -74,7 +90,7 @@ export function ManageModal({ open, onClose }: { open: boolean; onClose: () => v
 
   const handleStartCapture = (id: string) => {
     setCapturingId(id);
-    setCaptureKey('按下快捷键...');
+    setCaptureKey(t('manage.shortcutsPressKey'));
   };
 
   const handleResetAll = () => {
@@ -88,11 +104,11 @@ export function ManageModal({ open, onClose }: { open: boolean; onClose: () => v
   };
 
   const shortcutCategories: Array<{ id: ShortcutDef['category']; label: string }> = [
-    { id: 'navigation', label: '导航' },
-    { id: 'notes', label: '笔记操作' },
-    { id: 'editor', label: '编辑器' },
-    { id: 'view', label: '视图' },
-    { id: 'search', label: '搜索' },
+    { id: 'navigation', label: t('manage.shortcutsCategoryNavigation') },
+    { id: 'notes', label: t('manage.shortcutsCategoryNotes') },
+    { id: 'editor', label: t('manage.shortcutsCategoryEditor') },
+    { id: 'view', label: t('manage.shortcutsCategoryView') },
+    { id: 'search', label: t('manage.shortcutsCategorySearch') },
   ];
 
   if (!open) return null;
@@ -104,7 +120,7 @@ export function ManageModal({ open, onClose }: { open: boolean; onClose: () => v
   };
 
   const handleRenameNotebook = (id: string, name: string) => {
-    setNotebookModal({ open: true, mode: 'rename', title: '重命名笔记本', value: name, notebookId: id });
+    setNotebookModal({ open: true, mode: 'rename', title: t('manage.renameNotebookTitle'), value: name, notebookId: id });
   };
 
   const handleDeleteTag = (tag: string) => {
@@ -121,7 +137,7 @@ export function ManageModal({ open, onClose }: { open: boolean; onClose: () => v
           updateNote(n.meta.id, { tags: n.meta.tags.filter((t) => t !== confirmDel.id) });
         }
       });
-      showToast('success', `已移除标签「${confirmDel.id}」`);
+      showToast('success', t('manage.confirmDeleteTagMsg', { name: confirmDel.id }));
     }
     setConfirmDel(null);
   };
@@ -139,38 +155,48 @@ export function ManageModal({ open, onClose }: { open: boolean; onClose: () => v
     });
     setRenameTag(null);
     setRenameValue('');
-    showToast('success', `已重命名标签为「${newTag}」`);
+    showToast('success', t('manage.rename', { name: newTag }));
   };
 
   const tagCount = (tag: string) => notes.filter((n) => n.meta.tags.includes(tag)).length;
+
+  const formatDuration = (seconds: number): string => {
+    if (seconds < 60) return `${seconds}s`;
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes}m`;
+    const hours = Math.floor(minutes / 60);
+    const remMin = minutes % 60;
+    return remMin > 0 ? `${hours}h ${remMin}m` : `${hours}h`;
+  };
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal manage-modal" onClick={(e) => e.stopPropagation()}>
         <div className="manage-modal-header">
-          <h3>管理</h3>
+          <h3>{t('manage.title')}</h3>
           <button className="modal-close" onClick={onClose}>×</button>
         </div>
         <div className="manage-modal-tabs">
-          <button className={tab === 'notebooks' ? 'tab active' : 'tab'} onClick={() => setTab('notebooks')}>笔记本</button>
-          <button className={tab === 'tags' ? 'tab active' : 'tab'} onClick={() => setTab('tags')}>标签</button>
-          <button className={tab === 'security' ? 'tab active' : 'tab'} onClick={() => setTab('security')}>安全</button>
-          <button className={tab === 'appearance' ? 'tab active' : 'tab'} onClick={() => setTab('appearance')}>外观</button>
-          <button className={tab === 'shortcuts' ? 'tab active' : 'tab'} onClick={() => setTab('shortcuts')}>快捷键</button>
+          <button className={tab === 'notebooks' ? 'tab active' : 'tab'} onClick={() => setTab('notebooks')}>{t('manage.tabNotebooks')}</button>
+          <button className={tab === 'tags' ? 'tab active' : 'tab'} onClick={() => setTab('tags')}>{t('manage.tabTags')}</button>
+          <button className={tab === 'security' ? 'tab active' : 'tab'} onClick={() => setTab('security')}>{t('manage.tabSecurity')}</button>
+          <button className={tab === 'appearance' ? 'tab active' : 'tab'} onClick={() => setTab('appearance')}>{t('manage.tabAppearance')}</button>
+          <button className={tab === 'shortcuts' ? 'tab active' : 'tab'} onClick={() => setTab('shortcuts')}>{t('manage.tabShortcuts')}</button>
+          <button className={tab === 'stats' ? 'tab active' : 'tab'} onClick={() => setTab('stats')}>{t('manage.tabStats')}</button>
         </div>
         <div className="manage-modal-body">
           {tab === 'notebooks' && (
             <div className="manage-list">
-              {filteredNotebooks.length === 0 && <div className="manage-empty">暂无笔记本</div>}
+              {filteredNotebooks.length === 0 && <div className="manage-empty">{t('manage.noNotebooks')}</div>}
               {filteredNotebooks.map((nb) => (
                 <div key={nb.id} className="manage-item">
                   <span className="manage-item-icon">{nb.icon || '📓'}</span>
                   <span className="manage-item-name">{nb.name}</span>
-                  <span className="manage-item-count">{nb.noteCount} 条</span>
+                  <span className="manage-item-count">{t('manage.tagCount', { count: nb.noteCount })}</span>
                   <div className="manage-item-actions">
-                    <button className="manage-btn" onClick={() => handleRenameNotebook(nb.id, nb.name)} title="重命名">✏️</button>
-                    <button className="manage-btn" onClick={() => { setActiveNotebook(nb.id); onClose(); }} title="查看笔记">📄</button>
-                    <button className="manage-btn manage-btn-danger" onClick={() => void handleDeleteNotebook(nb.id, nb.name)} title="删除">🗑️</button>
+                    <button className="manage-btn" onClick={() => handleRenameNotebook(nb.id, nb.name)} title={t('manage.rename')}>✏️</button>
+                    <button className="manage-btn" onClick={() => { setActiveNotebook(nb.id); onClose(); }} title={t('manage.viewNotes')}>📄</button>
+                    <button className="manage-btn manage-btn-danger" onClick={() => void handleDeleteNotebook(nb.id, nb.name)} title={t('common.delete')}>🗑️</button>
                   </div>
                 </div>
               ))}
@@ -178,7 +204,7 @@ export function ManageModal({ open, onClose }: { open: boolean; onClose: () => v
           )}
           {tab === 'tags' && (
             <div className="manage-list">
-              {tags.length === 0 && <div className="manage-empty">暂无标签</div>}
+              {tags.length === 0 && <div className="manage-empty">{t('manage.noTags')}</div>}
               {tags.map((tag) => (
                 <div key={tag} className="manage-item">
                   {renameTag === tag ? (
@@ -197,10 +223,10 @@ export function ManageModal({ open, onClose }: { open: boolean; onClose: () => v
                     <>
                       <span className="manage-item-icon">#</span>
                       <span className="manage-item-name">#{tag}</span>
-                      <span className="manage-item-count">{tagCount(tag)} 条</span>
+                      <span className="manage-item-count">{t('manage.tagCount', { count: tagCount(tag) })}</span>
                       <div className="manage-item-actions">
-                        <button className="manage-btn" onClick={() => { setRenameTag(tag); setRenameValue(tag); }} title="重命名">✏️</button>
-                        <button className="manage-btn manage-btn-danger" onClick={() => handleDeleteTag(tag)} title="删除">🗑️</button>
+                        <button className="manage-btn" onClick={() => { setRenameTag(tag); setRenameValue(tag); }} title={t('manage.rename')}>✏️</button>
+                        <button className="manage-btn manage-btn-danger" onClick={() => handleDeleteTag(tag)} title={t('common.delete')}>🗑️</button>
                       </div>
                     </>
                   )}
@@ -213,17 +239,17 @@ export function ManageModal({ open, onClose }: { open: boolean; onClose: () => v
               <div className="manage-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 12, padding: '16px 20px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <span className="manage-item-icon">🔐</span>
-                  <span className="manage-item-name">端到端加密</span>
+                  <span className="manage-item-name">{t('manage.securityTitle')}</span>
                 </div>
                 <p style={{ margin: 0, fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.5 }}>
-                  使用 AES-256-GCM + Argon2 对笔记内容进行本地加密。设置密码后，每次启动应用需输入密码解锁。
+                  {t('manage.securityDesc')}
                 </p>
                 <button
                   className="primary-btn"
                   onClick={() => setEncryptionOpen(true)}
                   style={{ alignSelf: 'flex-start' }}
                 >
-                  管理加密设置
+                  {t('manage.securityManage')}
                 </button>
               </div>
             </div>
@@ -232,12 +258,12 @@ export function ManageModal({ open, onClose }: { open: boolean; onClose: () => v
             <div className="manage-list appearance-settings">
               {/* Theme Mode */}
               <div className="appearance-section">
-                <h4 className="appearance-section-title">主题模式</h4>
+                <h4 className="appearance-section-title">{t('manage.appearanceTheme')}</h4>
                 <div className="theme-mode-options">
                   {([
-                    { id: 'light' as ThemeMode, icon: '☀️', label: '浅色' },
-                    { id: 'dark' as ThemeMode, icon: '🌙', label: '深色' },
-                    { id: 'system' as ThemeMode, icon: '💻', label: '跟随系统' },
+                    { id: 'light' as ThemeMode, icon: '☀️', label: t('manage.appearanceLight') },
+                    { id: 'dark' as ThemeMode, icon: '🌙', label: t('manage.appearanceDark') },
+                    { id: 'system' as ThemeMode, icon: '💻', label: t('manage.appearanceSystem') },
                   ]).map((opt) => (
                     <button
                       key={opt.id}
@@ -251,9 +277,8 @@ export function ManageModal({ open, onClose }: { open: boolean; onClose: () => v
                 </div>
               </div>
 
-              {/* Accent Color */}
               <div className="appearance-section">
-                <h4 className="appearance-section-title">强调色</h4>
+                <h4 className="appearance-section-title">{t('manage.appearanceAccent')}</h4>
                 <div className="accent-color-picker">
                   {ACCENT_PRESETS.map((color) => (
                     <button
@@ -266,7 +291,7 @@ export function ManageModal({ open, onClose }: { open: boolean; onClose: () => v
                   ))}
                 </div>
                 <div className="accent-custom-row">
-                  <label className="accent-custom-label">自定义颜色</label>
+                  <label className="accent-custom-label">{t('manage.appearanceCustom')}</label>
                   <input
                     type="color"
                     className="accent-custom-input"
@@ -278,11 +303,48 @@ export function ManageModal({ open, onClose }: { open: boolean; onClose: () => v
               </div>
             </div>
           )}
+          {tab === 'stats' && (
+            <div className="manage-list stats-dashboard">
+              <h4 className="stats-title">{t('manage.statsTitle')}</h4>
+              {metricsLoading ? (
+                <div className="manage-empty">{t('common.loading')}</div>
+              ) : metrics ? (
+                <div className="stats-grid">
+                  <div className="stats-card">
+                    <span className="stats-value">{metrics.launchCount}</span>
+                    <span className="stats-label">{t('manage.statsLaunchCount')}</span>
+                  </div>
+                  <div className="stats-card">
+                    <span className="stats-value">{metrics.totalNotesCreated}</span>
+                    <span className="stats-label">{t('manage.statsNotesCreated')}</span>
+                  </div>
+                  <div className="stats-card">
+                    <span className="stats-value">{formatDuration(metrics.totalEditSeconds)}</span>
+                    <span className="stats-label">{t('manage.statsEditTime')}</span>
+                  </div>
+                  <div className="stats-card">
+                    <span className="stats-value">{metrics.totalSearches}</span>
+                    <span className="stats-label">{t('manage.statsSearches')}</span>
+                  </div>
+                  <div className="stats-card stats-card-wide">
+                    <span className="stats-label">{t('manage.statsFirstLaunch')}</span>
+                    <span className="stats-value-small">{metrics.firstLaunchAt ? new Date(metrics.firstLaunchAt * 1000).toLocaleString() : t('manage.statsNever')}</span>
+                  </div>
+                  <div className="stats-card stats-card-wide">
+                    <span className="stats-label">{t('manage.statsLastLaunch')}</span>
+                    <span className="stats-value-small">{metrics.lastLaunchAt ? new Date(metrics.lastLaunchAt * 1000).toLocaleString() : t('manage.statsNever')}</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="manage-empty">{t('manage.statsNever')}</div>
+              )}
+            </div>
+          )}
           {tab === 'shortcuts' && (
             <div className="manage-list shortcuts-settings" ref={captureRef}>
               <div className="shortcuts-header">
-                <span className="shortcuts-header-title">自定义快捷键</span>
-                <button className="shortcuts-reset-btn" onClick={handleResetAll}>重置全部</button>
+                <span className="shortcuts-header-title">{t('manage.shortcutsTitle')}</span>
+                <button className="shortcuts-reset-btn" onClick={handleResetAll}>{t('manage.shortcutsResetAll')}</button>
               </div>
               {shortcutCategories.map((cat) => {
                 const catShortcuts = shortcuts.filter((s) => s.category === cat.id);
@@ -293,7 +355,7 @@ export function ManageModal({ open, onClose }: { open: boolean; onClose: () => v
                     {catShortcuts.map((s) => {
                       const isCapturing = capturingId === s.id;
                       const displayCombo = isCapturing
-                        ? (captureKey || '按下快捷键...')
+                        ? (captureKey || t('manage.shortcutsPressKey'))
                         : formatKeyCombo(s.keys);
                       const isEdited = JSON.stringify(s.keys) !== JSON.stringify(s.defaultKeys);
                       return (
@@ -307,7 +369,7 @@ export function ManageModal({ open, onClose }: { open: boolean; onClose: () => v
                               className={`shortcuts-key-btn${isEdited ? ' edited' : ''}`}
                               onClick={() => handleStartCapture(s.id)}
                               disabled={capturingId !== null}
-                              title="点击修改快捷键"
+                              title={t('manage.shortcutsClickToEdit')}
                             >
                               <kbd>{displayCombo}</kbd>
                             </button>
@@ -315,7 +377,7 @@ export function ManageModal({ open, onClose }: { open: boolean; onClose: () => v
                               <button
                                 className="shortcuts-reset-one-btn"
                                 onClick={() => handleResetOne(s.id)}
-                                title="重置为默认"
+                                title={t('manage.shortcutsResetDefault')}
                               >
                                 ↺
                               </button>
@@ -328,7 +390,7 @@ export function ManageModal({ open, onClose }: { open: boolean; onClose: () => v
                 );
               })}
               <div className="shortcuts-footer">
-                <p>点击快捷键进行修改，按下 Esc 取消修改。</p>
+                <p>{t('manage.shortcutsFooter')}</p>
               </div>
             </div>
           )}
@@ -342,9 +404,9 @@ export function ManageModal({ open, onClose }: { open: boolean; onClose: () => v
         }} />
         <ConfirmDialog
           open={confirmDel !== null}
-          title={confirmDel?.kind === 'notebook' ? '删除笔记本' : '删除标签'}
-          message={confirmDel?.kind === 'notebook' ? `确认删除笔记本「${confirmDel?.name}」？（笔记不会被删除）` : `确认从所有笔记中移除标签「${confirmDel?.name}」？`}
-          confirmLabel="删除"
+          title={confirmDel?.kind === 'notebook' ? t('manage.confirmDeleteNotebookTitle') : t('manage.confirmDeleteTagTitle')}
+          message={confirmDel?.kind === 'notebook' ? t('manage.confirmDeleteNotebookMsg', { name: confirmDel?.name ?? '' }) : t('manage.confirmDeleteTagMsg', { name: confirmDel?.name ?? '' })}
+          confirmLabel={t('common.delete')}
           danger
           onConfirm={() => void executeDelete()}
           onCancel={() => setConfirmDel(null)}

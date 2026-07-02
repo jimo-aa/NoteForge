@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { Notebook } from '@/types';
 
 interface NewNotePayload {
@@ -236,7 +237,8 @@ flowchart LR
 ];
 
 export function NewNoteModal({ open, notebooks = [], onClose, onCreate }: NewNoteModalProps) {
-  const [title, setTitle] = useState('新笔记');
+  const { t } = useTranslation();
+  const [title, setTitle] = useState(t('noteModal.newNote'));
   const [notebookId, setNotebookId] = useState('default');
   const [templateId, setTemplateId] = useState('blank');
   const [tagText, setTagText] = useState('');
@@ -245,12 +247,13 @@ export function NewNoteModal({ open, notebooks = [], onClose, onCreate }: NewNot
 
   useEffect(() => {
     if (!open) return;
-    setTitle('新笔记');
+    setTitle(t('noteModal.newNote'));
     setNotebookId(notebooks.find((item) => item.id !== 'all')?.id ?? 'default');
     setTemplateId('blank');
     setTagText('');
     const template = TEMPLATES.find((t) => t.id === 'blank');
     setContent(template?.content ?? '');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
    
 
@@ -311,23 +314,23 @@ export function NewNoteModal({ open, notebooks = [], onClose, onCreate }: NewNot
       <div className="modal new-note-modal" onClick={(event) => event.stopPropagation()}>
         <div className="new-note-title">
           <span>＋</span>
-          <h3>新建笔记</h3>
+          <h3>{t('noteModal.title')}</h3>
           <button
             className="modal-close"
             onClick={onClose}
             type="button"
-            aria-label="关闭"
+            aria-label={t('common.close')}
           >
             ✕
           </button>
         </div>
 
         <label className="new-note-field new-note-field--full">
-          <span>标题</span>
+          <span>{t('noteModal.titleLabel')}</span>
           <input
             value={title}
             onChange={(event) => setTitle(event.target.value)}
-            placeholder="输入笔记标题"
+            placeholder={t('noteModal.titlePlaceholder')}
             autoFocus
             disabled={isLoading}
             onKeyDown={handleKeyDown}
@@ -336,7 +339,7 @@ export function NewNoteModal({ open, notebooks = [], onClose, onCreate }: NewNot
 
         <div className="new-note-grid">
           <label className="new-note-field">
-            <span>笔记本</span>
+            <span>{t('noteModal.notebookLabel')}</span>
             <select
               value={notebookId}
               onChange={(event) => setNotebookId(event.target.value)}
@@ -353,7 +356,7 @@ export function NewNoteModal({ open, notebooks = [], onClose, onCreate }: NewNot
           </label>
 
           <label className="new-note-field">
-            <span>模板</span>
+            <span>{t('noteModal.templateLabel')}</span>
             <select
               value={templateId}
               onChange={(event) => setTemplateId(event.target.value)}
@@ -369,26 +372,26 @@ export function NewNoteModal({ open, notebooks = [], onClose, onCreate }: NewNot
         </div>
 
         <label className="new-note-field new-note-field--full">
-          <span>标签（逗号分隔）</span>
+          <span>{t('noteModal.tagsLabel')}</span>
           <input
             value={tagText}
             onChange={(event) => setTagText(event.target.value)}
-            placeholder="如: Rust, 架构, 笔记"
+            placeholder={t('noteModal.tagsPlaceholder')}
             disabled={isLoading}
           />
         </label>
 
         <label className="new-note-field new-note-field--full">
           <span>
-            内容预览
+            {t('noteModal.contentLabel')}
             {selectedTemplate && selectedTemplate.id !== 'blank' && (
-              <small className="template-info">（使用 {selectedTemplate.name} 模板）</small>
+              <small className="template-info">{t('noteModal.templateInfo', { name: selectedTemplate.name })}</small>
             )}
           </span>
           <textarea
             value={content}
             onChange={(event) => setContent(event.target.value)}
-            placeholder="可选的笔记内容..."
+            placeholder={t('noteModal.contentPlaceholder')}
             rows={8}
             disabled={isLoading}
           />
@@ -396,14 +399,14 @@ export function NewNoteModal({ open, notebooks = [], onClose, onCreate }: NewNot
 
         <div className="modal-actions new-note-actions">
           <button className="ghost-btn" onClick={onClose} disabled={isLoading}>
-            取消
+            {t('noteModal.confirmCancel')}
           </button>
           <button
             className="primary-btn"
             onClick={createNote}
             disabled={!title.trim() || isLoading}
           >
-            {isLoading ? '创建中...' : '创建笔记'}
+            {isLoading ? t('noteModal.creating') : t('noteModal.createNote')}
           </button>
         </div>
       </div>

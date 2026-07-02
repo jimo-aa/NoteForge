@@ -1,5 +1,5 @@
 import { useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
-import { EditorView, keymap, placeholder, Decoration, DecorationSet } from '@codemirror/view';
+import { EditorView, keymap, placeholder, Decoration, DecorationSet, WidgetType } from '@codemirror/view';
 import { EditorState, Compartment, StateField, StateEffect, type Range } from '@codemirror/state';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
@@ -37,6 +37,7 @@ interface CodeMirrorEditorProps {
   onSelectionChange?: (from: number, to: number) => void;
   onImagePaste?: (file: File) => void;
   onImageDrop?: (file: File) => void;
+  onWikiLinkClick?: (title: string) => void;
   placeholderText?: string;
   searchQuery?: string;
 }
@@ -101,6 +102,142 @@ function getMatchRanges(view: EditorView | null, query: string): Array<{ from: n
   return ranges;
 }
 
+// ── WYSIWYG & Wiki Link Extensions ──────────────────────────────────
+
+class TaskCheckboxWidget extends WidgetType {
+  constructor(
+    readonly checked: boolean,
+    readonly lineStart: number,
+  ) { super(); }
+
+  eq(other: TaskCheckboxWidget): boolean {
+    return this.checked === other.checked && this.lineStart === other.lineStart;
+  }
+
+  toDOM(view: EditorView): HTMLElement {
+    const box = document.createElement('input');
+    box.type = 'checkbox';
+    box.checked = this.checked;
+    box.className = 'cm-task-checkbox';
+    box.addEventListener('mousedown', (e) => e.preventDefault());
+    box.addEventListener('click', (e) => {
+      e.preventDefault();
+      const pos = this.lineStart + 2; // After "- "
+      view.dispatch({
+        changes: { from: pos, to: pos + 3, insert: this.checked ? '[ ]' : '[x]' },
+      });
+      view.focus();
+    });
+    return box;
+  }
+
+  ignoreEvent(): boolean { return false; }
+}
+
+class ImagePreviewWidget extends WidgetType {
+  constructor(readonly src: string, readonly alt: string) { super(); }
+
+  eq(other: ImagePreviewWidget): boolean {
+    return this.src === other.src && this.alt === other.alt;
+  }
+
+  toDOM(): HTMLElement {
+    const wrapper = document.createElement('span');
+    wrapper.className = 'cm-image-wrapper';
+    const img = document.createElement('img');
+    img.src = this.src;
+    img.alt = this.alt;
+    img.className = 'cm-image-preview';
+    img.draggable = false;
+    wrapper.appendChild(img);
+    return wrapper;
+  }
+
+  ignoreEvent(): boolean { return true; }
+}
+
+const wikiLinkMark = Decoration.mark({ class: 'cm-wiki-link' });
+
+function computeWysiwygDecorations(state: EditorState): DecorationSet {
+  const decorations: Range<Decoration>[] = [];
+  const docStr = state.doc.toString();
+
+  // 1. Task list checkboxes: lines starting with "- [ ]" or "- [x]"
+  const lines = docStr.split('\n');
+  let offset = 0;
+  for (const line of lines) {
+    if (line.startsWith('- [ ] ')) {
+      decorations.push(
+        Decoration.replace({ widget: new TaskCheckboxWidget(false, offset) }).range(offset + 2, offset + 5),
+      );
+    } else if (/^- \[[xX]\] /.test(line)) {
+      decorations.push(
+        Decoration.replace({ widget: new TaskCheckboxWidget(true, offset) }).range(offset + 2, offset + 5),
+      );
+    }
+    offset += line.length + 1; // +1 for the newline
+  }
+
+  // 2. Image inline preview: ![alt](url)
+  const imgRe = /!\[([^\]]*)\]\(([^)]+)\)/g;
+  let match: RegExpExecArray | null;
+  while ((match = imgRe.exec(docStr)) !== null) {
+    const src = match[2];
+    const alt = match[1];
+    if (!src) continue;
+    decorations.push(
+      Decoration.replace({
+        widget: new ImagePreviewWidget(src, alt ?? ''),
+      }).range(match.index, match.index + match[0].length),
+    );
+  }
+
+  // 3. Wiki links: [[Note Title]]
+  const wikiRe = /\[\[([^\]]+)\]\]/g;
+  while ((match = wikiRe.exec(docStr)) !== null) {
+    decorations.push(wikiLinkMark.range(match.index, match.index + match[0].length));
+  }
+
+  return Decoration.set(decorations, true);
+}
+
+const wysiwygField = StateField.define<DecorationSet>({
+  create() { return Decoration.none; },
+  update(deco, tr) {
+    if (tr.docChanged) return computeWysiwygDecorations(tr.state);
+    return deco.map(tr.changes);
+  },
+  provide: (field) => EditorView.decorations.from(field),
+});
+
+const wysiwygTheme = EditorView.baseTheme({
+  '.cm-wiki-link': {
+    color: 'var(--accent, #6a63ff)',
+    cursor: 'pointer',
+    borderBottom: '1px solid rgba(106, 99, 255, 0.3)',
+  },
+  '.cm-task-checkbox': {
+    cursor: 'pointer',
+    accentColor: 'var(--accent, #6a63ff)',
+    width: '14px',
+    height: '14px',
+    margin: '0 4px',
+    verticalAlign: 'middle',
+  },
+  '.cm-image-wrapper': {
+    display: 'inline-block',
+    verticalAlign: 'middle',
+    margin: '4px 0',
+  },
+  '.cm-image-preview': {
+    maxWidth: '100%',
+    maxHeight: '300px',
+    borderRadius: '4px',
+    objectFit: 'contain',
+    cursor: 'default',
+  },
+});
+
 function createEditorState(
   doc: string,
   onChange: (text: string) => void,
@@ -137,6 +274,8 @@ function createEditorState(
       placeholder(placeholderText),
       searchHighlightComp.of([]),
       searchHighlightField,
+      wysiwygField,
+      wysiwygTheme,
       keymap.of([
         ...defaultKeymap,
         ...historyKeymap,
@@ -153,13 +292,14 @@ function createEditorState(
 }
 
 export const CodeMirrorEditor = forwardRef<CodeMirrorHandle, CodeMirrorEditorProps>(
-  function CodeMirrorEditor({ initialContent, onChange, onSelectionChange, onImagePaste, onImageDrop, placeholderText = '开始编写笔记...', searchQuery }, ref) {
+  function CodeMirrorEditor({ initialContent, onChange, onSelectionChange, onImagePaste, onImageDrop, onWikiLinkClick, placeholderText = '开始编写笔记...', searchQuery }, ref) {
     const containerRef = useRef<HTMLDivElement>(null);
     const viewRef = useRef<EditorView | null>(null);
     const onChangeRef = useRef(onChange);
     const onSelectionChangeRef = useRef(onSelectionChange);
     const onImagePasteRef = useRef(onImagePaste);
     const onImageDropRef = useRef(onImageDrop);
+    const onWikiLinkClickRef = useRef(onWikiLinkClick);
     const searchQueryRef = useRef(searchQuery);
     const matchRangesRef = useRef<Array<{ from: number; to: number }>>([]);
     const currentMatchRef = useRef(0);
@@ -168,6 +308,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorHandle, CodeMirrorEditorPro
     onSelectionChangeRef.current = onSelectionChange;
     onImagePasteRef.current = onImagePaste;
     onImageDropRef.current = onImageDrop;
+    onWikiLinkClickRef.current = onWikiLinkClick;
     searchQueryRef.current = searchQuery;
 
     useEffect(() => {
@@ -204,9 +345,23 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorHandle, CodeMirrorEditorPro
         onImageDropRef.current?.(file);
       };
 
+      const handleWikiLinkClick = (e: MouseEvent) => {
+        const target = e.target as HTMLElement | null;
+        if (!target) return;
+        const wikiSpan = target.closest('.cm-wiki-link') as HTMLElement | null;
+        if (!wikiSpan || !wikiSpan.textContent) return;
+        e.preventDefault();
+        // Extract title from [[Title]]
+        const text = wikiSpan.textContent.trim();
+        const match = text.match(/^\[\[(.+?)\]\]$/);
+        const title = match?.[1] ?? text;
+        onWikiLinkClickRef.current?.(title);
+      };
+
       containerRef.current.addEventListener('paste', handlePaste);
       containerRef.current.addEventListener('drop', handleDrop);
       containerRef.current.addEventListener('dragover', (e) => e.preventDefault());
+      containerRef.current.addEventListener('click', handleWikiLinkClick);
 
       viewRef.current = view;
 
@@ -214,6 +369,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorHandle, CodeMirrorEditorPro
         if (containerRef.current) {
           containerRef.current.removeEventListener('paste', handlePaste);
           containerRef.current.removeEventListener('drop', handleDrop);
+          containerRef.current.removeEventListener('click', handleWikiLinkClick);
         }
         view.destroy();
         viewRef.current = null;

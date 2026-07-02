@@ -12,6 +12,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -22,9 +24,12 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.util.Collections;
 
 import static org.hamcrest.Matchers.*;
+import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+
+import org.springframework.data.redis.core.ValueOperations;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -43,9 +48,13 @@ class AuthControllerTest {
     @Autowired
     private PasswordEncoder passwordEncoder;
 
+    @MockBean
+    private StringRedisTemplate stringRedisTemplate;
+
     @BeforeEach
     void setUp() {
         userRepository.deleteAll();
+        when(stringRedisTemplate.opsForValue()).thenReturn(mock(ValueOperations.class));
     }
 
     @Test

@@ -2,6 +2,7 @@ use std::{path::PathBuf, sync::Mutex};
 use tauri::{AppHandle, Manager, State};
 
 use noteforge_core::{md_engine::MarkdownEngine, search::{SearchEngine, SearchPage}, storage::LocalStorage, types::*, types::SyncQueueItem};
+use noteforge_core::metrics::MetricsData;
 
 use crate::git_history::{GitBranchEntry, GitHistory, GitVersionEntry};
 
@@ -24,6 +25,57 @@ macro_rules! timed_command {
     }};
 }
 
+
+// ============================================================
+// 使用统计 (Usage Metrics)
+// ============================================================
+
+use std::sync::Mutex as StdMutex;
+
+lazy_static::lazy_static! {
+    static ref METRICS: StdMutex<Option<noteforge_core::metrics::MetricsManager>> = StdMutex::new(None);
+}
+
+/// Initialize the metrics manager (called once from setup).
+pub fn init_metrics(app_data_dir: &std::path::Path) {
+    let metrics_path = app_data_dir.join("metrics.db");
+    match noteforge_core::metrics::MetricsManager::open(&metrics_path) {
+        Ok(mgr) => {
+            if let Ok(mut guard) = METRICS.lock() {
+                *guard = Some(mgr);
+            }
+        }
+        Err(e) => eprintln!("[metrics] Failed to open metrics db: {e}"),
+    }
+}
+
+/// Record a launch event — called from setup.
+pub fn record_launch() {
+    if let Ok(guard) = METRICS.lock() {
+        if let Some(ref m) = *guard {
+            let _ = m.record_launch();
+        }
+    }
+}
+
+#[tauri::command]
+pub fn record_metric(name: String, value: i64) -> Result<(), String> {
+    let guard = METRICS.lock().map_err(|e| e.to_string())?;
+    let m = guard.as_ref().ok_or("Metrics not initialized")?;
+    match name.as_str() {
+        "note_created" => m.record_note_created().map_err(|e| e.to_string()),
+        "edit_session" => m.record_edit_session(value as u64).map_err(|e| e.to_string()),
+        "search" => m.record_search().map_err(|e| e.to_string()),
+        _ => Ok(()),
+    }
+}
+
+#[tauri::command]
+pub fn get_metrics() -> Result<MetricsData, String> {
+    let guard = METRICS.lock().map_err(|e| e.to_string())?;
+    let m = guard.as_ref().ok_or("Metrics not initialized")?;
+    m.get_metrics().map_err(|e| e.to_string())
+}
 
 // ============================================================
 // 性能缓存系统 (Feature 5 - Performance Optimization)
@@ -164,7 +216,7 @@ pub struct NoteForgeDesktopCore {
 }
 
 impl NoteForgeDesktopCore {
-    pub fn open(data_dir: PathBuf) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn open(data_dir: PathBuf) -> Result<Self, noteforge_core::error::CoreError> {
         std::fs::create_dir_all(&data_dir)?;
         Ok(Self { 
             storage: LocalStorage::open(data_dir.join("noteforge.db"))?, 

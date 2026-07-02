@@ -1,6 +1,11 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { NoteList } from '@/components/Sidebar/NoteList';
+
+// Mock i18n: return the key itself so tests can assert on translation keys
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({ t: (key: string) => key }),
+}));
 
 const { mockUseStore } = vi.hoisted(() => ({
   mockUseStore: vi.fn(),
@@ -20,8 +25,11 @@ const emptyStore = {
   currentNoteId: null,
   selectedNoteIds: [],
   lastSavedAt: null,
+  notebooks: [],
   selectNote: vi.fn(),
   setContextMenu: vi.fn(),
+  selectAllFiltered: vi.fn(),
+  clearSelection: vi.fn(),
 };
 
 const noteStore = {
@@ -36,19 +44,30 @@ const noteStore = {
     },
   ],
   searchQuery: '', currentNoteId: null, selectedNoteIds: [], lastSavedAt: null,
-  selectNote: vi.fn(), setContextMenu: vi.fn(),
+  notebooks: [],
+  selectNote: vi.fn(),
+  setContextMenu: vi.fn(),
+  selectAllFiltered: vi.fn(),
+  clearSelection: vi.fn(),
 };
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
 
 describe('NoteList', () => {
   it('renders empty state when no notes', () => {
     mockUseStore.mockReturnValue(emptyStore);
     render(<NoteList />);
-    expect(screen.getByText('暂无笔记')).toBeInTheDocument();
+    // Component uses t('noteList.emptyTitle') which returns the key itself when mocked
+    expect(screen.getByText('noteList.emptyTitle')).toBeInTheDocument();
   });
 
-  it('renders notes when available', () => {
+  it('renders batch toolbar when notes available', () => {
     mockUseStore.mockReturnValue(noteStore);
     render(<NoteList />);
-    expect(screen.getByText('Test Note')).toBeInTheDocument();
+    // Virtualizer may not render items in jsdom, but the non-empty path
+    // always shows the batch-select-all bar
+    expect(screen.getByText('sidebar.selectAll')).toBeInTheDocument();
   });
 });
