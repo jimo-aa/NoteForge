@@ -13,8 +13,6 @@ const draftKey = (id: string) => `${STORAGE_PREFIX}:draft:${id}`;
 const cursorKey = (id: string) => `${STORAGE_PREFIX}:cursor:${id}`;
 const autosaveKey = (id: string) => `${STORAGE_PREFIX}:autosave:${id}`;
 
-type NoteVersion = { id: string; content: string; title: string; updatedAt: number; summary?: string; source?: 'git' | 'local' };
-
 const safeRead = <T,>(key: string, fallback: T): T => {
   try {
     const raw = window.localStorage.getItem(key);
@@ -281,7 +279,7 @@ export function useNoteStore() {
     setNotes((prev) => prev.map((n) => {
       if (n.meta.id !== id) return n;
       const nextContent = updates.content ?? n.content;
-      const { content: _content, ...metaUpdates } = updates;
+      const { content: _unused, ...metaUpdates } = updates; // eslint-disable-line @typescript-eslint/no-unused-vars
       const nextContentPlain = updates.content !== undefined ? n.contentPlain : n.contentPlain;
       const next: Note = {
         meta: { ...n.meta, ...metaUpdates, updatedAt: Date.now(), version: n.meta.version + (updates.content !== undefined ? 1 : 0), wordCount: countWords(nextContent) },

@@ -102,9 +102,8 @@ export function Editor() {
       setAiSelectedText(text);
       // Position toolbar near the selection
       if (editorContainerRef.current) {
-        const editorRect = editorContainerRef.current.getBoundingClientRect();
-        // Use the editor's scroll position to estimate cursor location
-        setAiToolbarPos({ top: 20, left: 10 }); // Will be refined
+        // Position toolbar near the selection (simplified for now)
+        setAiToolbarPos({ top: 20, left: 10 });
       }
       setAiToolbarVisible(text.length > 0 && text.length <= 2000);
     } else {
@@ -148,14 +147,14 @@ export function Editor() {
       updateNote(note.meta.id, { content: draft });
       showToast('info', t('note.draftRestored'));
     }
-  }, [loadCursor, loadDraft, note, showToast, updateNote]);
+  }, [loadCursor, loadDraft, note, showToast, updateNote, t]);
 
   useLayoutEffect(() => {
     if (!note || !restoreCursorRef.current) return;
     const { start, end } = restoreCursorRef.current;
     cmRef.current?.focus();
     cmRef.current?.setSelection(start, end);
-  }, [note?.meta.id]);
+  }, [note, note?.meta.id]);
 
   useEffect(() => {
     if (!note) return;
@@ -209,7 +208,7 @@ export function Editor() {
         .catch(() => { setBacklinks([]); })
         .finally(() => setBacklinksLoading(false));
     });
-  }, [note?.meta.id]);
+  }, [note, note?.meta.id]);
 
   const updateContent = (content: string) => {
     if (!note) return;
@@ -295,7 +294,7 @@ export function Editor() {
       });
       return;
     }
-  }, [notes, selectNote, showToast, note, updateContent]);
+  }, [notes, selectNote, showToast, note, updateContent, t]);
 
   // 处理 Wiki Link 悬停预览
   const handlePreviewMouseOver = useCallback((e: React.MouseEvent<HTMLElement>) => {

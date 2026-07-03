@@ -173,10 +173,10 @@ export function useVersionSearch(noteId: string) {
     setLoading(true);
     setError(null);
     
-    const data = await invoke<any[]>('search_notes_with_versions', {
+    const data = await invoke<VersionSearchResult[]>('search_notes_with_versions', {
       query,
     });
-    
+
     if (data) {
       setResults(data);
     } else {
@@ -256,7 +256,7 @@ export function useExportBackup(noteId: string) {
     setBacking(true);
     setError(null);
     
-    const result = await invoke<any>('restore_note', {
+    const result = await invoke<unknown>('restore_note', {
       backup_path: backupPath,
     });
     
@@ -283,10 +283,10 @@ export function useExportBackup(noteId: string) {
 
 // 缓存管理Hook
 export function useCacheManagement() {
-  const [stats, setStats] = useState(null);
+  const [stats, setStats] = useState<Record<string, unknown> | null>(null);
 
   const getCacheStats = useCallback(async () => {
-    const result = await invoke<any>('get_cache_stats');
+    const result = await invoke<Record<string, unknown>>('get_cache_stats');
     if (result) {
       setStats(result);
       return result;

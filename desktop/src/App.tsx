@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, lazy, Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useStore } from '@/stores/context';
 import { tauriInvoke } from '@/utils/invoke';
@@ -11,7 +11,6 @@ import { NewNoteModal } from '@/components/Modals/NewNoteModal';
 import { NotebookModal } from '@/components/Modals/NotebookModal';
 import { ContextMenu } from '@/components/Common/ContextMenu';
 import { Toast } from '@/components/Common/Toast';
-import { GraphView } from '@/components/Common/GraphView';
 import { EntityModal } from '@/components/Modals/EntityModal';
 import { AdvancedVersioningPanel } from '@/components/Features/AdvancedVersioningPanel';
 import { ErrorBoundary } from '@/components/Common/ErrorBoundary';
@@ -21,6 +20,8 @@ import { EncryptionModal } from '@/components/Modals/EncryptionModal';
 import { AboutModal } from '@/components/Modals/AboutModal';
 import { WelcomeGuide } from '@/components/Modals/WelcomeGuide';
 import type { NotebookModalState } from '@/components/Modals/NotebookModal';
+
+const LazyGraphView = lazy(() => import('@/components/Common/GraphView').then(m => ({ default: m.GraphView })));
 
 export default function App() {
   const store = useStore();
@@ -106,7 +107,7 @@ export default function App() {
       window.removeEventListener('unhandledrejection', handleUnhandledRejection as EventListener);
       window.removeEventListener('error', handleGlobalError as EventListener);
     };
-  }, []);
+  }, [t]);
 
   const [encryptionLockOpen, setEncryptionLockOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
@@ -157,8 +158,8 @@ export default function App() {
         // ignore event API errors in environments without permissions
       }
     })();
-    return () => { void unlisten?.(); };
-  }, []);
+    return () => { void unlisten?.();     };
+  }, [t]);
 
   const handleOpenNotebookModal = () => {
     setNotebookModal({
@@ -219,7 +220,7 @@ export default function App() {
           />
         )}
         <ContextMenu />
-        <GraphView />
+        <Suspense fallback={null}><LazyGraphView /></Suspense>
         <ManageModal open={manageOpen} onClose={() => setManageOpen(false)} />
         <DraftRecoveryModal open={draftRecoveryOpen} onClose={() => setDraftRecoveryOpen(false)} />
         <EncryptionModal open={encryptionLockOpen} onClose={() => setEncryptionLockOpen(false)} />

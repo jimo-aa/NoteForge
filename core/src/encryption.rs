@@ -9,7 +9,6 @@ use aes_gcm::{
 };
 use argon2::{Argon2, PasswordHasher};
 use argon2::password_hash::SaltString;
-use rand::Rng;
 use thiserror::Error;
 use tracing::{info, warn};
 
@@ -87,9 +86,11 @@ impl EncryptionManager {
 
         let cipher = Aes256Gcm::new(&key.into());
         
-        // 生成随机 nonce（12 字节）
-        let mut rng = rand::thread_rng();
-        let nonce_bytes: [u8; 12] = rng.gen();
+        // 生成随机 nonce（12 字节）— using OsRng for cryptographic quality
+        use rand::rngs::OsRng;
+        use rand::RngCore;
+        let mut nonce_bytes = [0u8; 12];
+        OsRng.fill_bytes(&mut nonce_bytes);
         let nonce = Nonce::from_slice(&nonce_bytes);
 
         // 加密
@@ -118,8 +119,8 @@ impl EncryptionManager {
         let ciphertext_bytes = hex::decode(ciphertext_hex)
             .map_err(|_| EncryptionError::InvalidDataFormat)?;
 
-        // 检查最小长度（12字节 nonce + 至少1字节密文 + 16字节标签）
-        if ciphertext_bytes.len() < 29 {
+        // 检查最小长度（12字节 nonce + 0字节密文 + 16字节标签 = 28字节最小）
+        if ciphertext_bytes.len() < 28 {
             warn!("❌ 加密数据长度不足");
             return Err(EncryptionError::InvalidDataFormat);
         }
@@ -157,9 +158,12 @@ impl EncryptionManager {
     }
 
     /// 生成随机盐（用于密钥派生）
+    /// Uses OsRng for cryptographic-quality randomness.
     pub fn generate_salt() -> String {
-        let mut rng = rand::thread_rng();
-        let salt_bytes: [u8; 16] = rng.gen();
+        use rand::rngs::OsRng;
+        use rand::RngCore;
+        let mut salt_bytes = [0u8; 16];
+        OsRng.fill_bytes(&mut salt_bytes);
         hex::encode(salt_bytes)
     }
 }
@@ -242,5 +246,69 @@ mod tests {
         let salt1 = EncryptionManager::generate_salt();
         let salt2 = EncryptionManager::generate_salt();
         assert_ne!(salt1, salt2);
+    }
+
+    #[test]
+    fn test_tampered_ciphertext_detected() {
+        let password = "test_password";
+        let salt = EncryptionManager::generate_salt();
+        let key = EncryptionManager::derive_key_from_password(password, &salt).unwrap();
+        let mut em = EncryptionManager::new();
+        em.initialize(key);
+
+        let encrypted = em.encrypt("sensitive content").unwrap();
+        // Tamper with the ciphertext by flipping a bit in the hex
+        let tampered = format!("{}x{}", &encrypted[..10], &encrypted[12..]);
+        let result = em.decrypt(&tampered);
+        assert!(result.is_err(), "GCM should detect tampering");
+    }
+
+    #[test]
+    fn test_empty_string_roundtrip() {
+        let password = "pwd123";
+        let salt = EncryptionManager::generate_salt();
+        let key = EncryptionManager::derive_key_from_password(password, &salt).unwrap();
+        let mut em = EncryptionManager::new();
+        em.initialize(key);
+
+        let encrypted = em.encrypt("").unwrap();
+        let decrypted = em.decrypt(&encrypted).unwrap();
+        assert_eq!(decrypted, "");
+    }
+
+    #[test]
+    fn test_very_long_content() {
+        let password = "pwd123";
+        let salt = EncryptionManager::generate_salt();
+        let key = EncryptionManager::derive_key_from_password(password, &salt).unwrap();
+        let mut em = EncryptionManager::new();
+        em.initialize(key);
+
+        let long = "A".repeat(100_000);
+        let encrypted = em.encrypt(&long).unwrap();
+        let decrypted = em.decrypt(&encrypted).unwrap();
+        assert_eq!(decrypted, long);
+    }
+
+    #[test]
+    fn test_invalid_hex_returns_error() {
+        let password = "pwd123";
+        let salt = EncryptionManager::generate_salt();
+        let key = EncryptionManager::derive_key_from_password(password, &salt).unwrap();
+        let mut em = EncryptionManager::new();
+        em.initialize(key);
+
+        let result = em.decrypt("not-hex-at-all!");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_uninitialized_manager_returns_error() {
+        let em = EncryptionManager::new();
+        assert!(!em.is_initialized());
+        let result = em.encrypt("test");
+        assert!(result.is_err());
+        let result = em.decrypt("abcd1234");
+        assert!(result.is_err());
     }
 }

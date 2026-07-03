@@ -1,0 +1,39 @@
+name: Lighthouse CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  lighthouse:
+    name: Lighthouse Desktop Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: desktop
+
+      - name: Build desktop app
+        run: npm run build
+        working-directory: desktop
+
+      - name: Run Lighthouse CI
+        run: |
+          npm install -g @lhci/cli@0.14.x
+          lhci autorun --collect.staticDistDir=./desktop/dist \
+            --collect.url=http://localhost:1420 \
+            --collect.settings.preset=desktop \
+            --upload.target=temporary-public-storage \
+            --assert.presets=desktop 2>&1 || echo "Lighthouse audit complete (non-blocking)"
+        continue-on-error: true

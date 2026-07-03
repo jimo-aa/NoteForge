@@ -34,7 +34,7 @@ export function EncryptionModal({ open, onClose }: EncryptionModalProps) {
       setState('error');
       setError(t('encryptionExtra.statusCheckFailed'));
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     if (open) {

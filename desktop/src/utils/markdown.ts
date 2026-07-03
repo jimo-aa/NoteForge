@@ -5,8 +5,7 @@ import DOMPurify from 'dompurify';
 // Allow class attribute on code/pre elements for highlight.js
 DOMPurify.addHook('uponSanitizeElement', (node, data) => {
   if (data.tagName === 'code' || data.tagName === 'pre') {
-    const attrs = (node as HTMLElement).getAttribute('class');
-    // Keep existing class attribute
+    // Keep existing class attribute (attrs read is implicit via DOMPurify)
   }
 });
 const SANITIZE_CONFIG = {
@@ -51,7 +50,6 @@ export function renderMarkdown(md: string, highlightQuery = ''): string {
     if (/^- \[[ xX]\] /.test(line)) {
       const ch3 = line[3]; const done = ch3 === 'x' || ch3 === 'X';
       if (listType !== 'ul') { flushList(); listType = 'ul'; out.push('<ul class="task-list">'); }
-      const index = codeBuf.length; // Use a unique key
       out.push(`<li class="${done ? 'task-done' : ''}"><button class="task-checkbox" data-checked="${done ? 'true' : 'false'}" data-line="${escapeHtml(line)}" title="${done ? '标记未完成' : '标记完成'}">${done ? '✅' : '⬜'}</button> ${inlineMd(line.replace(/^- \[[ xX]\] /, ''), highlightQuery)}</li>`);
       continue;
     }
@@ -155,7 +153,6 @@ export function formatTable(tableText: string): string {
   const colWidths: number[] = Array(numCols).fill(0);
   for (const row of parsed) {
     for (let i = 0; i < row.length && i < numCols; i++) {
-      const clean = row[i]!.replace(/^:?-{3,}:?$/, (m) => m.replace(/-/g, ''));
       colWidths[i] = Math.max(colWidths[i]!, strWidth(row[i]!));
     }
   }

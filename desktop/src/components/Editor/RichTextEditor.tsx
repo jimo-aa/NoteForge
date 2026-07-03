@@ -3,7 +3,7 @@
 // Can be used alongside or as a replacement for CodeMirrorEditor.
 
 import { useCallback, useImperativeHandle, forwardRef, useState, useRef, useEffect } from 'react';
-import { useEditor, EditorContent, type Editor } from '@tiptap/react';
+import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import Underline from '@tiptap/extension-underline';

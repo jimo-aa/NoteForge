@@ -385,25 +385,25 @@ export function AdvancedVersioningPanel({ noteId, onClose }: { noteId: string; o
                     type="radio"
                     value="markdown"
                     checked={exportFormat === 'markdown'}
-                    onChange={(e) => setExportFormat(e.target.value as any)}
+                    onChange={(e) => setExportFormat(e.target.value as 'markdown')}
                   />
-                  Markdown (.md)
+                   Markdown (.md)
                 </label>
                 <label>
                   <input
                     type="radio"
                     value="html"
                     checked={exportFormat === 'html'}
-                    onChange={(e) => setExportFormat(e.target.value as any)}
+                    onChange={(e) => setExportFormat(e.target.value as 'html')}
                   />
-                  HTML (.html)
+                   HTML (.html)
                 </label>
                 <label>
                   <input
                     type="radio"
                     value="json"
                     checked={exportFormat === 'json'}
-                    onChange={(e) => setExportFormat(e.target.value as any)}
+                    onChange={(e) => setExportFormat(e.target.value as 'json')}
                   />
                   JSON (.json)
                 </label>

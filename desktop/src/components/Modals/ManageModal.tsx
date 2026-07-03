@@ -55,7 +55,7 @@ export function ManageModal({ open, onClose }: { open: boolean; onClose: () => v
   const [conflictCount, setConflictCount] = useState(0);
   const [lastSyncAt, setLastSyncAt] = useState<number | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [syncError, setSyncError] = useState<string | null>(null);
+  
 
   useEffect(() => {
     if (!open || tab !== 'sync') return;
@@ -67,7 +67,6 @@ export function ManageModal({ open, onClose }: { open: boolean; onClose: () => v
 
   const handleSyncNow = () => {
     setIsSyncing(true);
-    setSyncError(null);
     void getSyncServiceFn().then(svc => {
       svc.sync(lastSyncAt ?? 0).then(result => {
         setIsSyncing(false);
@@ -78,7 +77,7 @@ export function ManageModal({ open, onClose }: { open: boolean; onClose: () => v
           showToast('success', t('sync.syncComplete'));
         } else {
           setSyncStatus('error');
-          setSyncError(t('sync.syncFailed'));
+          showToast('error', t('sync.syncFailed'));
         }
       });
     });
@@ -86,7 +85,7 @@ export function ManageModal({ open, onClose }: { open: boolean; onClose: () => v
 
   const handleResolveLocal = () => {
     // Resolve conflicts by keeping local versions (clear pending queue)
-    void getSyncServiceFn().then(svc => {
+    void getSyncServiceFn().then(_svc => {
       // Mark all as accepted by clearing queue
       import('@tauri-apps/api/core').then(({ invoke }) => {
         void invoke('clear_sync_queue');
@@ -99,7 +98,7 @@ export function ManageModal({ open, onClose }: { open: boolean; onClose: () => v
 
   const handleResolveRemote = () => {
     // Resolve conflicts by accepting remote versions (force pull)
-    void getSyncServiceFn().then(svc => {
+    void getSyncServiceFn().then(_svc => {
       handleSyncNow();
       setConflictCount(0);
       showToast('success', t('sync.resolvedRemote'));
@@ -146,7 +145,7 @@ export function ManageModal({ open, onClose }: { open: boolean; onClose: () => v
     };
     window.addEventListener('keydown', handler, true);
     return () => window.removeEventListener('keydown', handler, true);
-  }, [capturingId]);
+  }, [capturingId, t]);
 
   const handleStartCapture = (id: string) => {
     setCapturingId(id);

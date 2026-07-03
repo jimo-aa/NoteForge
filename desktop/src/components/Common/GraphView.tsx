@@ -25,6 +25,25 @@ function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+// Simple extractor for common entity patterns in Chinese/English text.
+// Returns entities grouped by type (person, tech, place, concept).
+function extractEntities(text: string): string[] {
+  const entities = new Set<string>();
+  // English: capitalized multi-word phrases (potential named entities)
+  const enEntities = text.match(/\b[A-Z][a-z]+(?:\s[A-Z][a-z]+)*\b/g);
+  enEntities?.forEach(e => { if (e.split(' ').length <= 3) entities.add(e); });
+  // Chinese: quoted terms "..." or 「...」
+  const cnQuoted = text.match(/[""「」]((?:[^"「」]){2,20})[""「」]/g);
+  cnQuoted?.forEach(e => entities.add(e.replace(/[""「」]/g, '').trim()));
+  // Technical terms: @ mentions, #tags, CamelCase terms
+  const techTerms = text.match(/#[\w\u4e00-\u9fff-]+/g);
+  techTerms?.forEach(e => entities.add(e.slice(1)));
+  // URLs and references
+  const refs = text.match(/\[\[([^\]]+)\]\]/g);
+  refs?.forEach(e => entities.add(e.slice(2, -2).trim()));
+  return Array.from(entities).slice(0, 10);
+}
+
 const CLUSTER_COLORS = [
   '#6a63ff', '#65d9ff', '#50e3c2', '#ff6b6b',
   '#ffa36b', '#ffd76b', '#b06bff', '#ff6bd6',
@@ -47,6 +66,19 @@ export function GraphView() {
   const [zoom, setZoom] = useState(1);
   const [showIsolated, setShowIsolated] = useState(true);
   const [showLegend, setShowLegend] = useState(true);
+  const [entityMode, setEntityMode] = useState(false);
+  const [entityResults, setEntityResults] = useState<Map<string, string[]>>(new Map());
+
+  // Build entity map: for each note, extract entities from content
+  useEffect(() => {
+    if (!entityMode) return;
+    const map = new Map<string, string[]>();
+    for (const note of store.notes) {
+      const entities = extractEntities(note.content);
+      if (entities.length > 0) map.set(note.meta.id, entities);
+    }
+    setEntityResults(map);
+  }, [entityMode, store.notes]);
 
   const graphKey = useMemo(() => {
     return store.notes.map((n) => `${n.meta.id}:${n.meta.updatedAt}`).join('|');
@@ -238,6 +270,13 @@ export function GraphView() {
           {showIsolated ? '🏷' : '🏷̶'}
         </button>
         <button
+          className={entityMode ? 'graph-toggle active' : 'graph-toggle'}
+          onClick={() => setEntityMode((v) => !v)}
+          title="实体提取模式：从笔记内容中提取命名实体"
+        >
+          🔤
+        </button>
+        <button
           className={showLegend ? 'graph-toggle active' : 'graph-toggle'}
           onClick={() => setShowLegend((v) => !v)}
           title="显示/隐藏图例"
@@ -316,6 +355,9 @@ export function GraphView() {
                 <strong>{node.label}</strong>
                 <span>{node.cluster}</span>
                 <span>{node.degree} 条关联</span>
+                {entityMode && entityResults.get(node.id) && entityResults.get(node.id)!.length > 0 && (
+                  <span className="graph-node-entities">{entityResults.get(node.id)!.slice(0, 3).join(' · ')}</span>
+                )}
               </button>
             );
           })}

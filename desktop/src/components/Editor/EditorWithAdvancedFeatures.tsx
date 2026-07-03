@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { tauriInvoke as invoke } from '@/utils/invoke';
 import { useStore } from '@/stores/context';
-import type { Note } from '@/types';
+import type { Note, GitVersionEntry } from '@/types';
 import { DiffViewerModal } from '../Modals/DiffViewerModal';
 import { MilestoneModal } from '../Modals/MilestoneModal';
 import { VersionSearchModal } from '../Modals/VersionSearchModal';
@@ -37,7 +37,7 @@ export function EditorWithAdvancedFeatures({
   const [showExportBackup, setShowExportBackup] = useState(false);
 
   // 版本选择状态
-  const [versions, setVersions] = useState<any[]>([]);
+  const [versions, setVersions] = useState<GitVersionEntry[]>([]);
   const [selectedVersions, setSelectedVersions] = useState({
     from: '',
     to: '',
@@ -61,13 +61,13 @@ export function EditorWithAdvancedFeatures({
   const loadVersions = async () => {
     if (!note) return;
     setLoadingVersions(true);
-    const data = await invoke<any[]>('list_note_versions_cached', {
+    const data = await invoke<GitVersionEntry[]>('list_note_versions_cached', {
       note_id: note.meta.id,
     });
     if (data && data.length > 0) {
       setVersions(data);
       // 自动选择最新的两个版本
-      if (data.length >= 2) {
+      if (data.length >= 2 && data[0] && data[1]) {
         setSelectedVersions({
           from: data[1].id,
           to: data[0].id,

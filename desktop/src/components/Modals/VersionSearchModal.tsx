@@ -39,7 +39,7 @@ export function VersionSearchModal({
       });
       if (data) setResults(data);
     } else {
-      const data = await invoke<any[]>('search_notes_with_versions', {
+      const data = await invoke<VersionSearchResult[]>('search_notes_with_versions', {
         query,
       });
       if (data) setResults(data);
