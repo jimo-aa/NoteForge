@@ -1,0 +1,1617 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NoteForge 智能知识库 — 交互原型 v0.3</title>
+<style>
+/* ================================================================
+   Design System — Tokens
+   ================================================================ */
+:root {
+  --sidebar-w: 280px;
+  --toc-w: 220px;
+  --props-w: 300px;
+  --bg: #f8f9fb;
+  --bg-card: #ffffff;
+  --sidebar-bg: #1a1b2e;
+  --sidebar-hover: #262840;
+  --sidebar-active: #32345a;
+  --sidebar-text: #c8cae0;
+  --sidebar-muted: #6b6e8a;
+  --accent: #6366f1;
+  --accent-hover: #5558e6;
+  --accent-subtle: #eef2ff;
+  --accent-glow: rgba(99,102,241,0.15);
+  --text: #171a23;
+  --text-secondary: #5a5f73;
+  --text-muted: #989daf;
+  --border: #e6e8ee;
+  --border-light: #f0f2f6;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --info: #3b82f6;
+  --radius-sm: 6px;
+  --radius: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
+  --shadow: 0 1px 4px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+  --shadow-lg: 0 8px 30px rgba(0,0,0,0.12);
+  --font: -apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei','Noto Sans SC',sans-serif;
+  --font-mono: 'JetBrains Mono','Fira Code','Consolas','SF Mono',monospace;
+  --transition: 0.2s cubic-bezier(0.4,0,0.2,1);
+}
+
+[data-theme="dark"] {
+  --bg: #12131e;
+  --bg-card: #1a1b2e;
+  --sidebar-bg: #0f101a;
+  --sidebar-hover: #1e1f35;
+  --sidebar-active: #28294a;
+  --sidebar-text: #c8cae0;
+  --sidebar-muted: #55587a;
+  --accent: #7c7fff;
+  --accent-subtle: #28294a;
+  --accent-glow: rgba(124,127,255,0.12);
+  --text: #e4e6f0;
+  --text-secondary: #989daf;
+  --text-muted: #5a5f73;
+  --border: #2a2c42;
+  --border-light: #1e2037;
+  --shadow: 0 1px 4px rgba(0,0,0,0.3);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.4);
+  --shadow-lg: 0 8px 30px rgba(0,0,0,0.5);
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:var(--font); background:var(--bg); color:var(--text); overflow:hidden; height:100vh; }
+::selection { background:var(--accent); color:#fff; }
+::-webkit-scrollbar { width:5px; height:5px; }
+::-webkit-scrollbar-track { background:transparent; }
+::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
+::-webkit-scrollbar-thumb:hover { background:var(--text-muted); }
+
+.app { display:flex; height:100vh; }
+
+/* ================================================================
+   Sidebar
+   ================================================================ */
+.sidebar {
+  width:var(--sidebar-w); background:var(--sidebar-bg); color:var(--sidebar-text);
+  display:flex; flex-direction:column; flex-shrink:0; user-select:none; position:relative; z-index:10;
+}
+.sidebar-header {
+  padding:14px 16px 10px; border-bottom:1px solid rgba(255,255,255,0.06);
+  display:flex; align-items:center; gap:10px;
+}
+.sidebar-header .logo {
+  width:26px;height:26px;background:var(--accent);border-radius:6px;
+  display:flex;align-items:center;justify-content:center;font-size:15px;color:#fff;flex-shrink:0;
+}
+.sidebar-header h1 { font-size:15px; font-weight:600; color:#fff; flex:1; }
+.sidebar-header .actions { display:flex; gap:4px; }
+.sidebar-header .actions button {
+  width:24px;height:24px;border:none;background:transparent;border-radius:4px;
+  cursor:pointer;font-size:12px;color:var(--sidebar-muted);display:flex;align-items:center;justify-content:center;
+  transition:var(--transition);
+}
+.sidebar-header .actions button:hover { background:var(--sidebar-hover); color:var(--sidebar-text); }
+
+.search-box { margin:10px 12px 8px; position:relative; }
+.search-box .icon {
+  position:absolute;left:10px;top:50%;transform:translateY(-50%);
+  font-size:13px;color:var(--sidebar-muted);pointer-events:none;
+}
+.search-box input {
+  width:100%;padding:7px 10px 7px 30px;border:1px solid rgba(255,255,255,0.06);
+  border-radius:var(--radius);background:rgba(255,255,255,0.04);
+  color:var(--sidebar-text);font-size:12.5px;outline:none;transition:var(--transition);
+  font-family:var(--font);
+}
+.search-box input:focus { border-color:var(--accent); background:rgba(255,255,255,0.07); }
+.search-box input::placeholder { color:var(--sidebar-muted); }
+.search-shortcut {
+  position:absolute;right:8px;top:50%;transform:translateY(-50%);
+  font-size:10px;color:var(--sidebar-muted);background:rgba(255,255,255,0.05);
+  padding:1px 5px;border-radius:3px;
+}
+
+.nav-section { padding:0 12px; margin-bottom:2px; }
+.nav-section-header {
+  display:flex;align-items:center;justify-content:space-between;
+  padding:6px 4px;font-size:11px;font-weight:600;color:var(--sidebar-muted);
+  text-transform:uppercase;letter-spacing:0.5px;cursor:pointer;border-radius:4px;
+  transition:var(--transition);
+}
+.nav-section-header:hover { color:var(--sidebar-text); }
+.nav-item {
+  display:flex;align-items:center;gap:8px;padding:5px 8px;margin:1px 0;
+  border-radius:var(--radius-sm);font-size:12.5px;cursor:pointer;
+  transition:var(--transition);color:var(--sidebar-muted);border:none;background:transparent;
+  width:100%;text-align:left;font-family:var(--font);
+}
+.nav-item:hover { background:var(--sidebar-hover); color:var(--sidebar-text); }
+.nav-item.active { background:var(--accent-subtle); color:var(--accent); }
+.nav-item .count {
+  margin-left:auto;font-size:11px;background:rgba(255,255,255,0.06);
+  padding:0 6px;border-radius:8px;color:var(--sidebar-muted);
+}
+.nav-item .badge {
+  margin-left:auto;font-size:9px;background:var(--accent);color:#fff;
+  padding:1px 6px;border-radius:8px;font-weight:600;
+}
+
+.nav-divider { height:1px; background:rgba(255,255,255,0.06); margin:6px 12px; }
+
+/* Knowledge nav */
+.nav-item.kb-icon { font-size:14px; }
+
+/* Doc list in sidebar */
+.doc-list-wrap { flex:1; overflow-y:auto; padding:2px 6px 8px; }
+.doc-item {
+  padding:9px 10px;border-radius:var(--radius);cursor:pointer;
+  transition:var(--transition);margin-bottom:1px;position:relative;
+  animation:fadeSlideIn 0.2s ease-out;
+}
+.doc-item:hover { background:var(--sidebar-hover); }
+.doc-item.active { background:var(--sidebar-active); }
+.doc-item .row1 {
+  display:flex;align-items:center;gap:5px;margin-bottom:2px;
+}
+.doc-item .file-icon { font-size:13px; flex-shrink:0; }
+.doc-item .title {
+  font-size:13px;font-weight:500;color:var(--sidebar-text);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;
+}
+.doc-item .preview {
+  font-size:11.5px;color:var(--sidebar-muted);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px;
+}
+.doc-item .meta {
+  font-size:10.5px;color:var(--sidebar-muted);display:flex;gap:6px;align-items:center;
+}
+.doc-item .meta .status-badge {
+  font-size:9px;padding:1px 5px;border-radius:8px;font-weight:500;
+}
+.status-processing { background:rgba(251,191,36,0.15); color:var(--warning); }
+.status-ready { background:rgba(16,185,129,0.15); color:var(--success); }
+.status-draft { background:rgba(99,102,241,0.15); color:var(--accent); }
+.status-published { background:rgba(16,185,129,0.15); color:var(--success); }
+.status-archived { background:rgba(100,116,139,0.15); color:var(--text-muted); }
+.doc-item .active-bar {
+  display:none;position:absolute;left:0;top:7px;bottom:7px;width:3px;
+  background:var(--accent);border-radius:0 2px 2px 0;
+}
+.doc-item.active .active-bar { display:block; }
+
+.sidebar-footer {
+  padding:10px 14px;border-top:1px solid rgba(255,255,255,0.06);
+  display:flex;align-items:center;gap:6px;font-size:11px;color:var(--sidebar-muted);
+}
+.sidebar-footer .status-dot {
+  width:7px;height:7px;border-radius:50%;flex-shrink:0;
+}
+.sidebar-footer .status-dot.online { background:var(--success); box-shadow:0 0 4px rgba(16,185,129,0.4); }
+.sidebar-footer .mcp-badge {
+  margin-left:auto;font-size:9px;background:rgba(99,102,241,0.15);color:var(--accent);
+  padding:2px 6px;border-radius:8px;font-weight:500;display:flex;align-items:center;gap:3px;
+}
+
+/* ============================================================
+   Main Content Area
+   ============================================================ */
+.main { flex:1; display:flex; flex-direction:column; min-width:0; position:relative; }
+
+/* Empty state */
+.empty-state {
+  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:10px;color:var(--text-muted);animation:fadeIn 0.3s ease-out;
+}
+.empty-state .icon { font-size:56px; opacity:0.3; }
+.empty-state h2 { font-size:20px;font-weight:600;color:var(--text-secondary); }
+.empty-state p { font-size:13.5px;max-width:400px;text-align:center;line-height:1.7; }
+
+/* ============================================================
+   Knowledge List View
+   ============================================================ */
+.kb-header {
+  padding:12px 24px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:12px;background:var(--bg-card);flex-shrink:0;
+  flex-wrap:wrap;
+}
+.kb-header h2 { font-size:17px;font-weight:600;flex-shrink:0; }
+.kb-header .kb-search {
+  flex:1;min-width:180px;position:relative;
+}
+.kb-header .kb-search input {
+  width:100%;padding:7px 12px 7px 32px;border:1px solid var(--border);
+  border-radius:var(--radius);font-size:12.5px;outline:none;font-family:var(--font);
+  background:var(--bg-card);color:var(--text);
+  transition:var(--transition);
+}
+.kb-header .kb-search input:focus { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-glow); }
+.kb-header .kb-search .icon {
+  position:absolute;left:10px;top:50%;transform:translateY(-50%);
+  font-size:13px;color:var(--text-muted);
+}
+.kb-header .kb-actions { display:flex; gap:6px; }
+.kb-header .kb-actions button {
+  padding:6px 14px;border-radius:var(--radius-sm);border:1px solid var(--border);
+  background:var(--bg-card);cursor:pointer;font-size:12px;color:var(--text-secondary);
+  transition:var(--transition);font-family:var(--font);display:flex;align-items:center;gap:4px;
+}
+.kb-header .kb-actions button:hover { background:var(--border-light); border-color:var(--text-muted); }
+.kb-header .kb-actions .btn-primary {
+  background:var(--accent);color:#fff;border-color:var(--accent);
+}
+.kb-header .kb-actions .btn-primary:hover { background:var(--accent-hover); }
+
+/* Category pills */
+.category-bar {
+  padding:8px 24px;border-bottom:1px solid var(--border-light);
+  background:var(--bg-card);display:flex;gap:6px;flex-wrap:wrap;align-items:center;flex-shrink:0;
+}
+.category-pill {
+  padding:4px 12px;border-radius:14px;font-size:11.5px;
+  background:var(--border-light);color:var(--text-secondary);cursor:pointer;
+  transition:var(--transition);border:1px solid transparent;white-space:nowrap;
+}
+.category-pill:hover { background:var(--accent-subtle); color:var(--accent); }
+.category-pill.active { background:var(--accent); color:#fff; }
+.category-pill .count { opacity:0.6;margin-left:3px;font-size:10px; }
+
+/* Knowledge doc list */
+.kb-list-wrap { flex:1; overflow-y:auto; padding:12px 24px; }
+.kb-item {
+  background:var(--bg-card);border:1px solid var(--border-light);
+  border-radius:var(--radius-lg);padding:16px 18px;margin-bottom:8px;
+  cursor:pointer;transition:var(--transition);animation:fadeSlideIn 0.2s ease-out;
+  display:flex;gap:14px;align-items:flex-start;
+}
+.kb-item:hover { border-color:var(--accent); box-shadow:var(--shadow-md); transform:translateY(-1px); }
+.kb-item:active { transform:translateY(0); }
+.kb-item .file-type-icon {
+  width:40px;height:40px;border-radius:var(--radius);flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;font-size:20px;
+}
+.kb-item .file-type-icon.pdf { background:#fef2f2;color:#ef4444; }
+.kb-item .file-type-icon.docx { background:#eef2ff;color:#6366f1; }
+.kb-item .file-type-icon.pptx { background:#fef3c7;color:#f59e0b; }
+.kb-item .file-type-icon.xlsx { background:#ecfdf5;color:#10b981; }
+.kb-item .file-type-icon.code { background:#f5f3ff;color:#8b5cf6; }
+.kb-item .file-type-icon.md { background:#eef2ff;color:#6366f1; }
+.kb-item .file-type-icon.txt { background:#f8fafc;color:#64748b; }
+.kb-item .item-body { flex:1; min-width:0; }
+.kb-item .item-title {
+  font-size:14.5px;font-weight:600;margin-bottom:4px;
+  display:flex;align-items:center;gap:6px;
+}
+.kb-item .item-title .status-badge {
+  font-size:9px;padding:1px 7px;border-radius:8px;font-weight:500;
+}
+.kb-item .item-summary {
+  font-size:12.5px;color:var(--text-secondary);line-height:1.6;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+  margin-bottom:6px;
+}
+.kb-item .item-meta {
+  display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text-muted);flex-wrap:wrap;
+}
+.kb-item .item-meta .tag {
+  padding:1px 7px;border-radius:8px;font-size:10px;
+  background:var(--accent-subtle);color:var(--accent);
+}
+.kb-item .item-meta .tag.tech { background:#eef2ff;color:#6366f1; }
+.kb-item .item-meta .tag.code { background:#f5f3ff;color:#8b5cf6; }
+.kb-item .item-meta .tag.data { background:#ecfdf5;color:#10b981; }
+.kb-item .item-meta .tag.mgmt { background:#fef3c7;color:#f59e0b; }
+.kb-item .item-right {
+  flex-shrink:0;text-align:right;font-size:11px;color:var(--text-muted);
+  display:flex;flex-direction:column;gap:4px;align-items:flex-end;
+}
+.kb-item .item-right .word-count { font-size:11px; }
+.kb-item .item-right .quality-score {
+  display:flex;align-items:center;gap:3px;font-size:10px;
+}
+.kb-item .item-right .quality-score.good { color:var(--success); }
+.kb-item .item-right .quality-score.fair { color:var(--warning); }
+.kb-item .item-right .quality-score.poor { color:var(--danger); }
+
+/* ============================================================
+   Knowledge Viewer
+   ============================================================ */
+.viewer-header {
+  padding:10px 24px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:10px;background:var(--bg-card);flex-shrink:0;
+}
+.viewer-header .back-btn {
+  width:30px;height:30px;border-radius:var(--radius-sm);border:1px solid transparent;
+  background:transparent;cursor:pointer;display:flex;align-items:center;
+  justify-content:center;font-size:16px;color:var(--text-secondary);
+  transition:var(--transition);flex-shrink:0;
+}
+.viewer-header .back-btn:hover { background:var(--border-light); border-color:var(--border); }
+.viewer-header .v-title {
+  font-size:15px;font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.viewer-header .v-actions { display:flex; gap:4px; }
+.viewer-header .v-actions button {
+  padding:5px 12px;border-radius:var(--radius-sm);border:1px solid var(--border);
+  background:var(--bg-card);cursor:pointer;font-size:11.5px;color:var(--text-secondary);
+  transition:var(--transition);font-family:var(--font);display:flex;align-items:center;gap:4px;
+}
+.viewer-header .v-actions button:hover { background:var(--border-light); }
+.viewer-header .v-actions .btn-primary {
+  background:var(--accent);color:#fff;border-color:var(--accent);
+}
+.viewer-header .v-actions .btn-primary:hover { background:var(--accent-hover); }
+
+/* Viewer body - 3 column */
+.viewer-body {
+  flex:1;display:flex;overflow:hidden;position:relative;
+}
+
+/* TOC sidebar */
+.viewer-toc {
+  width:var(--toc-w);border-right:1px solid var(--border);
+  background:var(--bg-card);overflow-y:auto;flex-shrink:0;
+  padding:12px 0;
+}
+.viewer-toc .toc-header {
+  padding:0 14px 8px;font-size:11px;font-weight:600;color:var(--text-muted);
+  text-transform:uppercase;letter-spacing:0.5px;display:flex;align-items:center;gap:4px;
+}
+.viewer-toc .toc-item {
+  padding:5px 14px;font-size:12px;color:var(--text-secondary);cursor:pointer;
+  transition:var(--transition);border-left:2px solid transparent;
+}
+.viewer-toc .toc-item:hover { background:var(--border-light); color:var(--text); }
+.viewer-toc .toc-item.active { color:var(--accent); border-left-color:var(--accent); background:var(--accent-subtle); }
+.viewer-toc .toc-item.level-1 { padding-left:14px; font-weight:500; }
+.viewer-toc .toc-item.level-2 { padding-left:28px; font-size:11.5px; }
+.viewer-toc .toc-item.level-3 { padding-left:42px; font-size:11px;color:var(--text-muted); }
+
+/* Content area */
+.viewer-content {
+  flex:1;overflow-y:auto;padding:24px 32px;background:var(--bg-card);
+}
+.viewer-content .doc-title {
+  font-size:24px;font-weight:700;margin-bottom:6px;padding-bottom:12px;
+  border-bottom:2px solid var(--accent);
+}
+.viewer-content .doc-meta-bar {
+  display:flex;align-items:center;gap:12px;font-size:11.5px;color:var(--text-muted);
+  padding:8px 0 16px;flex-wrap:wrap;border-bottom:1px solid var(--border-light);
+  margin-bottom:16px;
+}
+.viewer-content .doc-meta-bar .tag {
+  padding:1px 7px;border-radius:8px;font-size:10px;
+  background:var(--accent-subtle);color:var(--accent);
+}
+.viewer-content .doc-summary {
+  background:var(--accent-subtle);border-radius:var(--radius);
+  padding:12px 16px;margin-bottom:20px;font-size:13px;color:var(--text-secondary);
+  line-height:1.7;border-left:3px solid var(--accent);
+}
+.viewer-content .doc-summary .label { font-size:11px;font-weight:600;color:var(--accent);margin-bottom:4px; }
+.viewer-content .rendered {
+  line-height:1.85;font-size:14px;color:var(--text-secondary);
+}
+.viewer-content .rendered h1 { font-size:22px;margin:24px 0 10px;color:var(--text);font-weight:700; }
+.viewer-content .rendered h2 { font-size:18px;margin:20px 0 8px;color:var(--text);font-weight:600; }
+.viewer-content .rendered h3 { font-size:15px;margin:16px 0 6px;color:var(--text-secondary);font-weight:600; }
+.viewer-content .rendered p { margin-bottom:10px;line-height:1.85; }
+.viewer-content .rendered strong { color:var(--text); }
+.viewer-content .rendered code {
+  background:var(--border-light);padding:2px 6px;border-radius:4px;
+  font-family:var(--font-mono);font-size:12.5px;
+}
+.viewer-content .rendered pre {
+  background:var(--sidebar-bg);color:var(--sidebar-text);padding:16px 18px;
+  border-radius:var(--radius);overflow-x:auto;margin:14px 0;
+  font-family:var(--font-mono);font-size:12.5px;line-height:1.7;
+}
+.viewer-content .rendered table { width:100%;border-collapse:collapse;margin:14px 0;font-size:13px; }
+.viewer-content .rendered th { background:var(--border-light);padding:8px 12px;border:1px solid var(--border);text-align:left;font-weight:600; }
+.viewer-content .rendered td { padding:7px 12px;border:1px solid var(--border); }
+.viewer-content .rendered tr:nth-child(even) { background:var(--border-light); }
+.viewer-content .rendered ul,.viewer-content .rendered ol { margin:8px 0 8px 20px; }
+.viewer-content .rendered li { margin-bottom:3px; }
+.viewer-content .rendered blockquote {
+  border-left:3px solid var(--accent);padding:8px 16px;margin:14px 0;
+  color:var(--text-secondary);background:var(--accent-subtle);border-radius:0 var(--radius) var(--radius) 0;
+}
+.viewer-content .rendered a { color:var(--accent);text-decoration:none; }
+.viewer-content .rendered a:hover { text-decoration:underline; }
+
+/* Content annotations */
+.annotation-marker {
+  display:inline;background:rgba(245,158,11,0.15);border-bottom:2px solid var(--warning);
+  cursor:pointer;position:relative;
+}
+.annotation-popup {
+  display:none;position:absolute;bottom:calc(100% + 8px);left:0;
+  background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);
+  box-shadow:var(--shadow-md);padding:10px 14px;width:260px;z-index:50;
+  font-size:12px;color:var(--text-secondary);line-height:1.5;
+}
+.annotation-marker:hover .annotation-popup { display:block; }
+.annotation-popup .author { font-weight:500;color:var(--text);margin-bottom:2px; }
+.annotation-popup .time { font-size:10px;color:var(--text-muted); }
+
+/* Right sidebar - metadata */
+.viewer-props {
+  width:var(--props-w);border-left:1px solid var(--border);
+  background:var(--bg-card);overflow-y:auto;flex-shrink:0;
+}
+.vp-section { padding:14px 16px;border-bottom:1px solid var(--border-light); }
+.vp-section h4 {
+  font-size:10.5px;font-weight:600;color:var(--text-muted);
+  text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;
+  display:flex;align-items:center;gap:4px;
+}
+.vp-tags { display:flex;flex-wrap:wrap;gap:4px; }
+.vp-tag {
+  padding:2px 8px;border-radius:8px;font-size:11px;
+  background:var(--accent-subtle);color:var(--accent);cursor:pointer;
+  transition:var(--transition);
+}
+.vp-tag:hover { background:var(--accent);color:#fff; }
+.vp-tag.tech { background:#eef2ff;color:#6366f1; }
+.vp-tag.code { background:#f5f3ff;color:#8b5cf6; }
+.vp-tag.data { background:#ecfdf5;color:#10b981; }
+.vp-tag.mgmt { background:#fef3c7;color:#f59e0b; }
+
+.vp-keyterm {
+  padding:4px 0;font-size:12px;color:var(--text);display:flex;align-items:center;gap:6px;
+}
+.vp-keyterm .kt-type {
+  font-size:9px;color:var(--text-muted);background:var(--border-light);
+  padding:1px 5px;border-radius:4px;
+}
+.vp-entity {
+  padding:5px 0;font-size:12px;display:flex;align-items:center;gap:6px;
+  border-bottom:1px solid var(--border-light);cursor:pointer;transition:var(--transition);
+}
+.vp-entity:last-child { border-bottom:none; }
+.vp-entity:hover { color:var(--accent); }
+.vp-entity .entity-icon { flex-shrink:0;font-size:14px; }
+.vp-entity .entity-name { flex:1;font-weight:500; }
+.vp-entity .entity-type { font-size:10px;color:var(--text-muted); }
+
+.vp-related-item {
+  padding:6px 0;font-size:12px;cursor:pointer;transition:var(--transition);
+  display:flex;align-items:center;gap:6px;border-bottom:1px solid var(--border-light);
+}
+.vp-related-item:last-child { border-bottom:none; }
+.vp-related-item:hover { color:var(--accent); }
+.vp-related-item .rel-score {
+  margin-left:auto;font-size:10px;color:var(--text-muted);
+}
+
+.vp-progress-bar {
+  height:4px;background:var(--border-light);border-radius:2px;overflow:hidden;margin:6px 0;
+}
+.vp-progress-bar .fill {
+  height:100%;background:var(--accent);border-radius:2px;transition:width 0.3s;
+}
+.vp-stat-row { display:flex;justify-content:space-between;padding:3px 0;font-size:11.5px; }
+.vp-stat-row .label { color:var(--text-secondary); }
+.vp-stat-row .value { color:var(--text);font-weight:500; }
+
+.vp-comment {
+  padding:8px 0;border-bottom:1px solid var(--border-light);font-size:12px;
+}
+.vp-comment:last-child { border-bottom:none; }
+.vp-comment .comment-author {
+  font-weight:500;color:var(--text);margin-bottom:2px;display:flex;align-items:center;gap:4px;
+}
+.vp-comment .comment-author .role { font-size:9px;color:#fff;background:var(--accent);padding:1px 5px;border-radius:4px;font-weight:500; }
+.vp-comment .comment-text { color:var(--text-secondary);line-height:1.5; }
+.vp-comment .comment-time { font-size:10px;color:var(--text-muted);margin-top:2px; }
+.vp-comment .comment-reply {
+  font-size:11px;color:var(--accent);cursor:pointer;margin-top:2px;display:inline-block;
+}
+
+/* ============================================================
+   Upload Dialog
+   ============================================================ */
+.upload-overlay {
+  display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);
+  backdrop-filter:blur(6px);z-index:300;align-items:center;justify-content:center;
+}
+.upload-overlay.show { display:flex; }
+.upload-dialog {
+  background:var(--bg-card);border-radius:var(--radius-xl);padding:28px;
+  width:560px;max-width:94vw;box-shadow:var(--shadow-lg);animation:dialogIn 0.2s ease-out;
+  max-height:90vh;overflow-y:auto;
+}
+.upload-dialog h2 { font-size:18px;margin-bottom:16px;display:flex;align-items:center;gap:8px; }
+.upload-dropzone {
+  border:2px dashed var(--border);border-radius:var(--radius-lg);
+  padding:36px 24px;text-align:center;cursor:pointer;transition:var(--transition);
+  margin-bottom:16px;
+}
+.upload-dropzone:hover { border-color:var(--accent); background:var(--accent-subtle); }
+.upload-dropzone.dragover { border-color:var(--accent); background:var(--accent-subtle); }
+.upload-dropzone .dz-icon { font-size:40px;margin-bottom:8px;opacity:0.4; }
+.upload-dropzone .dz-text { font-size:14px;color:var(--text-secondary);margin-bottom:4px; }
+.upload-dropzone .dz-hint { font-size:11.5px;color:var(--text-muted); }
+.upload-dropzone .dz-support { font-size:11px;color:var(--text-muted);margin-top:6px; }
+
+.upload-field { margin-bottom:14px; }
+.upload-field label { display:block;font-size:12px;font-weight:500;margin-bottom:4px;color:var(--text-secondary); }
+.upload-field select,.upload-field input {
+  width:100%;padding:7px 12px;border:1px solid var(--border);border-radius:var(--radius);
+  font-size:13px;outline:none;font-family:var(--font);background:var(--bg-card);color:var(--text);
+  transition:var(--transition);
+}
+.upload-field select:focus,.upload-field input:focus { border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow); }
+
+.upload-file-list {
+  border:1px solid var(--border-light);border-radius:var(--radius);margin-bottom:14px;
+  max-height:160px;overflow-y:auto;
+}
+.upload-file-item {
+  display:flex;align-items:center;gap:8px;padding:8px 12px;
+  border-bottom:1px solid var(--border-light);font-size:12.5px;
+}
+.upload-file-item:last-child { border-bottom:none; }
+.upload-file-item .file-info { flex:1; }
+.upload-file-item .file-name { font-weight:500;color:var(--text); }
+.upload-file-item .file-size { font-size:10.5px;color:var(--text-muted);margin-left:6px; }
+.upload-file-item .file-status {
+  font-size:10px;padding:1px 6px;border-radius:8px;
+}
+.upload-file-item .file-status.ready { background:rgba(16,185,129,0.12);color:var(--success); }
+.upload-file-item .file-status.pending { background:rgba(251,191,36,0.12);color:var(--warning); }
+.upload-file-item .file-remove {
+  width:20px;height:20px;border:none;background:transparent;cursor:pointer;
+  color:var(--text-muted);font-size:14px;border-radius:4px;display:flex;align-items:center;justify-content:center;
+}
+.upload-file-item .file-remove:hover { background:var(--border-light);color:var(--danger); }
+
+.upload-actions { display:flex;justify-content:flex-end;gap:8px;margin-top:16px; }
+.upload-actions button {
+  padding:7px 18px;border-radius:var(--radius);font-size:12.5px;cursor:pointer;
+  transition:var(--transition);font-family:var(--font);
+}
+.upload-actions .btn-secondary { border:1px solid var(--border);background:var(--bg-card);color:var(--text); }
+.upload-actions .btn-secondary:hover { background:var(--border-light); }
+.upload-actions .btn-primary { background:var(--accent);color:#fff;border:1px solid var(--accent); }
+.upload-actions .btn-primary:hover { background:var(--accent-hover); }
+
+/* ============================================================
+   Knowledge Graph Modal
+   ============================================================ */
+.graph-overlay {
+  display:none;position:fixed;inset:0;background:var(--sidebar-bg);
+  z-index:200;animation:fadeIn 0.2s ease-out;
+}
+.graph-overlay.show { display:flex; flex-direction:column; }
+.graph-toolbar {
+  padding:12px 20px;display:flex;align-items:center;gap:12px;border-bottom:1px solid rgba(255,255,255,0.06);
+}
+.graph-toolbar h2 { color:#fff;font-size:15px;font-weight:600;flex:1; }
+.graph-toolbar .graph-stats { color:var(--sidebar-muted);font-size:12px; }
+.graph-toolbar button {
+  padding:6px 14px;border-radius:var(--radius-sm);border:1px solid rgba(255,255,255,0.1);
+  background:transparent;color:var(--sidebar-text);cursor:pointer;font-size:12px;transition:var(--transition);
+  font-family:var(--font);
+}
+.graph-toolbar button:hover { background:rgba(255,255,255,0.06); }
+.graph-canvas { flex:1;position:relative;overflow:hidden; }
+.graph-node {
+  position:absolute;padding:6px 14px;border-radius:20px;font-size:12px;
+  cursor:pointer;transition:var(--transition);user-select:none;
+}
+.graph-node.doc-node { background:var(--accent-subtle);color:var(--accent);border:1px solid rgba(99,102,241,0.2);box-shadow:0 2px 8px rgba(99,102,241,0.1); }
+.graph-node.entity-node { background:rgba(16,185,129,0.12);color:var(--success);border:1px solid rgba(16,185,129,0.2);box-shadow:0 2px 8px rgba(16,185,129,0.08); }
+.graph-node:hover { transform:scale(1.08); }
+.graph-node.center { background:var(--accent);color:#fff;border-color:var(--accent);box-shadow:0 0 20px var(--accent-glow); transform:scale(1.1); }
+
+/* ============================================================
+   Modal
+   ============================================================ */
+.modal-overlay {
+  display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);
+  backdrop-filter:blur(6px);z-index:300;align-items:center;justify-content:center;
+}
+.modal-overlay.show { display:flex; }
+.modal {
+  background:var(--bg-card);border-radius:var(--radius-xl);padding:28px;
+  width:520px;max-width:92vw;box-shadow:var(--shadow-lg);animation:dialogIn 0.2s ease-out;
+  max-height:85vh;overflow-y:auto;
+}
+.modal h2 { font-size:18px;margin-bottom:16px;display:flex;align-items:center;gap:8px; }
+.modal .field { margin-bottom:14px; }
+.modal label { display:block;font-size:12px;font-weight:500;margin-bottom:4px;color:var(--text-secondary); }
+.modal input,.modal select,.modal textarea {
+  width:100%;padding:7px 12px;border:1px solid var(--border);border-radius:var(--radius);
+  font-size:13px;outline:none;font-family:var(--font);background:var(--bg-card);color:var(--text);
+  transition:var(--transition);
+}
+.modal input:focus,.modal select:focus,.modal textarea:focus { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-glow); }
+.modal-actions { display:flex;justify-content:flex-end;gap:8px;margin-top:20px; }
+.modal-actions button {
+  padding:7px 18px;border-radius:var(--radius);font-size:12.5px;cursor:pointer;
+  transition:var(--transition);font-family:var(--font);
+}
+.modal-actions .btn-secondary { border:1px solid var(--border);background:var(--bg-card);color:var(--text); }
+.modal-actions .btn-secondary:hover { background:var(--border-light); }
+.modal-actions .btn-primary { background:var(--accent);color:#fff;border:1px solid var(--accent); }
+.modal-actions .btn-primary:hover { background:var(--accent-hover); }
+
+/* Share modal */
+.share-option {
+  display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border-light);
+}
+.share-option .so-radio {
+  width:16px;height:16px;border-radius:50%;border:2px solid var(--border);
+  flex-shrink:0;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  transition:var(--transition);
+}
+.share-option .so-radio.selected { border-color:var(--accent); }
+.share-option .so-radio.selected::after { content:'';width:8px;height:8px;border-radius:50%;background:var(--accent); }
+.share-option .so-info { flex:1; }
+.share-option .so-label { font-size:13px;font-weight:500; }
+.share-option .so-desc { font-size:11px;color:var(--text-muted); }
+.share-link-box {
+  display:flex;align-items:center;gap:6px;padding:8px 12px;
+  background:var(--border-light);border-radius:var(--radius);margin-top:10px;
+}
+.share-link-box .link-text { flex:1;font-size:12px;color:var(--text-secondary);font-family:var(--font-mono); }
+.share-link-box .copy-btn {
+  padding:3px 10px;border-radius:4px;border:none;background:var(--accent);
+  color:#fff;font-size:11px;cursor:pointer;font-family:var(--font);
+}
+
+/* ============================================================
+   Toast
+   ============================================================ */
+.toast-container {
+  position:fixed;bottom:24px;right:24px;z-index:500;display:flex;flex-direction:column;gap:8px;
+}
+.toast {
+  padding:10px 16px;border-radius:var(--radius);font-size:12.5px;
+  box-shadow:var(--shadow-md);animation:slideInUp 0.25s ease-out;
+  display:flex;align-items:center;gap:8px;max-width:360px;
+}
+.toast.success { background:var(--success);color:#fff; }
+.toast.error { background:var(--danger);color:#fff; }
+.toast.info { background:var(--sidebar-bg);color:var(--sidebar-text); }
+
+/* ============================================================
+   Animations
+   ============================================================ */
+@keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
+@keyframes fadeSlideIn { from { opacity:0;transform:translateY(6px); } to { opacity:1;transform:translateY(0); } }
+@keyframes dialogIn { from { opacity:0;transform:scale(0.95) translateY(10px); } to { opacity:1;transform:scale(1) translateY(0); } }
+@keyframes slideInUp { from { opacity:0;transform:translateY(16px); } to { opacity:1;transform:translateY(0); } }
+@keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
+@keyframes spin { to { transform:rotate(360deg); } }
+@keyframes progressPulse { 0% { background-position:0% 0; } 100% { background-position:200% 0; } }
+
+/* Processing status animation */
+.status-processing {
+  background:linear-gradient(90deg, rgba(251,191,36,0.15) 25%, rgba(251,191,36,0.25) 50%, rgba(251,191,36,0.15) 75%);
+  background-size:200% 100%;
+  animation:progressPulse 1.5s ease infinite;
+}
+
+/* ============================================================
+   Responsive
+   ============================================================ */
+@media (max-width:1024px) {
+  .viewer-toc { width:180px; }
+  .viewer-props { width:240px; }
+}
+@media (max-width:768px) {
+  .viewer-toc, .viewer-props { display:none; }
+  .kb-header { flex-direction:column;align-items:stretch; }
+  .kb-header .kb-search { min-width:0; }
+  .kb-header .kb-actions { justify-content:flex-end; }
+}
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ============================================================
+       Sidebar
+       ============================================================ -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="logo">✦</div>
+      <h1>NoteForge</h1>
+      <div class="actions">
+        <button title="切换暗色模式" onclick="toggleTheme()">🌓</button>
+        <button title="知识图谱" onclick="toggleGraph()">🕸</button>
+      </div>
+    </div>
+
+    <div class="search-box">
+      <span class="icon">🔍</span>
+      <input type="text" id="searchInput" placeholder="搜索知识库..." oninput="filterDocs(this.value)" onkeydown="if(event.key==='Escape')this.blur()">
+      <span class="search-shortcut">⌘K</span>
+    </div>
+
+    <!-- Navigation -->
+    <div class="nav-section">
+      <div class="nav-section-header">
+        工作区 <span>▾</span>
+      </div>
+      <div>
+        <button class="nav-item" onclick="switchView('notes')" id="navNotes">
+          📝 笔记 <span class="count">12</span>
+        </button>
+        <button class="nav-item active" onclick="switchView('knowledge')" id="navKnowledge">
+          🧠 知识库 <span class="badge">6</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="nav-divider"></div>
+
+    <div class="nav-section">
+      <div class="nav-section-header" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
+        知识分类 <span>▾</span>
+      </div>
+      <div id="categoryList">
+        <button class="nav-item active" onclick="filterByCategory('all',this)">
+          📂 全部 <span class="count">6</span>
+        </button>
+        <button class="nav-item" onclick="filterByCategory('技术文档',this)">
+          📘 技术文档 <span class="count">2</span>
+        </button>
+        <button class="nav-item" onclick="filterByCategory('代码库',this)">
+          💻 代码库 <span class="count">2</span>
+        </button>
+        <button class="nav-item" onclick="filterByCategory('数据报表',this)">
+          📊 数据报表 <span class="count">1</span>
+        </button>
+        <button class="nav-item" onclick="filterByCategory('项目管理',this)">
+          📋 项目管理 <span class="count">1</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-section-header">
+        状态 <span>▾</span>
+      </div>
+      <div>
+        <button class="nav-item" onclick="filterByStatus('draft',this)">✏️ 草稿 <span class="count">1</span></button>
+        <button class="nav-item" onclick="filterByStatus('published',this)">✅ 已发布 <span class="count">3</span></button>
+        <button class="nav-item" onclick="filterByStatus('archived',this)">📦 已归档 <span class="count">1</span></button>
+        <button class="nav-item" onclick="filterByStatus('processing',this)">⏳ 处理中 <span class="count">1</span></button>
+      </div>
+    </div>
+
+    <div class="nav-divider"></div>
+
+    <div class="nav-section">
+      <div class="nav-section-header">快速筛选</div>
+      <div>
+        <button class="nav-item" onclick="showToast('info','打开分面搜索面板')">🔍 分面搜索</button>
+        <button class="nav-item" onclick="showToast('info','打开知识推荐')">💡 知识推荐</button>
+        <button class="nav-item" onclick="showUpload()">📤 导入文件</button>
+      </div>
+    </div>
+
+    <div class="sidebar-footer">
+      <span class="status-dot online"></span>
+      <span>已同步</span>
+      <span style="flex:1"></span>
+      <span class="mcp-badge">🔌 MCP 服务</span>
+    </div>
+  </aside>
+
+  <!-- ============================================================
+       Main Content
+       ============================================================ -->
+  <main class="main" id="mainContent">
+
+    <!-- ==================== Empty State ==================== -->
+    <div class="empty-state" id="emptyState">
+      <div class="icon">🧠</div>
+      <h2>智能知识库</h2>
+      <p>导入文件后，AI 将自动提取内容、生成摘要、分类打标签。<br>支持 PDF / DOCX / PPTX / XLSX / TXT / 代码文件。</p>
+      <button class="upload-btn" onclick="showUpload()" style="margin-top:8px;padding:8px 20px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius);font-size:13px;cursor:pointer;font-family:var(--font);">📤 导入知识文件</button>
+    </div>
+
+    <!-- ==================== Knowledge List View ==================== -->
+    <div id="kbListView" style="display:none;flex:1;flex-direction:column;min-height:0;">
+
+      <!-- Header -->
+      <div class="kb-header">
+        <h2>🧠 知识库</h2>
+        <div class="kb-search">
+          <span class="icon">🔍</span>
+          <input type="text" placeholder="搜索所有知识文档..." id="kbSearchInput" oninput="onKbSearch(this.value)">
+        </div>
+        <div class="kb-actions">
+          <button onclick="showToast('info','打开分面搜索')">🔎 筛选</button>
+          <button onclick="showToast('info','知识推荐')">💡 推荐</button>
+          <button class="btn-primary" onclick="showUpload()">📤 导入</button>
+        </div>
+      </div>
+
+      <!-- Category pills -->
+      <div class="category-bar" id="categoryBar">
+        <span class="category-pill active" onclick="selectCategoryPill(this,'all')">全部 <span class="count">6</span></span>
+        <span class="category-pill" onclick="selectCategoryPill(this,'技术文档')">📘 技术文档 <span class="count">2</span></span>
+        <span class="category-pill" onclick="selectCategoryPill(this,'代码库')">💻 代码库 <span class="count">2</span></span>
+        <span class="category-pill" onclick="selectCategoryPill(this,'数据报表')">📊 数据报表 <span class="count">1</span></span>
+        <span class="category-pill" onclick="selectCategoryPill(this,'项目管理')">📋 项目管理 <span class="count">1</span></span>
+        <span class="category-pill" onclick="selectCategoryPill(this,'学术文献')">🎓 学术文献 <span class="count">0</span></span>
+        <span class="category-pill" onclick="selectCategoryPill(this,'设计稿')">🎨 设计稿 <span class="count">0</span></span>
+      </div>
+
+      <!-- Knowledge document list -->
+      <div class="kb-list-wrap" id="kbList">
+        <!-- Rendered by JS -->
+      </div>
+
+      <!-- Status bar -->
+      <div class="status-bar" style="padding:4px 24px;border-top:1px solid var(--border-light);display:flex;justify-content:space-between;font-size:11px;color:var(--text-muted);background:var(--bg-card);flex-shrink:0;align-items:center;">
+        <span>共 <span id="kbTotalCount">6</span> 个知识文档 · 已索引 <span id="kbIndexedCount">5</span></span>
+        <span>存储空间 156 MB · <span style="color:var(--success);">MCP 服务运行中</span></span>
+      </div>
+    </div>
+
+    <!-- ==================== Knowledge Viewer ==================== -->
+    <div id="kbViewerView" style="display:none;flex:1;flex-direction:column;min-height:0;">
+
+      <!-- Viewer header -->
+      <div class="viewer-header">
+        <button class="back-btn" onclick="backToList()">←</button>
+        <div class="v-title" id="viewerTitle">系统架构设计方案</div>
+        <div class="v-actions">
+          <button onclick="showToast('info','已下载原始文件')">⬇ 原文件</button>
+          <button onclick="showShareModal()">🔗 分享</button>
+          <button class="btn-primary" onclick="showToast('success','已重新提交 AI 处理')">🔄 重新处理</button>
+        </div>
+      </div>
+
+      <!-- Viewer body (3-column) -->
+      <div class="viewer-body">
+
+        <!-- TOC -->
+        <div class="viewer-toc" id="viewerToc">
+          <div class="toc-header">📋 目录 <span style="font-weight:400;text-transform:none;letter-spacing:0;" id="chunkCount">24 个片段</span></div>
+          <div id="tocItems">
+            <div class="toc-item level-1 active" onclick="scrollToHeading(1)">1. 项目背景</div>
+            <div class="toc-item level-2" onclick="scrollToHeading(2)">1.1 业务痛点</div>
+            <div class="toc-item level-2" onclick="scrollToHeading(3)">1.2 项目目标</div>
+            <div class="toc-item level-1" onclick="scrollToHeading(4)">2. 技术选型</div>
+            <div class="toc-item level-2" onclick="scrollToHeading(5)">2.1 后端框架</div>
+            <div class="toc-item level-2" onclick="scrollToHeading(6)">2.2 数据库选择</div>
+            <div class="toc-item level-2" onclick="scrollToHeading(7)">2.3 前端技术</div>
+            <div class="toc-item level-3" onclick="scrollToHeading(8)">2.3.1 React 18</div>
+            <div class="toc-item level-3" onclick="scrollToHeading(9)">2.3.2 TypeScript</div>
+            <div class="toc-item level-1" onclick="scrollToHeading(10)">3. 架构设计</div>
+            <div class="toc-item level-2" onclick="scrollToHeading(11)">3.1 分层架构</div>
+            <div class="toc-item level-2" onclick="scrollToHeading(12)">3.2 微服务拆分</div>
+            <div class="toc-item level-1" onclick="scrollToHeading(13)">4. 数据流</div>
+            <div class="toc-item level-1" onclick="scrollToHeading(14)">5. 部署方案</div>
+          </div>
+        </div>
+
+        <!-- Content -->
+        <div class="viewer-content" id="viewerContent">
+          <div class="doc-title" id="viewerDocTitle">系统架构设计方案</div>
+          <div class="doc-meta-bar">
+            <span>📄 架构设计方案.pdf</span>
+            <span>·</span>
+            <span>分类: 技术文档</span>
+            <span>·</span>
+            <span class="tag">架构</span>
+            <span class="tag">微服务</span>
+            <span class="tag">系统设计</span>
+            <span style="margin-left:auto;">📅 2026-06-29</span>
+          </div>
+
+          <div class="doc-summary">
+            <div class="label">📝 AI 摘要</div>
+            本文详细描述了 NoteForge 系统的分层架构设计和关键技术选型理由。系统采用微服务架构，后端基于 Spring Boot 3.3 构建，前端使用 React 18 + TypeScript，数据库选用 PostgreSQL 16 并启用 pgvector 扩展以支持向量检索。核心引擎使用 Rust 编写，确保高性能和内存安全。
+          </div>
+
+          <div class="rendered">
+            <h2>1. 项目背景</h2>
+            <p>随着业务规模的持续扩大，现有的单体架构已无法满足快速迭代和高可用性的需求。本项目旨在构建一个基于微服务架构的智能知识管理平台，支持多端协同、AI 驱动的知识管理和高效的全文检索。</p>
+
+            <h3>1.1 业务痛点</h3>
+            <p>当前系统面临以下核心挑战：</p>
+            <ul>
+              <li><strong>架构耦合</strong> — 单体应用中各模块耦合严重，变更影响范围大</li>
+              <li><strong>搜索效率低</strong> — 仅支持关键词匹配，无法理解语义，准确率不足 60%</li>
+              <li><strong>知识孤岛</strong> — 不同格式的知识文档分散存储，缺乏统一的管理和检索入口</li>
+              <li><strong>扩展瓶颈</strong> — 数据库连接和计算资源无法按需扩展</li>
+            </ul>
+
+            <h3>1.2 项目目标</h3>
+            <p>通过架构升级实现以下目标：</p>
+            <ul>
+              <li>系统可用性 ≥ 99.95%</li>
+              <li>搜索响应时间 P99 &lt; 200ms</li>
+              <li>支持 1000+ 并发用户</li>
+              <li>支持多格式文件导入和 AI 自动分类</li>
+            </ul>
+
+            <h2>2. 技术选型</h2>
+
+            <h3>2.1 后端框架</h3>
+            <p>经过对 Spring Boot 3.3、Quarkus 和 Micronaut 的全面评估，最终选择 <strong>Spring Boot 3.3</strong> 作为后端框架，主要考量：</p>
+            <ul>
+              <li>成熟的生态和社区支持</li>
+              <li>GraalVM 原生编译支持，启动时间 &lt; 100ms</li>
+              <li>虚拟线程 (Virtual Threads) 大幅提升并发处理能力</li>
+            </ul>
+
+            <h3>2.2 数据库选择</h3>
+            <p>采用 <strong>PostgreSQL 16</strong> 作为主数据库，并启用以下扩展：</p>
+            <table>
+              <tr><th>扩展</th><th>用途</th><th>版本</th></tr>
+              <tr><td>pgvector</td><td>向量相似度搜索</td><td>0.7.0</td></tr>
+              <tr><td>pg_trgm</td><td>模糊文本匹配</td><td>1.6</td></tr>
+              <tr><td>uuid-ossp</td><td>UUID 生成</td><td>1.1</td></tr>
+            </table>
+
+            <h3>2.3 前端技术</h3>
+            <p>桌面端采用 <strong>Tauri 2.x + React 18</strong> 技术栈：</p>
+
+            <h4>2.3.1 React 18</h4>
+            <p>利用 React 18 的并发特性（Concurrent Features）优化渲染性能。使用 <code>Suspense</code> 和 <code>useTransition</code> 实现流畅的交互体验。</p>
+
+            <h4>2.3.2 TypeScript</h4>
+            <p>全栈 TypeScript 确保类型安全，共享类型定义减少前后端沟通成本。</p>
+
+            <pre><code>// 共享类型示例
+interface KnowledgeDoc {
+  id: string;
+  title: string;
+  category: string;
+  tags: string[];
+}</code></pre>
+
+            <h2>3. 架构设计</h2>
+
+            <h3>3.1 分层架构</h3>
+            <p>系统采用经典的四层架构：</p>
+            <ol>
+              <li><strong>表现层</strong> — React 前端，负责 UI 渲染和用户交互</li>
+              <li><strong>API 层</strong> — Spring Boot 网关，负责请求路由和认证</li>
+              <li><strong>服务层</strong> — 业务逻辑实现，微服务拆分</li>
+              <li><strong>数据层</strong> — PostgreSQL + Redis + MinIO + Tantivy</li>
+            </ol>
+
+            <h3>3.2 微服务拆分</h3>
+            <p>按业务领域拆分为以下微服务：</p>
+            <ul>
+              <li><strong>user-service</strong> — 用户认证和权限管理</li>
+              <li><strong>note-service</strong> — 笔记 CRUD 和同步</li>
+              <li><strong>knowledge-service</strong> — 知识文档管理</li>
+              <li><strong>search-service</strong> — 全文搜索和语义搜索</li>
+              <li><strong>ai-service</strong> — AI 内容提取和 RAG 问答</li>
+            </ul>
+
+            <h2>4. 数据流</h2>
+            <p>用户请求经 API 网关路由到对应微服务，服务间通过 gRPC 通信，异步任务通过 RabbitMQ 消息队列解耦。</p>
+
+            <h2>5. 部署方案</h2>
+            <p>采用 Docker Compose 编排所有服务，Kubernetes 用于生产环境自动扩缩容。CI/CD 流程基于 GitHub Actions，自动构建和部署。</p>
+          </div>
+        </div>
+
+        <!-- Right sidebar -->
+        <div class="viewer-props" id="viewerProps">
+          <!-- Status -->
+          <div class="vp-section">
+            <h4>📌 文档状态</h4>
+            <div style="display:flex;gap:6px;align-items:center;">
+              <span class="status-badge status-published" style="font-size:11px;padding:2px 10px;border-radius:8px;">已发布</span>
+              <span style="font-size:11px;color:var(--text-muted);">v2.3</span>
+            </div>
+            <div class="vp-progress-bar" style="margin-top:8px;">
+              <div class="fill" style="width:100%"></div>
+            </div>
+            <div class="vp-stat-row"><span class="label">质量评分</span><span class="value" style="color:var(--success);">88/100</span></div>
+            <div class="vp-stat-row"><span class="label">字数</span><span class="value">3,247</span></div>
+            <div class="vp-stat-row"><span class="label">创建时间</span><span class="value">2026-06-28</span></div>
+            <div class="vp-stat-row"><span class="label">更新时间</span><span class="value">2026-06-29</span></div>
+            <div class="vp-stat-row"><span class="label">原始文件</span><span class="value" style="font-size:11px;color:var(--accent);cursor:pointer;" onclick="showToast('info','正在下载原始文件')">架构设计方案.pdf</span></div>
+          </div>
+
+          <!-- Tags -->
+          <div class="vp-section">
+            <h4>🏷 标签</h4>
+            <div class="vp-tags">
+              <span class="vp-tag tech">架构</span>
+              <span class="vp-tag tech">微服务</span>
+              <span class="vp-tag tech">系统设计</span>
+              <span class="vp-tag">技术文档</span>
+              <span class="vp-tag" style="background:var(--border-light);color:var(--text-secondary);">+ 添加</span>
+            </div>
+          </div>
+
+          <!-- Key Terms -->
+          <div class="vp-section">
+            <h4>🔑 关键术语</h4>
+            <div class="vp-keyterm">微服务架构 <span class="kt-type">概念</span></div>
+            <div class="vp-keyterm">CQRS <span class="kt-type">模式</span></div>
+            <div class="vp-keyterm">事件驱动 <span class="kt-type">概念</span></div>
+            <div class="vp-keyterm">GraalVM <span class="kt-type">技术栈</span></div>
+          </div>
+
+          <!-- Entities -->
+          <div class="vp-section">
+            <h4>🎯 实体识别</h4>
+            <div class="vp-entity"><span class="entity-icon">⚙️</span><span class="entity-name">Spring Boot</span><span class="entity-type">技术栈</span></div>
+            <div class="vp-entity"><span class="entity-icon">🗄️</span><span class="entity-name">PostgreSQL</span><span class="entity-type">技术栈</span></div>
+            <div class="vp-entity"><span class="entity-icon">🦀</span><span class="entity-name">Rust</span><span class="entity-type">技术栈</span></div>
+            <div class="vp-entity"><span class="entity-icon">📐</span><span class="entity-name">NoteForge</span><span class="entity-type">项目名</span></div>
+            <div class="vp-entity"><span class="entity-icon">🧠</span><span class="entity-name">知识图谱</span><span class="entity-type">概念</span></div>
+          </div>
+
+          <!-- Related Knowledge -->
+          <div class="vp-section">
+            <h4>🔗 关联知识</h4>
+            <div class="vp-related-item" onclick="showToast('info','打开关联文档')">
+              📄 API 设计规范文档
+              <span class="rel-score" style="color:var(--success);">92%</span>
+            </div>
+            <div class="vp-related-item" onclick="showToast('info','打开关联文档')">
+              📄 数据库设计文档
+              <span class="rel-score" style="color:var(--success);">87%</span>
+            </div>
+            <div class="vp-related-item" onclick="showToast('info','打开关联文档')">
+              💻 user_service.py
+              <span class="rel-score" style="color:var(--warning);">65%</span>
+            </div>
+            <div class="vp-related-item" onclick="showToast('info','打开关联文档')">
+              📊 Q2 性能分析报告
+              <span class="rel-score" style="color:var(--text-muted);">43%</span>
+            </div>
+          </div>
+
+          <!-- Comments -->
+          <div class="vp-section">
+            <h4>💬 评论与标注</h4>
+            <div class="vp-comment">
+              <div class="comment-author">
+                Alice Chen <span class="role">审核人</span>
+              </div>
+              <div class="comment-text">微服务拆分部分建议补充服务间通信的容错机制，如断路器模式。</div>
+              <div class="comment-time">2026-06-29 14:32</div>
+              <span class="comment-reply">回复</span>
+            </div>
+            <div class="vp-comment">
+              <div class="comment-author">Bob Wang</div>
+              <div class="comment-text">数据库选型部分建议增加与 MySQL 8.0 的性能对比数据。</div>
+              <div class="comment-time">2026-06-28 09:15</div>
+              <span class="comment-reply">回复</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- ============================================================
+     Upload Dialog
+     ============================================================ -->
+<div class="upload-overlay" id="uploadOverlay">
+  <div class="upload-dialog">
+    <h2>📤 导入知识文件</h2>
+
+    <div class="upload-dropzone" id="dropzone" onclick="document.getElementById('fileInput').click()">
+      <div class="dz-icon">📁</div>
+      <div class="dz-text">拖拽文件到此处，或点击选择文件</div>
+      <div class="dz-support">支持 PDF · DOCX · PPTX · XLSX · TXT · 代码文件</div>
+      <input type="file" id="fileInput" multiple style="display:none" onchange="onFileSelect(this.files)">
+    </div>
+
+    <div class="upload-field">
+      <label>目标笔记本（可选）</label>
+      <select id="uploadNotebook">
+        <option value="">不指定 — 自动归类</option>
+        <option>架构文档</option>
+        <option>项目文档</option>
+        <option>技术手册</option>
+        <option>数据报表</option>
+      </select>
+    </div>
+
+    <div class="upload-field">
+      <label>AI 分类策略</label>
+      <select id="uploadStrategy">
+        <option value="auto">自动分类（推荐）</option>
+        <option value="manual">手动指定分类</option>
+        <option value="ai_suggest">AI 建议 + 人工确认</option>
+      </select>
+    </div>
+
+    <div class="upload-file-list" id="uploadFileList">
+      <!-- Rendered by JS -->
+    </div>
+
+    <div class="upload-actions">
+      <button class="btn-secondary" onclick="closeUpload()">取消</button>
+      <button class="btn-primary" id="startImportBtn" onclick="startImport()" disabled>开始导入</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     Share Modal
+     ============================================================ -->
+<div class="modal-overlay" id="shareModal">
+  <div class="modal" style="width:480px;">
+    <h2>🔗 分享知识文档</h2>
+
+    <div class="share-option" onclick="selectShareOption(this,0)">
+      <div class="so-radio selected"></div>
+      <div class="so-info">
+        <div class="so-label">公开分享</div>
+        <div class="so-desc">任何人拥有链接即可查看</div>
+      </div>
+    </div>
+    <div class="share-option" onclick="selectShareOption(this,1)">
+      <div class="so-radio"></div>
+      <div class="so-info">
+        <div class="so-label">仅团队</div>
+        <div class="so-desc">需要登录 NoteForge 账号</div>
+      </div>
+    </div>
+    <div class="share-option" onclick="selectShareOption(this,2)">
+      <div class="so-radio"></div>
+      <div class="so-info">
+        <div class="so-label">密码保护</div>
+        <div class="so-desc">需要输入密码才能访问</div>
+      </div>
+    </div>
+
+    <div class="share-link-box">
+      <span class="link-text" id="shareLinkText">https://kb.noteforge.app/s/abc123xyz</span>
+      <button class="copy-btn" onclick="copyShareLink()">复制</button>
+    </div>
+
+    <div class="modal-actions" style="margin-top:12px;">
+      <button class="btn-secondary" onclick="closeModal('shareModal')">关闭</button>
+      <button class="btn-primary" onclick="closeModal('shareModal');showToast('success','分享链接已生成')">生成链接</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     Knowledge Graph Modal
+     ============================================================ -->
+<div class="graph-overlay" id="graphOverlay">
+  <div class="graph-toolbar">
+    <h2>🕸 知识图谱</h2>
+    <span class="graph-stats">文档节点: 6 · 实体节点: 12 · 连接: 28</span>
+    <span style="flex:1"></span>
+    <button onclick="toggleGraph()">✕ 关闭</button>
+  </div>
+  <div class="graph-canvas" id="graphCanvas">
+    <!-- Document nodes -->
+    <div class="graph-node doc-node center" style="left:calc(50% - 75px);top:calc(45% - 16px)">系统架构设计方案</div>
+    <div class="graph-node doc-node" style="left:calc(50% - 220px);top:calc(25% - 16px)">API 设计规范文档</div>
+    <div class="graph-node doc-node" style="left:calc(50% + 100px);top:calc(20% - 16px)">数据库设计文档</div>
+    <div class="graph-node doc-node" style="left:calc(50% - 280px);top:calc(55% - 16px)">user_service.py</div>
+    <div class="graph-node doc-node" style="left:calc(50% + 140px);top:calc(55% - 16px)">Q2 性能分析报告</div>
+    <div class="graph-node doc-node" style="left:calc(50% - 160px);top:calc(78% - 16px)">项目管理计划</div>
+    <!-- Entity nodes -->
+    <div class="graph-node entity-node" style="left:calc(50% - 50px);top:calc(10% - 16px)">PostgreSQL</div>
+    <div class="graph-node entity-node" style="left:calc(50% + 200px);top:calc(38% - 16px)">Spring Boot</div>
+    <div class="graph-node entity-node" style="left:calc(50% - 320px);top:calc(40% - 16px)">React 18</div>
+    <div class="graph-node entity-node" style="left:calc(50% + 40px);top:calc(75% - 16px)">Docker</div>
+  </div>
+</div>
+
+<!-- ============================================================
+     Toast Container
+     ============================================================ -->
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+// ================================================================
+// Data: Knowledge Documents
+// ================================================================
+const KNOWLEDGE_DOCS = [
+  {
+    id:'d1', title:'系统架构设计方案', summary:'本文详细描述了 NoteForge 系统的分层架构设计和关键技术选型理由。系统采用微服务架构，后端基于 Spring Boot 3.3，前端使用 React 18 + TypeScript。',
+    fileName:'架构设计方案.pdf', fileType:'pdf', fileSize:'3.2 MB', category:'技术文档',
+    tags:['架构','微服务','系统设计'], words:3247, status:'published', quality:88,
+    updated:'2026-06-29', chunks:24, entities:['Spring Boot','PostgreSQL','Rust'],
+  },
+  {
+    id:'d2', title:'API 设计规范文档', summary:'NoteForge RESTful API 设计规范，包含命名约定、版本策略、认证方式、错误码定义和分页规范。适用于所有后端服务的 API 开发。',
+    fileName:'API设计规范.docx', fileType:'docx', fileSize:'1.8 MB', category:'技术文档',
+    tags:['API','规范','REST'], words:2180, status:'published', quality:92,
+    updated:'2026-06-28', chunks:16, entities:['JWT','REST','OpenAPI'],
+  },
+  {
+    id:'d3', title:'user_service.py 核心实现', summary:'用户微服务核心实现代码，包含 JWT 认证、用户 CRUD、角色权限管理。使用 Python FastAPI 框架，PostgreSQL 存储用户数据。',
+    fileName:'user_service.py', fileType:'code', fileSize:'156 KB', category:'代码库',
+    tags:['Python','FastAPI','JWT','认证'], words:845, status:'published', quality:75,
+    updated:'2026-06-27', chunks:8, entities:['FastAPI','JWT','PostgreSQL'],
+  },
+  {
+    id:'d4', title:'note_service.rs 核心模块', summary:'笔记服务的 Rust 核心引擎实现，包括 CRUD 操作、全文索引和 CRDT 同步逻辑。基于 Actix-web 框架构建高性能异步服务。',
+    fileName:'note_service.rs', fileType:'code', fileSize:'89 KB', category:'代码库',
+    tags:['Rust','Actix','CRDT'], words:567, status:'draft', quality:60,
+    updated:'2026-06-26', chunks:6, entities:['Rust','Actix','CRDT'],
+  },
+  {
+    id:'d5', title:'Q2 数据分析报告', summary:'2026 年第二季度产品数据全面分析。MAU 突破 50 万，环比增长 30%，用户留存率提升至 65%，付费转化率提升 8 个百分点。',
+    fileName:'Q2数据分析.xlsx', fileType:'xlsx', fileSize:'5.1 MB', category:'数据报表',
+    tags:['季度','Q2','分析','增长'], words:1560, status:'published', quality:85,
+    updated:'2026-06-25', chunks:12, entities:['MAU','增长率'],
+  },
+  {
+    id:'d6', title:'项目管理计划 v2.0', summary:'NoteForge 2026 下半年项目管理计划，涵盖目标设定、里程碑规划、资源分配和风险评估。采用 Scrum 框架管理。',
+    fileName:'项目计划.pptx', fileType:'pptx', fileSize:'4.5 MB', category:'项目管理',
+    tags:['项目','Scrum','里程碑'], words:1890, status:'archived', quality:70,
+    updated:'2026-06-20', chunks:14, entities:['Scrum','Jira'],
+  },
+  {
+    id:'d7', title:'数据库迁移方案', summary:'从 MySQL 到 PostgreSQL 16 的数据库迁移方案，包含 schema 映射、数据迁移脚本、回滚策略和性能验证。预计停机窗口 2 小时。',
+    fileName:'数据库迁移方案.pdf', fileType:'pdf', fileSize:'2.3 MB', category:'技术文档',
+    tags:['数据库','迁移','PostgreSQL'], words:2100, status:'processing', quality:0,
+    updated:'2026-06-30', chunks:0, entities:['PostgreSQL','MySQL'],
+  },
+];
+
+let currentView = 'list'; // 'list' | 'viewer'
+let currentDocId = 'd1';
+let currentCategory = 'all';
+let currentStatus = 'all';
+let searchQuery = '';
+
+// ================================================================
+// View switching
+// ================================================================
+function switchView(view) {
+  document.querySelectorAll('.nav-item').forEach(e => e.classList.remove('active'));
+  if (view === 'notes') {
+    document.getElementById('navNotes').classList.add('active');
+    document.getElementById('emptyState').style.display = 'flex';
+    document.getElementById('kbListView').style.display = 'none';
+    document.getElementById('kbViewerView').style.display = 'none';
+  } else {
+    document.getElementById('navKnowledge').classList.add('active');
+    document.getElementById('emptyState').style.display = 'none';
+    showList();
+  }
+}
+
+function showList() {
+  currentView = 'list';
+  document.getElementById('kbListView').style.display = 'flex';
+  document.getElementById('kbViewerView').style.display = 'none';
+  renderKbList();
+}
+
+function backToList() {
+  showList();
+}
+
+// ================================================================
+// Render Knowledge List
+// ================================================================
+function renderKbList() {
+  let docs = [...KNOWLEDGE_DOCS];
+
+  // Filter by category
+  if (currentCategory !== 'all') {
+    docs = docs.filter(d => d.category === currentCategory);
+  }
+
+  // Filter by status
+  if (currentStatus !== 'all') {
+    docs = docs.filter(d => d.status === currentStatus);
+  }
+
+  // Search
+  if (searchQuery) {
+    const q = searchQuery.toLowerCase();
+    docs = docs.filter(d =>
+      d.title.toLowerCase().includes(q) ||
+      d.tags.some(t => t.toLowerCase().includes(q)) ||
+      d.category.toLowerCase().includes(q) ||
+      d.fileName.toLowerCase().includes(q)
+    );
+  }
+
+  // Sort: processing first, then by date desc
+  docs.sort((a, b) => {
+    if (a.status === 'processing') return -1;
+    if (b.status === 'processing') return 1;
+    return b.updated.localeCompare(a.updated);
+  });
+
+  const list = document.getElementById('kbList');
+
+  if (docs.length === 0) {
+    list.innerHTML = `<div style="text-align:center;padding:48px 24px;color:var(--text-muted);font-size:13px;">没有匹配的知识文档</div>`;
+    document.getElementById('kbTotalCount').textContent = '0';
+    document.getElementById('kbIndexedCount').textContent = '0';
+    return;
+  }
+
+  const indexed = docs.filter(d => d.status !== 'processing').length;
+
+  list.innerHTML = docs.map(d => `
+    <div class="kb-item" onclick="openViewer('${d.id}')" style="animation-delay:${Math.random()*0.15}s">
+      <div class="file-type-icon ${d.fileType === 'pdf' || d.fileType === 'docx' ? d.fileType : d.fileType === 'xlsx' ? 'xlsx' : d.fileType === 'pptx' ? 'pptx' : d.fileType === 'code' ? 'code' : 'pdf'}">
+        ${d.fileType === 'pdf' ? '📄' : d.fileType === 'docx' ? '📃' : d.fileType === 'pptx' ? '📊' : d.fileType === 'xlsx' ? '📈' : d.fileType === 'code' ? '💻' : '📄'}
+      </div>
+      <div class="item-body">
+        <div class="item-title">
+          ${d.title}
+          <span class="status-badge status-${d.status}">${d.status === 'published' ? '已发布' : d.status === 'draft' ? '草稿' : d.status === 'archived' ? '已归档' : '处理中'}</span>
+        </div>
+        <div class="item-summary">${d.summary}</div>
+        <div class="item-meta">
+          <span>${d.category}</span>
+          <span>·</span>
+          <span>${d.fileName}</span>
+          <span>·</span>
+          ${d.tags.map(t => `<span class="tag">${t}</span>`).join('')}
+        </div>
+      </div>
+      <div class="item-right">
+        <span>${d.updated}</span>
+        <span class="word-count">${d.words} 字</span>
+        ${d.quality > 0 ? `<span class="quality-score ${d.quality >= 80 ? 'good' : d.quality >= 60 ? 'fair' : 'poor'}">${d.quality >= 80 ? '🟢' : d.quality >= 60 ? '🟡' : '🔴'} ${d.quality}/100</span>` : `<span class="quality-score" style="color:var(--warning);">⏳ 处理中</span>`}
+      </div>
+    </div>
+  `).join('');
+
+  document.getElementById('kbTotalCount').textContent = docs.length;
+  document.getElementById('kbIndexedCount').textContent = indexed;
+}
+
+// ================================================================
+// Filter & Search
+// ================================================================
+function filterByCategory(category, el) {
+  document.querySelectorAll('#categoryList .nav-item').forEach(e => e.classList.remove('active'));
+  if (el) el.classList.add('active');
+  currentCategory = category;
+  renderKbList();
+}
+
+function filterByStatus(status, el) {
+  document.querySelectorAll('.nav-section .nav-item').forEach(e => e.classList.remove('active'));
+  if (el) el.classList.add('active');
+  currentStatus = status;
+  renderKbList();
+}
+
+function selectCategoryPill(el, cat) {
+  document.querySelectorAll('.category-pill').forEach(e => e.classList.remove('active'));
+  el.classList.add('active');
+  currentCategory = cat;
+  renderKbList();
+}
+
+function onKbSearch(q) {
+  searchQuery = q.trim();
+  renderKbList();
+}
+
+function filterDocs(q) {
+  // global search in sidebar
+  onKbSearch(q);
+}
+
+// ================================================================
+// Knowledge Viewer
+// ================================================================
+function openViewer(docId) {
+  currentDocId = docId;
+  const doc = KNOWLEDGE_DOCS.find(d => d.id === docId);
+  if (!doc) return;
+
+  currentView = 'viewer';
+  document.getElementById('kbListView').style.display = 'none';
+  document.getElementById('kbViewerView').style.display = 'flex';
+  document.getElementById('viewerTitle').textContent = doc.title;
+  document.getElementById('viewerDocTitle').textContent = doc.title;
+  document.getElementById('chunkCount').textContent = doc.chunks + ' 个片段';
+  showToast('info', `已打开: ${doc.title}`);
+}
+
+function scrollToHeading(idx) {
+  document.querySelectorAll('.toc-item').forEach(e => e.classList.remove('active'));
+  const items = document.querySelectorAll('.toc-item');
+  if (items[idx-1]) items[idx-1].classList.add('active');
+  showToast('info', `跳转到章节 ${idx}`);
+}
+
+// ================================================================
+// Upload Dialog
+// ================================================================
+let selectedFiles = [];
+
+function showUpload() {
+  document.getElementById('uploadOverlay').classList.add('show');
+  document.getElementById('uploadFileList').innerHTML = '';
+  selectedFiles = [];
+  document.getElementById('startImportBtn').disabled = true;
+}
+
+function closeUpload() {
+  document.getElementById('uploadOverlay').classList.remove('show');
+}
+
+function onFileSelect(files) {
+  for (const f of files) {
+    selectedFiles.push({
+      name: f.name,
+      size: formatSize(f.size),
+      type: f.name.split('.').pop(),
+      status: 'ready',
+    });
+  }
+  updateUploadList();
+}
+
+function updateUploadList() {
+  const list = document.getElementById('uploadFileList');
+  if (selectedFiles.length === 0) {
+    list.innerHTML = `<div style="padding:12px;text-align:center;font-size:12px;color:var(--text-muted);">暂未选择文件</div>`;
+    document.getElementById('startImportBtn').disabled = true;
+    return;
+  }
+  list.innerHTML = selectedFiles.map((f,i) => `
+    <div class="upload-file-item">
+      <span>${f.type === 'pdf' ? '📄' : f.type === 'docx' ? '📃' : f.type === 'pptx' ? '📊' : f.type === 'xlsx' ? '📈' : f.type === 'py' || f.type === 'rs' || f.type === 'ts' ? '💻' : '📄'}</span>
+      <div class="file-info">
+        <span class="file-name">${f.name}</span>
+        <span class="file-size">${f.size}</span>
+      </div>
+      <span class="file-status ${f.status}">${f.status === 'ready' ? '待导入' : '就绪'}</span>
+      <button class="file-remove" onclick="removeFile(${i})">×</button>
+    </div>
+  `).join('');
+  document.getElementById('startImportBtn').disabled = false;
+}
+
+function removeFile(idx) {
+  selectedFiles.splice(idx, 1);
+  updateUploadList();
+}
+
+function startImport() {
+  const btn = document.getElementById('startImportBtn');
+  btn.disabled = true;
+  btn.textContent = '⏳ 导入中...';
+
+  // Simulate import progress
+  let progress = 0;
+  const interval = setInterval(() => {
+    progress += Math.random() * 20;
+    if (progress >= 100) {
+      clearInterval(interval);
+      btn.textContent = '✅ 导入完成';
+      setTimeout(() => {
+        closeUpload();
+        showToast('success', `✅ ${selectedFiles.length} 个文件已加入处理队列`);
+        btn.disabled = false;
+        btn.textContent = '开始导入';
+        // Add a processing doc to the list
+        if (selectedFiles.length > 0) {
+          KNOWLEDGE_DOCS.unshift({
+            id:'d' + Date.now(),
+            title: selectedFiles[0].name.replace(/\.[^.]+$/, ''),
+            summary: 'AI 正在解析中，请稍候...',
+            fileName: selectedFiles[0].name,
+            fileType: selectedFiles[0].type === 'pdf' ? 'pdf' : selectedFiles[0].type === 'docx' ? 'docx' : selectedFiles[0].type === 'xlsx' ? 'xlsx' : 'code',
+            fileSize: selectedFiles[0].size,
+            category: '通用知识',
+            tags: [],
+            words: 0,
+            status: 'processing',
+            quality: 0,
+            updated: '刚刚',
+            chunks: 0,
+            entities: [],
+          });
+          renderKbList();
+        }
+        selectedFiles = [];
+      }, 600);
+    }
+  }, 300);
+}
+
+function formatSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+// ================================================================
+// Share Modal
+// ================================================================
+let shareOptionIndex = 0;
+
+function showShareModal() {
+  document.getElementById('shareModal').classList.add('show');
+}
+
+function selectShareOption(el, idx) {
+  shareOptionIndex = idx;
+  document.querySelectorAll('.share-option .so-radio').forEach(r => r.classList.remove('selected'));
+  el.querySelector('.so-radio').classList.add('selected');
+}
+
+function copyShareLink() {
+  const text = document.getElementById('shareLinkText').textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    showToast('success', '链接已复制到剪贴板');
+  }).catch(() => {
+    showToast('info', '链接: ' + text);
+  });
+}
+
+// ================================================================
+// Graph
+// ================================================================
+function toggleGraph() {
+  document.getElementById('graphOverlay').classList.toggle('show');
+}
+
+// ================================================================
+// Theme
+// ================================================================
+function toggleTheme() {
+  const html = document.documentElement;
+  const current = html.getAttribute('data-theme');
+  html.setAttribute('data-theme', current === 'dark' ? 'light' : 'dark');
+  showToast('info', current === 'dark' ? '☀️ 浅色模式' : '🌙 深色模式');
+}
+
+// ================================================================
+// Toast
+// ================================================================
+function showToast(type, msg) {
+  const container = document.getElementById('toastContainer');
+  const toast = document.createElement('div');
+  toast.className = 'toast ' + type;
+  toast.textContent = msg;
+  container.appendChild(toast);
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transition = 'opacity 0.3s';
+    setTimeout(() => toast.remove(), 300);
+  }, 2500);
+}
+
+// ================================================================
+// Modal
+// ================================================================
+function closeModal(id) {
+  document.getElementById(id).classList.remove('show');
+}
+
+// ================================================================
+// Init
+// ================================================================
+document.addEventListener('DOMContentLoaded', () => {
+  renderKbList();
+});
+</script>
+</body>
+</html>

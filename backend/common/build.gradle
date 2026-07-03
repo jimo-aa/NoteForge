@@ -13,4 +13,11 @@ dependencies {
     compileOnly 'org.springframework:spring-web:6.1.8'
     compileOnly 'org.springframework:spring-context:6.1.8'
     compileOnly 'org.springframework.boot:spring-boot-autoconfigure:3.3.0'
+
+    // Test
+    testImplementation 'org.springframework.boot:spring-boot-starter-test:3.3.0'
+    testImplementation 'org.testcontainers:testcontainers:1.20.0'
+    testImplementation 'org.testcontainers:junit-jupiter:1.20.0'
+    testImplementation 'org.testcontainers:postgresql:1.20.0'
+    testRuntimeOnly 'com.h2database:h2:2.2.224'
 }

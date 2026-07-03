@@ -124,6 +124,31 @@ services:
     networks:
       - noteforge-net
 
+  # === ai-service ===
+  ai-service:
+    image: eclipse-temurin:21-jdk-alpine
+    container_name: noteforge-ai-service
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/noteforge
+      SPRING_DATASOURCE_USERNAME: noteforge
+      SPRING_DATASOURCE_PASSWORD: noteforge123
+      AI_JWT_SECRET: ${AI_JWT_SECRET:-${JWT_SECRET:-noteforge-shared-jwt-secret-key-2026}}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+    ports:
+      - "8083:8083"
+    volumes:
+      - ../backend:/app
+    working_dir: /app
+    command: >
+      sh -c "cd ai-service && ../gradlew bootRun -x test"
+    networks:
+      - noteforge-net
+
   # === Nginx ===
   nginx:
     image: nginx:alpine
@@ -131,6 +156,7 @@ services:
     depends_on:
       - note-service
       - user-service
+      - ai-service
     ports:
       - "80:80"
     volumes:

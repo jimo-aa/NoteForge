@@ -1,11 +1,5 @@
 package com.noteforge.common;
 
-import org.junit.jupiter.api.BeforeAll;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Primary;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.GenericContainer;
@@ -13,13 +7,14 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
-import static org.mockito.Mockito.mock;
-
 /**
  * Base class for integration tests requiring real PostgreSQL (+ optional Redis).
  *
  * <p>Subclasses should extend this class and can optionally override containers.
  * Uses Singleton containers pattern for speed across test classes.</p>
+ *
+ * <p>Redis is configured as a container, but individual services should
+ * provide their own mock/stub for StringRedisTemplate if needed.</p>
  */
 @Testcontainers
 public abstract class AbstractIntegrationTest {
@@ -43,18 +38,5 @@ public abstract class AbstractIntegrationTest {
         registry.add("spring.jpa.hibernate.ddl-auto", () -> "create-drop");
         registry.add("spring.data.redis.host", REDIS::getHost);
         registry.add("spring.data.redis.port", () -> REDIS.getMappedPort(6379));
-    }
-
-    /**
-     * Test configuration that provides a mock StringRedisTemplate
-     * to prevent connection issues when Redis is not fully initialized.
-     */
-    @TestConfiguration
-    public static class TestRedisMockConfig {
-        @Bean
-        @Primary
-        public StringRedisTemplate stringRedisTemplate() {
-            return mock(StringRedisTemplate.class);
-        }
     }
 }

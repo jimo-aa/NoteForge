@@ -613,5 +613,28 @@
     "noteCount": "{{count}} 条",
     "themeTitle": "切换颜色主题",
     "graphTitle": "打开图谱视图"
+  },
+  "ai": {
+    "continue": "续写",
+    "continueHint": "从当前位置继续写作",
+    "rewrite": "改写",
+    "rewriteHint": "改写选中文本",
+    "translate": "翻译",
+    "translateHint": "翻译选中文本",
+    "complete": "补全",
+    "completeHint": "补全当前句子",
+    "cancel": "取消",
+    "continuing": "AI 续写中...",
+    "rewriting": "AI 改寫中...",
+    "translating": "AI 翻译中...",
+    "completing": "AI 补全中...",
+    "toneClear": "清晰",
+    "toneProfessional": "专业",
+    "toneAcademic": "学术",
+    "toneSimple": "简单",
+    "toneCreative": "创意",
+    "suggestTags": "AI 推荐标签",
+    "tagApplied": "已应用 AI 推荐标签",
+    "aiContentInserted": "✓ AI 内容已插入"
   }
 }

@@ -613,5 +613,28 @@
     "noteCount": "{{count}} notes",
     "themeTitle": "Toggle theme",
     "graphTitle": "Open Graph View"
+  },
+  "ai": {
+    "continue": "Continue",
+    "continueHint": "Continue writing from here",
+    "rewrite": "Rewrite",
+    "rewriteHint": "Rewrite selected text",
+    "translate": "Translate",
+    "translateHint": "Translate selected text",
+    "complete": "Complete",
+    "completeHint": "Complete the sentence",
+    "cancel": "Cancel",
+    "continuing": "AI is writing...",
+    "rewriting": "AI is rewriting...",
+    "translating": "AI is translating...",
+    "completing": "AI is completing...",
+    "toneClear": "Clear",
+    "toneProfessional": "Professional",
+    "toneAcademic": "Academic",
+    "toneSimple": "Simple",
+    "toneCreative": "Creative",
+    "suggestTags": "AI Suggest Tags",
+    "tagApplied": "AI-recommended tags applied",
+    "aiContentInserted": "✓ AI content inserted"
   }
 }

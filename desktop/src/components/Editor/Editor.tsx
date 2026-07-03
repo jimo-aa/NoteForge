@@ -6,6 +6,7 @@ import { VersionControlModal } from '@/components/Modals/VersionControlModal';
 import { Icon } from '@/components/Common/Icon';
 import { AttachmentPanel } from '@/components/Editor/AttachmentPanel';
 import { CodeMirrorEditor, type CodeMirrorHandle } from './CodeMirrorEditor';
+import { AIToolbar } from './AIToolbar';
 import hljs from 'highlight.js';
 import 'highlight.js/styles/github.css';
 
@@ -87,6 +88,56 @@ export function Editor() {
   const [wikiOpen, setWikiOpen] = useState(false);
   const [wikiActiveIndex, setWikiActiveIndex] = useState(0);
   const [searchMatchInfo, setSearchMatchInfo] = useState<{ current: number; total: number } | null>(null);
+
+  // ── AI Toolbar state ──
+  const [aiSelectedText, setAiSelectedText] = useState('');
+  const [aiToolbarPos, setAiToolbarPos] = useState<{ top: number; left: number } | null>(null);
+  const [aiToolbarVisible, setAiToolbarVisible] = useState(false);
+  const editorContainerRef = useRef<HTMLDivElement>(null);
+
+  const handleEditorSelectionChange = useCallback((from: number, to: number) => {
+    if (!note || !cmRef.current) return;
+    const text = note.content.slice(from, to);
+    if (text && text.length > 0 && text.length <= 5000) {
+      setAiSelectedText(text);
+      // Position toolbar near the selection
+      if (editorContainerRef.current) {
+        const editorRect = editorContainerRef.current.getBoundingClientRect();
+        // Use the editor's scroll position to estimate cursor location
+        setAiToolbarPos({ top: 20, left: 10 }); // Will be refined
+      }
+      setAiToolbarVisible(text.length > 0 && text.length <= 2000);
+    } else {
+      setAiToolbarVisible(false);
+    }
+  }, [note]);
+
+  const handleAiInsert = useCallback((content: string, mode: 'replace' | 'append' | 'insertBelow') => {
+    if (!cmRef.current) return;
+    const sel = cmRef.current.getSelection();
+    const currentContent = cmRef.current.getContent();
+
+    switch (mode) {
+      case 'replace':
+        cmRef.current.insertText(content);
+        break;
+      case 'append':
+        // Insert after selection (at cursor position)
+        cmRef.current.insertTextAtCursor('\n' + content);
+        break;
+      case 'insertBelow': {
+        // Insert below current selection, then restore selection
+        const before = currentContent.slice(0, sel.to);
+        const after = currentContent.slice(sel.to);
+        const nextContent = before + '\n\n' + content + '\n' + after;
+        cmRef.current.setContent(nextContent);
+        break;
+      }
+    }
+    cmRef.current.focus();
+    setAiToolbarVisible(false);
+    showToast('success', t('note.aiContentInserted'));
+  }, [showToast, t]);
 
   useEffect(() => {
     if (!note) return;
@@ -505,30 +556,41 @@ export function Editor() {
               >✕</button>
             </div>
           )}
-          <CodeMirrorEditor
-            ref={cmRef}
-            initialContent={note.content ?? ''}
-            searchQuery={searchQuery}
-            onChange={(next) => {
-              updateContent(next);
-              if (wikiOpen) openWikiSuggestions();
-            }}
-            onSelectionChange={() => {
-              persistCursor();
-              if (wikiOpen) openWikiSuggestions();
-            }}
-            onImagePaste={handleImagePaste}
-            onImageDrop={handleImageDrop}
-            onWikiLinkClick={(title) => {
-              const found = notes.find((n) => n.meta.title.toLowerCase() === title.toLowerCase());
-              if (found) {
-                selectNote(found.meta.id);
-        showToast('info', t('note.jumpedToNote', { title: found.meta.title }));
-              } else {
-        showToast('error', t('note.noteNotFound', { title }));
-              }
-            }}
-          />
+          <div ref={editorContainerRef} style={{ position: 'relative', flex: 1, minHeight: 0 }}>
+            <CodeMirrorEditor
+              ref={cmRef}
+              initialContent={note.content ?? ''}
+              searchQuery={searchQuery}
+              onChange={(next) => {
+                updateContent(next);
+                if (wikiOpen) openWikiSuggestions();
+              }}
+              onSelectionChange={(from, to) => {
+                persistCursor();
+                if (wikiOpen) openWikiSuggestions();
+                handleEditorSelectionChange(from, to);
+              }}
+              onImagePaste={handleImagePaste}
+              onImageDrop={handleImageDrop}
+              onWikiLinkClick={(title) => {
+                const found = notes.find((n) => n.meta.title.toLowerCase() === title.toLowerCase());
+                if (found) {
+                  selectNote(found.meta.id);
+                  showToast('info', t('note.jumpedToNote', { title: found.meta.title }));
+                } else {
+                  showToast('error', t('note.noteNotFound', { title }));
+                }
+              }}
+            />
+            <AIToolbar
+              selectedText={aiSelectedText}
+              noteContent={note.content}
+              position={aiToolbarPos}
+              onInsert={handleAiInsert}
+              visible={aiToolbarVisible}
+              onClose={() => setAiToolbarVisible(false)}
+            />
+          </div>
           {wikiOpen && (
             <div className="wiki-autocomplete" onKeyDown={handleEditorKeyDown}>
               <div className="wiki-autocomplete-header">Wiki Link {wikiQuery ? `：${wikiQuery}` : ''}</div>
