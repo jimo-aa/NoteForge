@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useStore } from '@/stores/context';
 import { useTheme, type ThemeMode } from '@/hooks/useTheme';
@@ -15,7 +15,6 @@ import {
   formatKeyCombo,
   isComboTaken,
   type ShortcutDef,
-  type KeyCombo,
 } from '@/services/shortcutService';
 
 const ACCENT_PRESETS = [
@@ -396,7 +395,7 @@ export function ManageModal({ open, onClose }: { open: boolean; onClose: () => v
           )}
         </div>
         <EncryptionModal open={encryptionOpen} onClose={() => setEncryptionOpen(false)} />
-        <NotebookModal state={notebookModal} onClose={() => setNotebookModal({ open: false, mode: null, title: '', value: '' })} onConfirm={async (name, icon, color) => {
+        <NotebookModal state={notebookModal} onClose={() => setNotebookModal({ open: false, mode: null, title: '', value: '' })} onConfirm={async (name, _icon, _color) => {
           if (notebookModal.mode === 'rename' && notebookModal.notebookId) {
             await renameNotebook(notebookModal.notebookId, name);
             setNotebookModal({ open: false, mode: null, title: '', value: '' });

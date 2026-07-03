@@ -474,7 +474,6 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorHandle, CodeMirrorEditorPro
         const ranges = matchRangesRef.current;
         if (!view || ranges.length === 0) return;
 
-        const sel = view.state.selection.main;
         // Find the next match after current cursor position
         let nextIdx = currentMatchRef.current + 1;
         if (nextIdx >= ranges.length) nextIdx = 0;

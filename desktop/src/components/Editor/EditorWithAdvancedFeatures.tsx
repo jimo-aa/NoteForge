@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { tauriInvoke as invoke } from '@/utils/invoke';
 import { useStore } from '@/stores/context';
@@ -95,16 +95,6 @@ export function EditorWithAdvancedFeatures({
       setContent(content);
       await onRefresh();
     }
-  };
-
-  const handleExport = async (format: string, target: string) => {
-    if (!note) return;
-
-    let filename = '';
-    if (target === 'note') {
-      filename = `${note.meta.title}.${format === 'markdown' ? 'md' : format}`;
-    }
-    // 导出逻辑会在ExportBackupModal中处理
   };
 
   // ============================================================
@@ -282,81 +272,4 @@ export function EditorWithAdvancedFeatures({
   );
 }
 
-// 样式补充
-const editorStyles = `
-.editor-container {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  background: var(--background-primary);
-}
 
-.editor-empty {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  color: var(--text-tertiary);
-  font-size: 16px;
-}
-
-.editor-content {
-  flex: 1;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-
-.editor-textarea {
-  flex: 1;
-  padding: 16px;
-  border: none;
-  resize: none;
-  font-family: 'Monaco', 'Courier New', monospace;
-  font-size: 14px;
-  line-height: 1.6;
-  background: var(--background-primary);
-  color: var(--text-primary);
-  outline: none;
-}
-
-.editor-preview {
-  flex: 1;
-  overflow-y: auto;
-  padding: 16px;
-}
-
-.preview-content {
-  max-width: 800px;
-  line-height: 1.8;
-}
-
-.editor-statusbar {
-  display: flex;
-  gap: 24px;
-  padding: 8px 16px;
-  background: var(--surface-secondary);
-  border-top: 1px solid var(--border-color);
-  font-size: 12px;
-  color: var(--text-tertiary);
-}
-
-.status-item {
-  display: flex;
-  align-items: center;
-}
-
-.version-select-group {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  border-left: 1px solid var(--border-color);
-  border-right: 1px solid var(--border-color);
-  padding: 0 8px;
-}
-
-.select-arrow {
-  color: var(--text-tertiary);
-  font-weight: 600;
-}
-`;

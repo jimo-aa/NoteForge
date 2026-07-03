@@ -4,11 +4,9 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import {
   getShortcuts,
-  getShortcut,
   eventMatchesCombo,
   eventToCombo,
   type ShortcutDef,
-  type KeyCombo,
 } from '@/services/shortcutService';
 
 export type ActionMap = Record<string, () => void>;

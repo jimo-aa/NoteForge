@@ -86,7 +86,7 @@ services:
       MINIO_ENDPOINT: http://minio:9000
       MINIO_ACCESS_KEY: noteforge
       MINIO_SECRET_KEY: noteforge123
-      JWT_SECRET: ${JWT_SECRET:-noteforge-mvp-dev-jwt-secret-key-2026}
+      NOTE_JWT_SECRET: ${NOTE_JWT_SECRET:-${JWT_SECRET:-noteforge-shared-jwt-secret-key-2026}}
       JWT_ACCESS_TOKEN_EXPIRATION: 3600000
       JWT_REFRESH_TOKEN_EXPIRATION: 604800000
     ports:
@@ -111,7 +111,7 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/noteforge
       SPRING_DATASOURCE_USERNAME: noteforge
       SPRING_DATASOURCE_PASSWORD: noteforge123
-      JWT_SECRET: ${JWT_SECRET:-noteforge-mvp-dev-jwt-secret-key-2026}
+      USER_JWT_SECRET: ${USER_JWT_SECRET:-${JWT_SECRET:-noteforge-shared-jwt-secret-key-2026}}
       JWT_ACCESS_TOKEN_EXPIRATION: 3600000
       JWT_REFRESH_TOKEN_EXPIRATION: 604800000
     ports:

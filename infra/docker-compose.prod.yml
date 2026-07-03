@@ -22,7 +22,7 @@ services:
       MINIO_ACCESS_KEY: noteforge
       MINIO_SECRET_KEY: noteforge123
       MINIO_BUCKET: noteforge-attachments
-      JWT_SECRET: ${JWT_SECRET:-noteforge-prod-jwt-secret-change-me}
+      NOTE_JWT_SECRET: ${NOTE_JWT_SECRET:-${JWT_SECRET:-noteforge-prod-jwt-secret-change-me}}
       CORS_ALLOWED_ORIGINS: http://localhost:1420,tauri://localhost
     ports:
       - "8081:8081"
@@ -63,7 +63,7 @@ services:
       DB_PASS: noteforge123
       REDIS_HOST: redis
       REDIS_PORT: 6379
-      JWT_SECRET: ${JWT_SECRET:-noteforge-prod-jwt-secret-change-me}
+      USER_JWT_SECRET: ${USER_JWT_SECRET:-${JWT_SECRET:-noteforge-prod-jwt-secret-change-me}}
       CORS_ALLOWED_ORIGINS: http://localhost:1420,tauri://localhost
     ports:
       - "8082:8082"

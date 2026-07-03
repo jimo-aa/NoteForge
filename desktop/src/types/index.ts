@@ -138,21 +138,12 @@ export interface SyncPullRequest {
   lastVersion: number;
 }
 
-// Backend NoteResponse shape (camelCase — matches backend exactly)
-export interface NoteResponseItem {
-  id: string;
+// Backend NoteResponse shape — extends NoteMeta to avoid field redefinition.
+// NoteMeta fields: id, title, notebookId, tags, isPinned, isFavorite, wordCount, version, createdAt, updatedAt
+export interface NoteResponseItem extends NoteMeta {
   userId: string;
-  notebookId: string | null;
-  title: string;
   content: string;
   contentPlain: string;
-  tags: string[];
-  isPinned: boolean;
-  isFavorite: boolean;
-  wordCount: number;
-  version: number;
-  createdAt: number;
-  updatedAt: number;
 }
 
 export interface SyncPullResponse {

@@ -19,7 +19,6 @@ function relativeTime(ts: number): string {
 
 function getDateGroup(ts: number): string {
   const now = new Date();
-  const date = new Date(ts);
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
   const yesterday = today - 86400000;
   if (ts >= today) return i18n.t('draftRecovery.groupToday');

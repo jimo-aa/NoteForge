@@ -1,5 +1,3 @@
-import { useStore } from '@/stores/context';
-
 interface NavItem {
   id: string;
   label: string;

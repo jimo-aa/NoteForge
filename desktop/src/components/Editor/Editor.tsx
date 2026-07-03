@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useStore } from '../../stores/context';
-import { renderMarkdown, formatTable, TABLE_CELL_KEYS } from '@/utils/markdown';
+import { renderMarkdown, formatTable } from '@/utils/markdown';
 import { VersionControlModal } from '@/components/Modals/VersionControlModal';
 import { Icon } from '@/components/Common/Icon';
 import { AttachmentPanel } from '@/components/Editor/AttachmentPanel';
@@ -118,8 +118,6 @@ export function Editor() {
       const detail = (event as CustomEvent<{ noteId: string; line: number; column: number }>).detail;
       if (!detail || !note || detail.noteId !== note.meta.id) return;
       const targetLine = Math.max(1, detail.line);
-      const lines = note.content.split('\n');
-      const targetIndex = lines.slice(0, targetLine - 1).reduce((acc, line) => acc + line.length + 1, 0);
       setJumpLine(targetLine);
       setIsPreviewVisible(true);
       cmRef.current?.focus();
@@ -129,12 +127,6 @@ export function Editor() {
     window.addEventListener('noteforge:jump-to-hit', onJump as EventListener);
     return () => window.removeEventListener('noteforge:jump-to-hit', onJump as EventListener);
   }, [note, setIsPreviewVisible]);
-
-  const allTags = useMemo(() => {
-    const tagSet = new Set<string>();
-    notes.forEach((item) => item.meta.tags.forEach((tag) => tagSet.add(tag)));
-    return Array.from(tagSet);
-  }, [notes]);
 
   const wikiCandidates = useMemo(() => notes.map((item) => item.meta.title).filter(Boolean), [notes]);
 

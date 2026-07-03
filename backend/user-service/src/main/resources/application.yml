@@ -24,7 +24,9 @@ spring:
         format_sql: true
 
 jwt:
-  secret: ${JWT_SECRET:noteforge-mvp-dev-jwt-secret-key-2026}
+  # user-service is the token issuer (signing authority).
+  # Configure via USER_JWT_SECRET env var (or JWT_SECRET as fallback).
+  secret: ${USER_JWT_SECRET:${JWT_SECRET:noteforge-shared-jwt-secret-key-2026}}
   access-token-expiration: ${JWT_ACCESS_TOKEN_EXPIRATION:900000}
   refresh-token-expiration: ${JWT_REFRESH_TOKEN_EXPIRATION:604800000}
 

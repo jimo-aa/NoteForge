@@ -197,7 +197,6 @@ export function GraphView() {
   if (!store.isGraphOpen) return null;
 
   const maxDegree = Math.max(1, ...graph.nodes.map((node) => node.degree));
-  const activeCount = focusedId ? neighborhood.size : graph.nodes.length;
 
   const activeEdgeNote = activeEdge
     ? (() => {

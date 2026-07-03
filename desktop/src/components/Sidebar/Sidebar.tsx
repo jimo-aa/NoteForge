@@ -9,8 +9,6 @@ import { Icon } from '@/components/Common/Icon';
 import { SyncIndicator } from '@/components/Common/SyncIndicator';
 import { AuthModal } from '@/components/Modals/AuthModal';
 import { formatTime } from '@/utils/markdown';
-import type { EntityModalState } from '@/components/Modals/EntityModal';
-
 interface SidebarProps {
   onNewNote?: () => void;
   onNewNotebook?: () => void;
@@ -21,7 +19,7 @@ interface SidebarProps {
 
 export function Sidebar({ onNewNote, onNewNotebook, onManage, onDraftRecovery, onAbout }: SidebarProps) {
   const { t } = useTranslation();
-  const { searchQuery, setSearchQuery, currentFilter, setCurrentFilter, activeNotebook, setActiveNotebook, notebooks, tags, favoriteCount, totalCount, searchResultCount, setIsGraphOpen, selectNote, currentNoteId, activeTags, setActiveTags, filteredNotes, setContextMenu } = useStore();
+  const { currentFilter, setCurrentFilter, activeNotebook, setActiveNotebook, notebooks, tags, favoriteCount, totalCount, searchResultCount, setIsGraphOpen, selectNote, currentNoteId, activeTags, setActiveTags, filteredNotes, setContextMenu } = useStore();
   const { user, isAuthenticated, logout } = useAuth();
   const [authOpen, setAuthOpen] = useState(false);
 

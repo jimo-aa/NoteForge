@@ -19,10 +19,6 @@ function setToken(token: string) {
   window.localStorage.setItem(AUTH_TOKEN_KEY, JSON.stringify(token));
 }
 
-function clearToken() {
-  window.localStorage.removeItem(AUTH_TOKEN_KEY);
-}
-
 /** Build a Response-like object that fetch resolves to */
 function jsonResponse(data: unknown, status = 200): Response {
   return {
@@ -132,7 +128,7 @@ describe('SyncService', () => {
 
     const calls = mockFetch.mock.calls;
     expect(calls.length).toBeGreaterThan(0);
-    const [_url, opts] = calls[0] as [string, RequestInit];
+    const [, opts] = calls[0] as [string, RequestInit];
     expect(JSON.parse(opts.body as string)).toEqual({ changes });
   });
 

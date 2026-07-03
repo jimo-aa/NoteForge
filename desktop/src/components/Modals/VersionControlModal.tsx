@@ -3,12 +3,6 @@ import { useTranslation } from 'react-i18next';
 import { tauriInvoke as invoke } from '@/utils/invoke';
 import type { GitVersionEntry, GitBranchEntry } from '@/types';
 
-interface BranchNode {
-  branch: string;
-  commits: GitVersionEntry[];
-  isExpanded: boolean;
-}
-
 export function VersionControlModal({ open, noteId, onClose, onCheckoutVersion, onCheckoutBranch, onCreateBranch, onRestore }: {
   open: boolean; noteId: string; onClose: () => void;
   onCheckoutVersion: (commitId: string) => Promise<boolean>;

@@ -282,7 +282,7 @@ export function SearchBox() {
     const handler = () => openSearch();
     window.addEventListener('noteforge:open-search', handler);
     return () => window.removeEventListener('noteforge:open-search', handler);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);  
 
   useEffect(() => {
     if (!open) return;
@@ -448,7 +448,7 @@ export function SearchBox() {
                     <span>{t('search.recentSearches')}</span>
                     <button className="search-history-clear" onClick={clearHistory}>{t('search.clear')}</button>
                   </div>
-                  {searchHistory.map((hq, i) => (
+                  {searchHistory.map((hq) => (
                     <button
                       key={hq}
                       className="search-history-item"

@@ -1,10 +1,5 @@
 import { useTranslation } from 'react-i18next';
 
-const LANGUAGES = [
-  { code: 'zh-CN', label: '中文' },
-  { code: 'en-US', label: 'EN' },
-] as const;
-
 export function LanguageSwitcher() {
   const { i18n } = useTranslation();
   const currentLang = i18n.language?.startsWith('zh') ? 'zh-CN' : 'en-US';
