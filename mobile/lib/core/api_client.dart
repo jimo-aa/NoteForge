@@ -111,4 +111,9 @@ class ApiClient {
   // ── Tags ──
 
   static Future<ApiResponse<Map<String, dynamic>>> listTags() => request('GET', '/api/v1/tags');
+
+  // ── AI ──
+
+  static Future<ApiResponse<Map<String, dynamic>>> aiTag(String title, String content) =>
+      request('POST', '/api/v1/ai/tag', body: {'title': title, 'content': content});
 }

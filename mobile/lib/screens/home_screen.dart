@@ -30,6 +30,13 @@ class _HomeScreenState extends State<HomeScreen> {
         title: Text('⚒ NoteForge', style: const TextStyle(fontSize: 18)),
         actions: [
           IconButton(
+            icon: const Icon(Icons.sync, size: 20),
+            onPressed: () {
+              context.read<NoteProvider>().loadData();
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Syncing...'), duration: Duration(seconds: 1)));
+            },
+          ),
+          IconButton(
             icon: const Icon(Icons.search),
             onPressed: () => Navigator.pushNamed(context, '/search'),
           ),

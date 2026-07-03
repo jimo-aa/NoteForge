@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useTranslation } from 'react-i18next';
 import { notes as notesApi, notebooks as notebooksApi, ai as aiApi } from '@/lib/api-client';
 import { RichTextEditor, type RichTextHandle } from '@/components/Editor/RichTextEditor';
+import { AIToolbar } from '@/components/Editor/AIToolbar';
 import type { NoteResponseItem, Notebook } from '@/lib/types';
 
 export default function NoteEditorPage() {
@@ -22,6 +23,8 @@ export default function NoteEditorPage() {
   const [notebooks, setNotebooks] = useState<Notebook[]>([]);
   const [tagInput, setTagInput] = useState('');
   const [deleting, setDeleting] = useState(false);
+  const [aiSelectedText, setAiSelectedText] = useState('');
+  const [aiToolbarVisible, setAiToolbarVisible] = useState(false);
   const editorRef = useRef<RichTextHandle>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -38,6 +41,18 @@ export default function NoteEditorPage() {
       setLoading(false);
     });
   }, [id]);
+
+  const handleAiInsert = (content: string, mode: 'replace' | 'append' | 'insertBelow') => {
+    if (!editorRef.current) return;
+    if (mode === 'replace') {
+      // Replace entire content for now (simplified)
+      editorRef.current.setContent(content);
+    } else {
+      const current = editorRef.current.getContent();
+      editorRef.current.setContent(current + '\n' + content);
+    }
+    setAiToolbarVisible(false);
+  };
 
   const scheduleSave = (updates: Record<string, unknown>) => {
     if (!note) return;
@@ -188,6 +203,17 @@ export default function NoteEditorPage() {
         </div>
       </div>
 
+      {/* AI Toolbar */}
+      <div style={{ position: 'relative' }}>
+        <AIToolbar
+          selectedText={aiSelectedText}
+          noteContent={note.content}
+          position={null}
+          onInsert={handleAiInsert}
+          visible={aiToolbarVisible}
+          onClose={() => setAiToolbarVisible(false)}
+        />
+      </div>
       {/* Editor */}
       <RichTextEditor ref={editorRef} initialContent={note.content || ''} onChange={handleContentChange} placeholderText={t('noteModal.contentPlaceholder')} />
     </div>

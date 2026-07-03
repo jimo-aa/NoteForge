@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>NoteForge Mobile — UIUX 原型</title>
+<style>
+:root {
+  --accent: #6366f1; --accent-hover: #5558e6; --accent-subtle: #eef2ff; --accent-glow: rgba(99,102,241,0.15);
+  --accent-gradient: linear-gradient(135deg, #6366f1, #8b5cf6); --bg: #f5f6fa; --bg-card: #ffffff;
+  --bg-elevated: #ffffff; --text: #171a23; --text-secondary: #5a5f73; --text-muted: #989daf;
+  --border: #e6e8ee; --border-light: #f0f2f6; --success: #10b981; --warning: #f59e0b; --danger: #ef4444;
+  --tab-bar: #ffffff; --tab-bar-border: #eef0f4; --radius: 10px; --radius-lg: 14px; --radius-xl: 20px;
+  --radius-full: 50%; --shadow-sm: 0 1px 3px rgba(0,0,0,0.04); --shadow: 0 2px 8px rgba(0,0,0,0.06);
+  --shadow-md: 0 4px 16px rgba(0,0,0,0.08); --shadow-lg: 0 8px 32px rgba(0,0,0,0.12);
+  --font: -apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei','Noto Sans SC',sans-serif;
+  --font-mono: 'JetBrains Mono','SF Mono','Consolas',monospace; --transition: 0.2s cubic-bezier(0.4,0,0.2,1);
+  --safe-top: env(safe-area-inset-top,0px); --safe-bottom: env(safe-area-inset-bottom,0px); --tab-h: 56px;
+}
+[data-theme="dark"] {
+  --bg: #0f101a; --bg-card: #1a1b2e; --bg-elevated: #1e1f35; --text: #e4e6f0; --text-secondary: #989daf;
+  --text-muted: #5a5f73; --border: #2a2c42; --border-light: #1e2037; --tab-bar: #1a1b2e;
+  --tab-bar-border: #2a2c42; --accent-subtle: #262840; --shadow-sm: 0 1px 3px rgba(0,0,0,0.2);
+  --shadow: 0 2px 8px rgba(0,0,0,0.3); --shadow-md: 0 4px 16px rgba(0,0,0,0.4); --shadow-lg: 0 8px 32px rgba(0,0,0,0.5);
+}
+* { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+html,body { height:100%; overflow:hidden; background:#2a2a3e; display:flex; align-items:center; justify-content:center; }
+body { font-family:var(--font); }
+.phone-frame { width:375px; height:667px; background:var(--bg); border-radius:16px; overflow:hidden; position:relative; box-shadow:0 20px 60px rgba(0,0,0,0.3),0 0 0 1px rgba(255,255,255,0.06); }
+.app { height:100%; display:flex; flex-direction:column; }
+.screens { flex:1; position:relative; overflow:hidden; }
+.screen { position:absolute; inset:0; overflow-y:auto; overflow-x:hidden; padding:0 0 calc(var(--tab-h) + 8px) 0; opacity:0; pointer-events:none; transition:opacity 0.25s ease,transform 0.25s ease; transform:translateY(8px); -webkit-overflow-scrolling:touch; }
+.screen.active { opacity:1; pointer-events:auto; transform:translateY(0); }
+.screen-header { padding:12px 16px 8px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:10; background:var(--bg); }
+.screen-header h1 { font-size:22px; font-weight:700; }
+.avatar { width:34px;height:34px;border-radius:var(--radius-full); background:var(--accent-gradient); display:flex; align-items:center; justify-content:center; color:#fff; font-size:14px; font-weight:600; box-shadow:0 2px 8px var(--accent-glow); border:none; cursor:pointer; }
+.tab-bar { position:absolute; bottom:0; left:0; right:0; z-index:100; height:calc(var(--tab-h) + var(--safe-bottom)); padding-bottom:var(--safe-bottom); background:var(--tab-bar); border-top:1px solid var(--tab-bar-border); display:flex; align-items:center; justify-content:space-around; backdrop-filter:blur(20px); }
+.tab-item { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; padding:4px 12px; border:none; background:transparent; cursor:pointer; transition:var(--transition); position:relative; flex:1; font-family:var(--font); }
+.tab-item .tab-icon { font-size:21px; line-height:1; transition:var(--transition); filter:grayscale(1) opacity(0.5); }
+.tab-item .tab-label { font-size:10px; color:var(--text-muted); font-weight:500; transition:var(--transition); }
+.tab-item.active .tab-icon { filter:none; }
+.tab-item.active .tab-label { color:var(--accent); font-weight:600; }
+.tab-item.active::before { content:''; position:absolute; top:-1px; left:50%; transform:translateX(-50%); width:20px; height:3px; background:var(--accent); border-radius:0 0 3px 3px; }
+.greeting { padding:0 16px 12px; }
+.greeting .sub { font-size:13px; color:var(--text-muted); margin-top:1px; }
+.section-label { padding:12px 16px 6px; font-size:12px; font-weight:600; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px; }
+.note-card { background:var(--bg-card); margin:0 12px 8px; padding:14px 16px; border-radius:var(--radius-lg); cursor:pointer; transition:var(--transition); box-shadow:var(--shadow-sm); border:1px solid var(--border-light); position:relative; animation:fadeSlideIn 0.25s ease-out; }
+.note-card:active { transform:scale(0.98); }
+.note-card.pinned { border-left:3px solid var(--warning); }
+.note-card .nc-top { display:flex; align-items:flex-start; gap:8px; margin-bottom:4px; }
+.note-card .nc-icon { width:32px;height:32px;border-radius:8px; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:15px; }
+.note-card .nc-icon.tech { background:#eef2ff; }
+.note-card .nc-icon.default { background:#fef3c7; }
+.note-card .nc-icon.project { background:#ede9fe; }
+.note-card .nc-title { flex:1; font-size:15px; font-weight:600; line-height:1.4; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.note-card .nc-preview { font-size:13px; color:var(--text-secondary); line-height:1.5; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; margin-bottom:6px; }
+.note-card .nc-meta { display:flex; align-items:center; gap:8px; font-size:11px; color:var(--text-muted); }
+.note-card .nc-meta .tag-dot { padding:1px 6px; border-radius:4px; font-size:10px; background:var(--accent-subtle); color:var(--accent); }
+.note-card .nc-meta .fav-star { color:var(--warning); }
+.fab { position:absolute; bottom:calc(var(--tab-h) + var(--safe-bottom) + 16px); right:16px; width:52px;height:52px;border-radius:var(--radius-full); background:var(--accent-gradient); color:#fff; border:none; display:flex; align-items:center; justify-content:center; font-size:26px; box-shadow:0 4px 16px var(--accent-glow); cursor:pointer; transition:var(--transition); z-index:50; font-family:var(--font); }
+.fab:active { transform:scale(0.92); }
+.search-input-wrap { margin:4px 16px 12px; position:relative; }
+.search-input-wrap .si-icon { position:absolute; left:14px; top:50%; transform:translateY(-50%); font-size:16px; color:var(--text-muted); pointer-events:none; }
+.search-input-wrap input { width:100%; padding:12px 14px 12px 42px; border:none; border-radius:var(--radius-lg); background:var(--bg-card); font-size:15px; color:var(--text); outline:none; font-family:var(--font); box-shadow:var(--shadow-sm); border:1px solid var(--border-light); }
+.search-input-wrap input:focus { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-glow); }
+.search-hints { padding:0 16px; }
+.search-hint-item { display:flex; align-items:center; gap:12px; padding:12px 4px; border-bottom:1px solid var(--border-light); cursor:pointer; transition:var(--transition); font-size:14px; color:var(--text-secondary); }
+.search-hint-item:active { opacity:0.6; }
+.search-hint-item .shi-icon { width:28px;height:28px;border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:13px; background:var(--accent-subtle); color:var(--accent); flex-shrink:0; }
+.recent-header { display:flex; justify-content:space-between; padding:14px 16px 6px; font-size:12px; font-weight:600; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px; }
+.recent-header .clear-btn { color:var(--accent); text-transform:none; letter-spacing:0; cursor:pointer; }
+.recent-tags { padding:0 16px; display:flex; flex-wrap:wrap; gap:6px; }
+.recent-tag { padding:5px 12px; border-radius:16px; background:var(--bg-card); border:1px solid var(--border-light); font-size:13px; color:var(--text-secondary); cursor:pointer; }
+.recent-tag:active { background:var(--accent-subtle); border-color:var(--accent); color:var(--accent); }
+.notebook-grid { padding:4px 12px; display:flex; flex-direction:column; gap:6px; }
+.notebook-card { background:var(--bg-card); border-radius:var(--radius-lg); padding:14px 16px; display:flex; align-items:center; gap:12px; cursor:pointer; transition:var(--transition); box-shadow:var(--shadow-sm); border:1px solid var(--border-light); }
+.notebook-card:active { transform:scale(0.98); }
+.notebook-card .nb-icon { width:40px;height:40px;border-radius:10px; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:20px; }
+.notebook-card .nb-info { flex:1; }
+.notebook-card .nb-name { font-size:15px; font-weight:600; }
+.notebook-card .nb-count { font-size:12px; color:var(--text-muted); margin-top:1px; }
+.notebook-card .nb-arrow { color:var(--text-muted); font-size:14px; }
+.notebook-card .nb-color-dot { width:8px;height:8px;border-radius:var(--radius-full); flex-shrink:0; }
+.empty-state { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:48px 24px; text-align:center; }
+.empty-state .es-icon { font-size:56px; margin-bottom:12px; opacity:0.5; }
+.empty-state h2 { font-size:17px; font-weight:600; color:var(--text-secondary); margin-bottom:4px; }
+.empty-state p { font-size:13px; color:var(--text-muted); line-height:1.6; }
+.profile-header { padding:16px; display:flex; align-items:center; gap:16px; }
+.profile-header .ph-avatar { width:56px;height:56px;border-radius:var(--radius-full); background:var(--accent-gradient); display:flex; align-items:center; justify-content:center; color:#fff; font-size:24px; font-weight:600; flex-shrink:0; box-shadow:0 4px 12px var(--accent-glow); }
+.profile-header .ph-info h2 { font-size:18px; font-weight:700; }
+.profile-header .ph-info p { font-size:13px; color:var(--text-muted); margin-top:1px; }
+.profile-stats { display:flex; margin:0 16px 12px; gap:8px; }
+.profile-stat { flex:1; background:var(--bg-card); border-radius:var(--radius-lg); padding:12px; text-align:center; border:1px solid var(--border-light); box-shadow:var(--shadow-sm); }
+.profile-stat .ps-num { font-size:20px; font-weight:700; }
+.profile-stat .ps-label { font-size:11px; color:var(--text-muted); margin-top:2px; }
+.profile-menu { padding:0 12px; }
+.profile-menu-item { display:flex; align-items:center; gap:12px; padding:14px 12px; border-radius:var(--radius); cursor:pointer; transition:var(--transition); font-size:14px; font-weight:500; }
+.profile-menu-item:active { background:var(--accent-subtle); }
+.profile-menu-item .pmi-icon { width:32px;height:32px;border-radius:8px; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:15px; background:var(--accent-subtle); color:var(--accent); }
+.profile-menu-item .pmi-text { flex:1; }
+.profile-menu-item .pmi-arrow { color:var(--text-muted); font-size:14px; }
+.profile-menu-item.danger .pmi-icon { background:#fef2f2; color:var(--danger); }
+.profile-menu-item.danger .pmi-text { color:var(--danger); }
+.menu-divider { height:1px; background:var(--border-light); margin:6px 12px; }
+
+.editor-page { position:absolute; inset:0; z-index:60; background:var(--bg); display:none; flex-direction:column; animation:slideUp 0.3s ease-out; }
+.editor-page.show { display:flex; }
+.editor-toolbar { padding:8px 12px; display:flex; align-items:center; gap:4px; background:var(--bg-card); border-bottom:1px solid var(--border); flex-shrink:0; }
+.editor-toolbar .et-back { width:36px;height:36px;border:none;background:transparent;border-radius:8px; font-size:20px; display:flex;align-items:center;justify-content:center; cursor:pointer; color:var(--text); flex-shrink:0; font-family:var(--font); }
+.editor-toolbar .et-title { flex:1; font-size:15px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding:0 4px; }
+.editor-toolbar .et-actions { display:flex; gap:2px; }
+.editor-toolbar .et-btn { width:36px;height:36px;border:none;background:transparent;border-radius:8px; font-size:18px; display:flex;align-items:center;justify-content:center; cursor:pointer; color:var(--text-secondary); font-family:var(--font); }
+.editor-tags { padding:6px 16px; display:flex; gap:4px; flex-wrap:wrap; align-items:center; background:var(--bg-card); border-bottom:1px solid var(--border-light); flex-shrink:0; }
+.editor-tag { padding:2px 10px; border-radius:12px; font-size:12px; background:var(--accent-subtle); color:var(--accent); display:inline-flex; align-items:center; gap:4px; }
+.editor-tag .et-remove { font-size:14px; opacity:0.5; cursor:pointer; }
+.editor-tag-add { padding:2px 10px; border-radius:12px; font-size:12px; border:1px dashed var(--border); background:transparent; color:var(--text-muted); cursor:pointer; font-family:var(--font); }
+.editor-content { flex:1; display:flex; flex-direction:column; overflow:hidden; }
+.editor-title-input { padding:12px 16px 4px; font-size:20px; font-weight:700; border:none; outline:none; background:transparent; color:var(--text); font-family:var(--font); width:100%; flex-shrink:0; }
+.editor-textarea { flex:1; padding:8px 16px 24px; font-size:15px; line-height:1.8; border:none; outline:none; resize:none; width:100%; font-family:var(--font); background:transparent; color:var(--text); }
+.editor-status { padding:6px 16px; display:flex; justify-content:space-between; align-items:center; font-size:11px; color:var(--text-muted); background:var(--bg-card); border-top:1px solid var(--border-light); flex-shrink:0; }
+.editor-status .es-left { display:flex; gap:12px; }
+.editor-status .es-dot { width:6px;height:6px;border-radius:var(--radius-full); display:inline-block; margin-right:4px; }
+.editor-status .es-dot.saved { background:var(--success); }
+.editor-status .es-dot.saving { background:var(--warning); animation:pulse 1s infinite; }
+.format-bar { position:absolute; bottom:calc(var(--tab-h) + var(--safe-bottom) + 16px); left:50%; transform:translateX(-50%); background:var(--bg-elevated); border-radius:var(--radius-xl); box-shadow:var(--shadow-lg); border:1px solid var(--border); padding:6px 4px; display:flex; gap:1px; z-index:55; animation:slideUp 0.2s ease-out; }
+.format-btn { width:36px;height:36px;border:none;background:transparent;border-radius:6px; font-size:15px; display:flex;align-items:center;justify-content:center; cursor:pointer; color:var(--text-secondary); font-family:var(--font); }
+.format-btn:active { background:var(--accent-subtle); color:var(--accent); }
+.sheet-overlay { position:absolute; inset:0; z-index:200; background:rgba(0,0,0,0.35); backdrop-filter:blur(4px); display:none; }
+.sheet-overlay.show { display:block; }
+.sheet { position:absolute; bottom:0; left:0; right:0; z-index:201; background:var(--bg-card); border-radius:var(--radius-xl) var(--radius-xl) 0 0; padding:20px 16px calc(20px + var(--safe-bottom)); animation:slideUp 0.3s ease-out; max-height:70vh; overflow-y:auto; display:none; }
+.sheet .sheet-handle { width:36px;height:4px;border-radius:2px;background:var(--border); margin:0 auto 16px; }
+.sheet h2 { font-size:18px; font-weight:700; margin-bottom:16px; }
+.sheet .field { margin-bottom:14px; }
+.sheet label { display:block; font-size:12px; font-weight:600; color:var(--text-secondary); margin-bottom:4px; }
+.sheet input,.sheet select,.sheet textarea { width:100%; padding:10px 14px; border:1px solid var(--border); border-radius:var(--radius); font-size:14px; outline:none; font-family:var(--font); background:var(--bg-card); color:var(--text); }
+.sheet input:focus,.sheet textarea:focus { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-glow); }
+.sheet .sheet-actions { display:flex; gap:8px; margin-top:16px; }
+.sheet .sheet-actions button { flex:1; padding:12px; border-radius:var(--radius); font-size:14px; font-weight:600; cursor:pointer; transition:var(--transition); font-family:var(--font); border:none; }
+.sheet .btn-cancel { background:var(--border-light); color:var(--text-secondary); }
+.sheet .btn-primary { background:var(--accent); color:#fff; }
+.toast-container { position:absolute; top:12px; left:16px; right:16px; z-index:300; display:flex; flex-direction:column; gap:6px; pointer-events:none; }
+.toast { padding:12px 16px; border-radius:var(--radius-lg); font-size:13px; font-weight:500; box-shadow:var(--shadow-md); animation:slideDown 0.3s ease-out; pointer-events:auto; }
+.toast.success { background:var(--success); color:#fff; }
+.toast.error { background:var(--danger); color:#fff; }
+.toast.info { background:var(--bg-elevated); color:var(--text); border:1px solid var(--border); }
+@keyframes fadeIn { from{opacity:0} to{opacity:1} }
+@keyframes fadeSlideIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+@keyframes slideUp { from{transform:translateY(100%)} to{transform:translateY(0)} }
+@keyframes slideDown { from{opacity:0;transform:translateY(-12px)} to{opacity:1;transform:translateY(0)} }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+::-webkit-scrollbar { width:0; height:0; }
+.nb-icon-picker { display:flex; flex-wrap:wrap; gap:6px; }
+.nb-icon-picker button { width:38px;height:38px;border:1px solid var(--border);border-radius:8px; background:var(--bg-card);font-size:18px;cursor:pointer; display:flex;align-items:center;justify-content:center; transition:var(--transition);font-family:var(--font); }
+.nb-icon-picker button:active { transform:scale(0.92); }
+.nb-icon-picker button.selected { border-color:var(--accent);background:var(--accent-subtle); transform:scale(1.12);box-shadow:0 0 0 2px var(--accent-glow); }
+.nb-color-picker { display:flex;flex-wrap:wrap;gap:6px; }
+.nb-color-picker button { width:30px;height:30px;border-radius:50%;border:2px solid transparent; cursor:pointer;transition:var(--transition);padding:0; }
+.nb-color-picker button.selected { border-color:var(--text);transform:scale(1.16); }
+.nb-sheet-preview { display:flex;align-items:center;gap:10px; padding:12px 14px;margin:8px 0;border:1px solid var(--border-light); border-radius:var(--radius);background:var(--bg-card); }
+.nb-sheet-preview-icon { font-size:20px; }
+.nb-sheet-preview-name { font-weight:600;font-size:14px;flex:1; }
+.nb-sheet-preview-dot { width:8px;height:8px;border-radius:50%;flex-shrink:0; }
+</style>
+</head>
+<body>
+<div class="phone-frame">
+<div class="app">
+<div class="screens">
+  <!-- Screen 1: Notes -->
+  <div class="screen active" id="screenNotes">
+    <div class="screen-header"><h1>笔记</h1><button class="avatar" onclick="showToast('info','个人中心')">F</button></div>
+    <div class="greeting"><div style="font-size:15px;font-weight:600;">晚上好 👋</div><div class="sub">今天有 3 篇笔记待整理</div></div>
+    <div class="pinned-section">
+      <div class="section-label">📌 已固定</div>
+      <div class="note-card pinned" onclick="openEditor(1)">
+        <div class="nc-top"><div class="nc-icon tech">📘</div><div class="nc-title">NoteForge 架构设计</div></div>
+        <div class="nc-preview">系统概览 — NoteForge 采用离线优先架构，核心由 Rust 引擎驱动关键操作…</div>
+        <div class="nc-meta"><span>📅 5分钟前</span><span class="tag-dot">#架构</span><span class="tag-dot">#Rust</span><span style="margin-left:auto;">🔗 2</span></div>
+      </div>
+    </div>
+    <div class="section-label">最近更新</div>
+    <div class="note-card" onclick="openEditor(2)" style="animation-delay:0.05s">
+      <div class="nc-top"><div class="nc-icon default">📝</div><div class="nc-title">Rust 内存安全入门</div></div>
+      <div class="nc-preview">所有权系统是 Rust 最独特的特性，在编译期保证内存安全且无需 GC…</div>
+      <div class="nc-meta"><span class="fav-star">⭐</span><span>1小时前</span><span class="tag-dot">#Rust</span></div>
+    </div>
+    <div class="note-card" onclick="openEditor(3)" style="animation-delay:0.1s">
+      <div class="nc-top"><div class="nc-icon tech">⚡</div><div class="nc-title">Tauri vs Electron 对比分析</div></div>
+      <div class="nc-preview">安装包体积对比：Tauri 仅需系统 WebView + Rust 二进制，通常小于 5MB…</div>
+      <div class="nc-meta"><span>3小时前</span><span class="tag-dot">#Tauri</span></div>
+    </div>
+    <div class="note-card" onclick="openEditor(4)" style="animation-delay:0.15s">
+      <div class="nc-top"><div class="nc-icon project">🔄</div><div class="nc-title">CRDT 同步协议设计</div></div>
+      <div class="nc-preview">CRDT 是一种无需中心化协调即可合并的数据结构…</div>
+      <div class="nc-meta"><span class="fav-star">⭐</span><span>昨天</span><span class="tag-dot">#架构</span><span>🔗 3</span></div>
+    </div>
+    <div class="note-card" onclick="openEditor(5)" style="animation-delay:0.2s">
+      <div class="nc-top"><div class="nc-icon default">🎯</div><div class="nc-title">2026 Q3 学习计划</div></div>
+      <div class="nc-preview">- [ ] 深入 Rust 异步编程\n- [ ] 学习 Tauri 插件开发…</div>
+      <div class="nc-meta"><span>2天前</span><span class="tag-dot">#计划</span></div>
+    </div>
+  </div>
+
+  <!-- Screen 2: Search -->
+  <div class="screen" id="screenSearch">
+    <div class="screen-header"><h1>搜索</h1></div>
+    <div class="search-input-wrap"><span class="si-icon">🔍</span><input type="text" placeholder="搜索笔记、标签..." oninput="if(this.value.trim())showToast('info','找到 3 条相关笔记')"></div>
+    <div class="recent-header"><span>最近搜索</span><span class="clear-btn" onclick="showToast('info','已清除搜索历史')">清除</span></div>
+    <div class="recent-tags"><span class="recent-tag" onclick="showToast('info','搜索: Rust')">Rust 架构</span><span class="recent-tag" onclick="showToast('info','搜索: Tauri')">Tauri 插件</span><span class="recent-tag" onclick="showToast('info','搜索: CRDT')">CRDT 同步</span></div>
+    <div class="recent-header" style="margin-top:8px;"><span>快速搜索</span></div>
+    <div class="search-hints">
+      <div class="search-hint-item" onclick="showToast('info','打开标签筛选')"><div class="shi-icon">🏷</div><span class="shi-text">按标签筛选笔记</span><span class="shi-arrow">→</span></div>
+      <div class="search-hint-item" onclick="showToast('info','打开笔记本筛选')"><div class="shi-icon">📓</div><span class="shi-text">按笔记本浏览</span><span class="shi-arrow">→</span></div>
+      <div class="search-hint-item" onclick="showToast('info','打开全文搜索')"><div class="shi-icon">🔍</div><span class="shi-text">全文搜索（含已删除）</span><span class="shi-arrow">→</span></div>
+    </div>
+  </div>
+
+  <!-- Screen 3: Notebooks -->
+  <div class="screen" id="screenNotebooks">
+    <div class="screen-header"><h1>笔记本</h1><button style="width:34px;height:34px;border:none;background:transparent;font-size:22px;cursor:pointer;border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--accent);font-family:var(--font);" onclick="showSheet('newNbSheet')">+</button></div>
+    <div class="notebook-grid">
+      <div class="notebook-card" onclick="showToast('info','打开全部笔记')"><div class="nb-icon" style="background:var(--accent-subtle);">📋</div><div class="nb-info"><div class="nb-name">全部笔记</div><div class="nb-count">12 条笔记</div></div><span class="nb-color-dot" style="background:var(--accent);"></span><span class="nb-arrow">›</span></div>
+      <div class="notebook-card" onclick="showToast('info','打开默认笔记本')"><div class="nb-icon" style="background:#fef3c7;">📓</div><div class="nb-info"><div class="nb-name">默认笔记本</div><div class="nb-count">5 条笔记</div></div><span class="nb-color-dot" style="background:#f59e0b;"></span><span class="nb-arrow">›</span></div>
+      <div class="notebook-card" onclick="showToast('info','打开技术笔记')"><div class="nb-icon" style="background:#eef2ff;">💻</div><div class="nb-info"><div class="nb-name">技术笔记</div><div class="nb-count">4 条笔记</div></div><span class="nb-color-dot" style="background:#6366f1;"></span><span class="nb-arrow">›</span></div>
+      <div class="notebook-card" onclick="showToast('info','打开项目文档')"><div class="nb-icon" style="background:#ede9fe;">🗂</div><div class="nb-info"><div class="nb-name">项目文档</div><div class="nb-count">2 条笔记</div></div><span class="nb-color-dot" style="background:#8b5cf6;"></span><span class="nb-arrow">›</span></div>
+      <div class="notebook-card" onclick="showToast('info','打开个人日记')"><div class="nb-icon" style="background:#fce7f3;">📖</div><div class="nb-info"><div class="nb-name">个人日记</div><div class="nb-count">1 条笔记</div></div><span class="nb-color-dot" style="background:#ec4899;"></span><span class="nb-arrow">›</span></div>
+    </div>
+  </div>
+
+  <!-- Screen 4: Favorites -->
+  <div class="screen" id="screenFavorites">
+    <div class="screen-header"><h1>收藏</h1></div>
+    <div class="note-card" onclick="openEditor(2)"><div class="nc-top"><div class="nc-icon default">📝</div><div class="nc-title">Rust 内存安全入门</div></div><div class="nc-preview">所有权系统是 Rust 最独特的特性，在编译期保证内存安全且无需 GC…</div><div class="nc-meta"><span class="fav-star">⭐</span><span>1小时前</span><span class="tag-dot">#Rust</span></div></div>
+    <div class="note-card" onclick="openEditor(4)"><div class="nc-top"><div class="nc-icon project">🔄</div><div class="nc-title">CRDT 同步协议设计</div></div><div class="nc-preview">CRDT 是一种无需中心化协调即可合并的数据结构…</div><div class="nc-meta"><span class="fav-star">⭐</span><span>昨天</span><span class="tag-dot">#架构</span></div></div>
+    <div class="note-card" onclick="openEditor(7)"><div class="nc-top"><div class="nc-icon default">🤖</div><div class="nc-title">AI Prompt 工程最佳实践</div></div><div class="nc-preview">结构化 Prompt — 写清晰明确的指令，给模型足够的上下文…</div><div class="nc-meta"><span class="fav-star">⭐</span><span>5天前</span><span class="tag-dot">#AI</span></div></div>
+  </div>
+
+  <!-- Screen 5: Profile -->
+  <div class="screen" id="screenProfile">
+    <div class="screen-header"><h1>我的</h1></div>
+    <div class="profile-header"><div class="ph-avatar">F</div><div class="ph-info"><h2>Forge User</h2><p>user@noteforge.app</p></div></div>
+    <div class="profile-stats"><div class="profile-stat"><div class="ps-num">12</div><div class="ps-label">笔记</div></div><div class="profile-stat"><div class="ps-num">5</div><div class="ps-label">笔记本</div></div><div class="profile-stat"><div class="ps-num">28</div><div class="ps-label">版本</div></div><div class="profile-stat"><div class="ps-num">3</div><div class="ps-label">收藏</div></div></div>
+    <div class="profile-menu">
+      <div class="profile-menu-item" onclick="showToast('info','打开同步设置')"><div class="pmi-icon">☁️</div><span class="pmi-text">同步与备份</span><span class="pmi-arrow">›</span></div>
+      <div class="profile-menu-item" onclick="showSheet('themeSheet')"><div class="pmi-icon">🎨</div><span class="pmi-text">主题与外观</span><span class="pmi-arrow">›</span></div>
+      <div class="profile-menu-item" onclick="showToast('info','打开安全设置')"><div class="pmi-icon">🔒</div><span class="pmi-text">加密与安全</span><span class="pmi-arrow">›</span></div>
+      <div class="profile-menu-item" onclick="showToast('info','打开存储管理')"><div class="pmi-icon">💾</div><span class="pmi-text">存储管理</span><span class="pmi-arrow">›</span></div>
+      <div class="menu-divider"></div>
+      <div class="profile-menu-item" onclick="showToast('info','反馈已发送')"><div class="pmi-icon">💬</div><span class="pmi-text">意见反馈</span><span class="pmi-arrow">›</span></div>
+      <div class="profile-menu-item" onclick="showToast('info','关于 NoteForge')"><div class="pmi-icon">ℹ️</div><span class="pmi-text">关于 NoteForge</span><span class="pmi-arrow">›</span></div>
+      <div class="menu-divider"></div>
+      <div class="profile-menu-item danger" onclick="if(confirm('确认退出？'))showToast('error','已退出')"><div class="pmi-icon">🚪</div><span class="pmi-text">退出登录</span><span class="pmi-arrow">›</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- Tab Bar -->
+<nav class="tab-bar" id="tabBar">
+  <button class="tab-item active" data-screen="screenNotes" onclick="switchTab('screenNotes',this)"><span class="tab-icon">📄</span><span class="tab-label">笔记</span></button>
+  <button class="tab-item" data-screen="screenSearch" onclick="switchTab('screenSearch',this)"><span class="tab-icon">🔍</span><span class="tab-label">搜索</span></button>
+  <button class="tab-item" data-screen="screenNotebooks" onclick="switchTab('screenNotebooks',this)"><span class="tab-icon">📓</span><span class="tab-label">笔记本</span></button>
+  <button class="tab-item" data-screen="screenFavorites" onclick="switchTab('screenFavorites',this)"><span class="tab-icon">⭐</span><span class="tab-label">收藏</span></button>
+  <button class="tab-item" data-screen="screenProfile" onclick="switchTab('screenProfile',this)"><span class="tab-icon">👤</span><span class="tab-label">我的</span></button>
+</nav>
+
+<!-- FAB -->
+<button class="fab" id="fabBtn" onclick="showSheet('newNoteSheet')">+</button>
+
+<!-- Editor -->
+<div class="editor-page" id="editorPage">
+  <div class="editor-toolbar">
+    <button class="et-back" onclick="closeEditor()">←</button>
+    <div class="et-title" id="editorTitle">NoteForge 架构设计</div>
+    <div class="et-actions">
+      <button class="et-btn" onclick="this.textContent=this.textContent=='☆'?'★':'☆';showToast('info',this.textContent=='★'?'已收藏':'取消收藏')" id="editorFavBtn">☆</button>
+      <button class="et-btn" onclick="showToast('success','已保存')">✓</button>
+      <button class="et-btn" onclick="showToast('success','导出中...')">⬆</button>
+    </div>
+  </div>
+  <div class="editor-tags">
+    <span class="editor-tag">架构 <span class="et-remove">×</span></span>
+    <span class="editor-tag">Rust <span class="et-remove">×</span></span>
+    <button class="editor-tag-add" onclick="showToast('info','添加标签')">+</button>
+  </div>
+  <div class="editor-content">
+    <input class="editor-title-input" id="editorTitleInput" placeholder="笔记标题..." value="NoteForge 架构设计">
+    <textarea class="editor-textarea" id="editorTextarea" placeholder="开始写作..." oninput="onEditorInput(this.value)"># NoteForge 架构设计
+
+## 系统概览
+
+NoteForge 采用 **离线优先** 架构。核心由 Rust 引擎驱动：
+
+- **Markdown 解析** — 基于 pulldown-cmark
+- **本地存储** — SQLite + WAL 模式
+- **全文搜索** — Tantivy 嵌入式搜索引擎
+- **CRDT 同步** — Automerge 冲突自由合并
+
+### 技术栈
+
+| 层级 | 技术 |
+|------|------|
+| 桌面端 | Tauri + React |
+| 核心引擎 | Rust |
+| 向量搜索 | pgvector</textarea>
+  </div>
+  <div class="editor-status">
+    <div class="es-left"><span><span class="es-dot saved" id="editorSaveDot"></span><span id="editorSaveStatus">已保存</span></span><span id="editorWordCount">字数 86</span></div>
+    <span>刚刚</span>
+  </div>
+  <div class="format-bar">
+    <button class="format-btn" onclick="showToast('info','加粗')"><b>B</b></button>
+    <button class="format-btn" onclick="showToast('info','斜体')"><i>I</i></button>
+    <button class="format-btn" onclick="showToast('info','删除线')"><s>S</s></button>
+    <button class="format-btn" onclick="showToast('info','行内代码')">`</button>
+    <button class="format-btn" onclick="showToast('info','标题')">H</button>
+    <button class="format-btn" onclick="showToast('info','列表')">•</button>
+    <button class="format-btn" onclick="showToast('info','待办')">☐</button>
+    <button class="format-btn" onclick="showToast('info','引用')">❝</button>
+  </div>
+</div>
+
+<!-- Sheet: New Note -->
+<div class="sheet-overlay" id="newNoteSheetOverlay" onclick="closeSheet('newNoteSheet')"></div>
+<div class="sheet" id="newNoteSheet">
+  <div class="sheet-handle"></div>
+  <h2>✚ 新建笔记</h2>
+  <div class="field"><label>标题</label><input type="text" placeholder="笔记标题..." value="新笔记"></div>
+  <div class="field"><label>笔记本</label><select><option>默认笔记本</option><option>技术笔记</option><option>项目文档</option><option>个人日记</option></select></div>
+  <div class="field"><label>标签（逗号分隔）</label><input type="text" placeholder="如: Rust, 架构"></div>
+  <div class="field"><label>内容预览（可选）</label><textarea rows="3" placeholder="可选的笔记内容..."></textarea></div>
+  <div class="sheet-actions"><button class="btn-cancel" onclick="closeSheet('newNoteSheet')">取消</button><button class="btn-primary" onclick="closeSheet('newNoteSheet');showToast('success','✓ 笔记已创建')">创建</button></div>
+</div>
+
+<!-- Sheet: New Notebook -->
+<div class="sheet-overlay" id="newNbSheetOverlay" onclick="closeSheet('newNbSheet')"></div>
+<div class="sheet" id="newNbSheet">
+  <div class="sheet-handle"></div>
+  <h2>📓 新建笔记本</h2>
+  <div class="field"><label>名称</label><input type="text" placeholder="给笔记本起个名字吧" id="newNbName" oninput="updateNbPreview()"></div>
+  <div class="field"><label>图标</label><div class="nb-icon-picker" id="nbIconPicker"></div></div>
+  <div class="field"><label>颜色</label><div class="nb-color-picker" id="nbColorPicker"></div></div>
+  <div class="nb-sheet-preview" id="nbSheetPreview"><span class="nb-sheet-preview-icon" id="nbPreviewIcon">📓</span><span class="nb-sheet-preview-name" id="nbPreviewName">笔记本名称</span><span class="nb-sheet-preview-dot" id="nbPreviewDot"></span><span class="nb-sheet-preview-count">0 条笔记</span></div>
+  <div class="sheet-actions"><button class="btn-cancel" onclick="closeSheet('newNbSheet')">取消</button><button class="btn-primary" onclick="confirmNewNb()">创建</button></div>
+</div>
+
+<!-- Sheet: Theme -->
+<div class="sheet-overlay" id="themeSheetOverlay" onclick="closeSheet('themeSheet')"></div>
+<div class="sheet" id="themeSheet">
+  <div class="sheet-handle"></div>
+  <h2>🎨 主题与外观</h2>
+  <div class="field"><label>主题模式</label><div style="display:flex;gap:8px;">
+    <button onclick="setTheme('light')" id="themeLight" style="flex:1;padding:10px;border:2px solid var(--accent);border-radius:var(--radius);background:var(--bg-card);cursor:pointer;font-family:var(--font);font-size:13px;">☀️ 浅色</button>
+    <button onclick="setTheme('dark')" id="themeDark" style="flex:1;padding:10px;border:2px solid transparent;border-radius:var(--radius);background:var(--bg-card);cursor:pointer;font-family:var(--font);font-size:13px;">🌙 深色</button>
+    <button onclick="setTheme('system')" id="themeSystem" style="flex:1;padding:10px;border:2px solid transparent;border-radius:var(--radius);background:var(--bg-card);cursor:pointer;font-family:var(--font);font-size:13px;">💻 系统</button>
+  </div></div>
+  <div class="field"><label>字体大小</label><select><option>小</option><option selected>中</option><option>大</option><option>特大</option></select></div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0;">
+    <div style="width:36px;height:36px;border-radius:50%;background:#6366f1;cursor:pointer;border:3px solid var(--accent);"></div>
+    <div style="width:36px;height:36px;border-radius:50%;background:#10b981;cursor:pointer;"></div>
+    <div style="width:36px;height:36px;border-radius:50%;background:#f59e0b;cursor:pointer;"></div>
+    <div style="width:36px;height:36px;border-radius:50%;background:#ef4444;cursor:pointer;"></div>
+    <div style="width:36px;height:36px;border-radius:50%;background:#8b5cf6;cursor:pointer;"></div>
+    <div style="width:36px;height:36px;border-radius:50%;background:#ec4899;cursor:pointer;"></div>
+  </div>
+  <div class="sheet-actions"><button class="btn-primary" onclick="closeSheet('themeSheet');showToast('success','✓ 主题已更新')">应用</button></div>
+</div>
+
+<div class="toast-container" id="toastContainer"></div>
+</div>
+</div>
+
+<script>
+let currentScreen='screenNotes',editorOpen=false;
+const NOTEBOOK_ICONS=['📓','📔','📙','📕','📚','📖','📝','✏️','📋','📰','📑','🗂️','💻','🎯','🔄','🤖'];
+const NOTEBOOK_COLORS=[{value:'#6366f1',name:'靛蓝'},{value:'#8b5cf6',name:'紫色'},{value:'#ec4899',name:'粉色'},{value:'#ef4444',name:'红色'},{value:'#f59e0b',name:'琥珀'},{value:'#10b981',name:'翠绿'},{value:'#06b6d4',name:'青色'},{value:'#64748b',name:'石板'}];
+let selectedNbIcon='📓',selectedNbColor='#6366f1';
+
+function switchTab(screenId,el){
+  if(currentScreen===screenId)return;
+  document.querySelectorAll('.tab-item').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById(screenId).classList.add('active');
+  document.getElementById('fabBtn').style.display=screenId==='screenProfile'?'none':'flex';
+  currentScreen=screenId;
+}
+function openEditor(id){
+  editorOpen=true;
+  document.getElementById('editorPage').classList.add('show');
+  document.getElementById('fabBtn').style.display='none';
+  document.getElementById('tabBar').style.display='none';
+}
+function closeEditor(){
+  editorOpen=false;
+  document.getElementById('editorPage').classList.remove('show');
+  document.getElementById('fabBtn').style.display=currentScreen==='screenProfile'?'none':'flex';
+  document.getElementById('tabBar').style.display='flex';
+}
+function onEditorInput(text){
+  const words=text.replace(/\s/g,'').length||0;
+  document.getElementById('editorWordCount').textContent='字数 '+words;
+  const dot=document.getElementById('editorSaveDot'),st=document.getElementById('editorSaveStatus');
+  dot.className='es-dot saving';st.textContent='保存中...';
+  clearTimeout(window._es);window._es=setTimeout(()=>{dot.className='es-dot saved';st.textContent='已保存';},400);
+}
+function showSheet(id){
+  document.getElementById(id+'Overlay').classList.add('show');
+  document.getElementById(id).style.display='block';
+  if(id==='newNbSheet'){initNbSheet();setTimeout(()=>{const inp=document.getElementById('newNbName');if(inp){inp.value='';inp.focus()}updateNbPreview();},100);}
+}
+function closeSheet(id){
+  document.getElementById(id+'Overlay').classList.remove('show');
+  document.getElementById(id).style.display='none';
+}
+function initNbSheet(){
+  const ic=document.getElementById('nbIconPicker'),cc=document.getElementById('nbColorPicker');
+  if(!ic||!cc||ic.children.length)return;
+  NOTEBOOK_ICONS.forEach((icon,i)=>{const btn=document.createElement('button');btn.textContent=icon;if(i===0)btn.className='selected';btn.onclick=()=>{selectedNbIcon=icon;ic.querySelectorAll('button').forEach(b=>b.classList.remove('selected'));btn.classList.add('selected');updateNbPreview()};ic.appendChild(btn);});
+  NOTEBOOK_COLORS.forEach((c,i)=>{const btn=document.createElement('button');btn.style.backgroundColor=c.value;if(i===0)btn.className='selected';btn.onclick=()=>{selectedNbColor=c.value;cc.querySelectorAll('button').forEach(b=>b.classList.remove('selected'));btn.classList.add('selected');updateNbPreview()};cc.appendChild(btn);});
+  updateNbPreview();
+}
+function updateNbPreview(){
+  const nm=document.getElementById('newNbName'),pi=document.getElementById('nbPreviewIcon'),pn=document.getElementById('nbPreviewName'),pd=document.getElementById('nbPreviewDot');
+  if(pi)pi.textContent=selectedNbIcon;
+  if(pn)pn.textContent=(nm&&nm.value.trim())||'笔记本名称';
+  if(pd)pd.style.backgroundColor=selectedNbColor;
+}
+function confirmNewNb(){const nm=document.getElementById('newNbName');closeSheet('newNbSheet');showToast('success','✓ 已创建笔记本「'+(nm&&nm.value.trim()||'笔记本')+'」');}
+function setTheme(val){
+  const h=document.documentElement;
+  if(val==='system'){h.setAttribute('data-theme',window.matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light')}else{h.setAttribute('data-theme',val)}
+  document.querySelectorAll('#themeSheet button[id^=theme]').forEach(b=>b.style.borderColor='transparent');
+  const btn=document.getElementById('theme'+val.charAt(0).toUpperCase()+val.slice(1));if(btn)btn.style.borderColor='var(--accent)';
+}
+function showToast(type,msg){
+  const c=document.getElementById('toastContainer'),t=document.createElement('div');
+  t.className='toast '+type;t.textContent=msg;c.appendChild(t);
+  setTimeout(()=>{t.style.opacity='0';t.style.transform='translateY(-8px)';t.style.transition='0.2s ease';setTimeout(()=>t.remove(),200);},2000);
+}
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(editorOpen)closeEditor();document.querySelectorAll('.sheet').forEach(s=>{if(s.style.display==='block')closeSheet(s.id);})}});
+let touchStartX=0;
+document.addEventListener('touchstart',e=>{touchStartX=e.changedTouches[0].screenX;});
+document.addEventListener('touchend',e=>{if(e.changedTouches[0].screenX-touchStartX>80&&editorOpen&&touchStartX<30)closeEditor();});
+</script>
+</body>
+</html>

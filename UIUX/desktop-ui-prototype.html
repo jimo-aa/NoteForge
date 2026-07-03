@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NoteForge Desktop — UIUX 原型 1920×1080</title>
+<style>
+:root {
+  --sidebar-w: 280px; --props-w: 280px; --toc-w: 220px; --viewer-props-w: 300px;
+  --bg: #fafbfc; --bg-card: #ffffff; --sidebar-bg: #1e1e2e; --sidebar-hover: #262840;
+  --sidebar-active: #32345a; --sidebar-text: #c8cae0; --sidebar-muted: #6b6e8a;
+  --accent: #6366f1; --accent-hover: #5558e6; --accent-subtle: #eef2ff; --accent-glow: rgba(99,102,241,0.15);
+  --text: #1f2937; --text-secondary: #5a5f73; --text-muted: #9ca3af;
+  --border: #e5e7eb; --border-light: #f0f2f6; --success: #10b981; --warning: #f59e0b; --danger: #ef4444; --info: #3b82f6;
+  --radius-sm: 6px; --radius: 8px; --radius-lg: 12px; --radius-xl: 16px;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.04); --shadow: 0 1px 4px rgba(0,0,0,0.06),0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.08); --shadow-lg: 0 8px 30px rgba(0,0,0,0.12);
+  --font: -apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei','Noto Sans SC',sans-serif;
+  --font-mono: 'JetBrains Mono','Fira Code','Consolas','SF Mono',monospace; --transition: 0.2s cubic-bezier(0.4,0,0.2,1);
+}
+[data-theme="dark"] {
+  --bg: #12131e; --bg-card: #1a1b2e; --sidebar-bg: #0f101a; --sidebar-hover: #1e1f35; --sidebar-active: #28294a;
+  --accent: #7c7fff; --accent-subtle: #28294a; --accent-glow: rgba(124,127,255,0.12);
+  --text: #e4e6f0; --text-secondary: #989daf; --text-muted: #5a5f73; --border: #2a2c42; --border-light: #1e2037;
+  --shadow: 0 1px 4px rgba(0,0,0,0.3); --shadow-md: 0 4px 12px rgba(0,0,0,0.4); --shadow-lg: 0 8px 30px rgba(0,0,0,0.5);
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+html,body { height:100%; margin:0; background:#1a1b2e; display:flex; align-items:center; justify-content:center; }
+body { font-family:var(--font); }
+.desktop-frame { width:1920px; height:1080px; background:var(--bg); overflow:hidden; position:relative; box-shadow:0 0 0 1px rgba(255,255,255,0.08),0 30px 80px rgba(0,0,0,0.4); }
+::-webkit-scrollbar { width:5px; height:5px; }
+::-webkit-scrollbar-track { background:transparent; }
+::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
+::-webkit-scrollbar-thumb:hover { background:var(--text-muted); }
+.app { display:flex; height:100%; }
+.sidebar { width:var(--sidebar-w); background:var(--sidebar-bg); color:var(--sidebar-text); display:flex; flex-direction:column; flex-shrink:0; user-select:none; }
+.sidebar-header { padding:14px 16px 10px; border-bottom:1px solid rgba(255,255,255,0.06); display:flex; align-items:center; gap:10px; }
+.sidebar-header .logo { width:26px;height:26px;background:var(--accent);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:15px;color:#fff;flex-shrink:0; }
+.sidebar-header h1 { font-size:15px; font-weight:600; color:#fff; flex:1; }
+.sidebar-header .actions { display:flex; gap:4px; }
+.sidebar-header .actions button { width:24px;height:24px;border:none;background:transparent;border-radius:4px;cursor:pointer;font-size:12px;color:var(--sidebar-muted);display:flex;align-items:center;justify-content:center;transition:var(--transition); }
+.sidebar-header .actions button:hover { background:var(--sidebar-hover); color:var(--sidebar-text); }
+.search-box { margin:10px 12px 8px; position:relative; }
+.search-box .icon { position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:13px;color:var(--sidebar-muted);pointer-events:none; }
+.search-box input { width:100%;padding:7px 10px 7px 30px;border:1px solid rgba(255,255,255,0.06);border-radius:var(--radius);background:rgba(255,255,255,0.04);color:var(--sidebar-text);font-size:12.5px;outline:none;transition:var(--transition);font-family:var(--font); }
+.search-box input:focus { border-color:var(--accent); background:rgba(255,255,255,0.07); }
+.search-shortcut { position:absolute;right:8px;top:50%;transform:translateY(-50%);font-size:10px;color:var(--sidebar-muted);background:rgba(255,255,255,0.05);padding:1px 5px;border-radius:3px; }
+.mode-tabs { display:flex; margin:6px 12px; gap:4px; }
+.mode-tab { flex:1; padding:7px 0; border:none; border-radius:var(--radius-sm); background:transparent; color:var(--sidebar-muted); cursor:pointer; font-size:12px; font-weight:500; transition:var(--transition); font-family:var(--font); display:flex; align-items:center; justify-content:center; gap:4px; }
+.mode-tab:hover { background:var(--sidebar-hover); color:var(--sidebar-text); }
+.mode-tab.active { background:var(--accent-subtle); color:var(--accent); }
+.nav-section { padding:0 12px; margin-bottom:2px; }
+.nav-section-header { display:flex;align-items:center;justify-content:space-between;padding:6px 4px;font-size:11px;font-weight:600;color:var(--sidebar-muted);text-transform:uppercase;letter-spacing:0.5px;cursor:pointer;border-radius:4px; }
+.nav-item { display:flex;align-items:center;gap:8px;padding:5px 8px;margin:1px 0;border-radius:var(--radius-sm);font-size:12.5px;cursor:pointer;transition:var(--transition);color:var(--sidebar-muted);border:none;background:transparent;width:100%;text-align:left;font-family:var(--font); }
+.nav-item:hover { background:var(--sidebar-hover); color:var(--sidebar-text); }
+.nav-item.active { background:var(--accent-subtle); color:var(--accent); }
+.nav-item .count { margin-left:auto;font-size:11px;background:rgba(255,255,255,0.06);padding:0 6px;border-radius:8px;color:var(--sidebar-muted); }
+.nav-divider { height:1px; background:rgba(255,255,255,0.06); margin:6px 12px; }
+.new-note-btn { margin:0 12px 8px;padding:7px 14px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius);font-size:12.5px;font-weight:500;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;transition:var(--transition);font-family:var(--font); }
+.new-note-btn:hover { background:var(--accent-hover); }
+.note-list-wrap { flex:1; overflow-y:auto; padding:2px 6px 8px; }
+.note-item { padding:9px 10px;border-radius:var(--radius);cursor:pointer;transition:var(--transition);margin-bottom:1px;position:relative; }
+.note-item:hover { background:var(--sidebar-hover); }
+.note-item.active { background:var(--sidebar-active); }
+.note-item .title { font-size:13px;font-weight:500;color:var(--sidebar-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+.note-item .preview { font-size:11.5px;color:var(--sidebar-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px; }
+.note-item .meta { font-size:10.5px;color:var(--sidebar-muted);display:flex;gap:6px;align-items:center; }
+.note-item .active-bar { display:none;position:absolute;left:0;top:7px;bottom:7px;width:3px;background:var(--accent);border-radius:0 2px 2px 0; }
+.note-item.active .active-bar { display:block; }
+.sidebar-footer { padding:10px 14px;border-top:1px solid rgba(255,255,255,0.06);display:flex;align-items:center;gap:6px;font-size:11px;color:var(--sidebar-muted); }
+.sidebar-footer .status-dot { width:7px;height:7px;border-radius:50%;flex-shrink:0; }
+.sidebar-footer .status-dot.online { background:var(--success); box-shadow:0 0 4px rgba(16,185,129,0.4); }
+.main { flex:1; display:flex; flex-direction:column; min-width:0; }
+.empty-state { flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:var(--text-muted); }
+.empty-state .icon { font-size:56px; opacity:0.3; }
+.empty-state h2 { font-size:20px;font-weight:600;color:var(--text-secondary); }
+.empty-state p { font-size:13.5px;max-width:360px;text-align:center;color:var(--text-muted);line-height:1.7; }
+.editor-header { padding:10px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;background:var(--bg-card);flex-shrink:0; }
+.editor-header .title-input { flex:1;border:none;outline:none;font-size:20px;font-weight:600;color:var(--text);background:transparent;font-family:var(--font); }
+.editor-actions { display:flex; gap:3px; }
+.editor-actions button { width:30px;height:30px;border-radius:var(--radius-sm);border:1px solid transparent;background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--text-secondary);transition:var(--transition); }
+.editor-actions button:hover { background:var(--border-light); border-color:var(--border); }
+.editor-actions button.active { color:var(--accent); background:var(--accent-subtle); }
+.tags-bar { padding:6px 20px;border-bottom:1px solid var(--border-light);background:var(--bg-card);display:flex;gap:4px;flex-wrap:wrap;align-items:center;flex-shrink:0; }
+.tag-pill { display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:10px;font-size:11px;background:var(--accent-subtle);color:var(--accent);cursor:pointer; }
+.tag-pill .remove { font-size:13px;opacity:0.5;cursor:pointer; }
+.add-tag-btn { border:1px dashed var(--border);background:transparent;padding:2px 10px;border-radius:10px;font-size:11px;color:var(--text-muted);cursor:pointer;font-family:var(--font); }
+.add-tag-btn:hover { border-color:var(--accent); color:var(--accent); }
+.toolbar { padding:4px 20px;border-bottom:1px solid var(--border);display:flex;gap:1px;background:var(--bg-card);flex-shrink:0;align-items:center; }
+.toolbar button { width:28px;height:28px;border:none;background:transparent;border-radius:var(--radius-sm);cursor:pointer;font-size:13px;color:var(--text-secondary);display:flex;align-items:center;justify-content:center;transition:var(--transition);font-family:var(--font); }
+.toolbar button:hover { background:var(--border-light); color:var(--text); }
+.toolbar .sep { width:1px;height:18px;background:var(--border);margin:0 4px;flex-shrink:0; }
+.toolbar .spacer { flex:1; }
+.toolbar .toggle-preview-btn { font-size:12px;gap:4px;width:auto;padding:0 8px;color:var(--accent);cursor:pointer; }
+.editor-container { flex:1;display:flex;overflow:hidden; }
+.editor-pane { flex:1;display:flex;flex-direction:column;min-width:0; }
+.editor-pane textarea { flex:1;padding:20px 24px;font-family:var(--font-mono);font-size:13.5px;line-height:1.85;border:none;outline:none;resize:none;width:100%;background:var(--bg-card);color:var(--text);tab-size:2; }
+.preview-pane { width:45%;border-left:1px solid var(--border);padding:24px 28px;overflow-y:auto;background:var(--bg-card); }
+.preview-pane.hidden { display:none; }
+.preview-pane h1 { font-size:26px;margin-bottom:16px;padding-bottom:10px;border-bottom:2px solid var(--accent);font-weight:700; }
+.preview-pane h2 { font-size:20px;margin:22px 0 8px;font-weight:600; }
+.preview-pane h3 { font-size:16px;margin:16px 0 6px;font-weight:600;color:var(--text-secondary); }
+.preview-pane p { margin-bottom:12px;line-height:1.85;color:var(--text-secondary);font-size:14px; }
+.preview-pane strong { color:var(--text); }
+.preview-pane code { background:var(--border-light);padding:2px 6px;border-radius:4px;font-family:var(--font-mono);font-size:12.5px; }
+.preview-pane pre { background:var(--sidebar-bg);color:var(--sidebar-text);padding:16px 18px;border-radius:var(--radius);overflow-x:auto;margin:14px 0;font-size:12.5px;line-height:1.7; }
+.preview-pane blockquote { border-left:3px solid var(--accent);padding:8px 16px;margin:14px 0;color:var(--text-secondary);background:var(--accent-subtle);border-radius:0 var(--radius) var(--radius) 0;font-style:italic; }
+.preview-pane ul,.preview-pane ol { margin:8px 0 8px 20px;color:var(--text-secondary); }
+.preview-pane li { margin-bottom:3px;line-height:1.7; }
+.status-bar { padding:3px 20px;border-top:1px solid var(--border-light);display:flex;justify-content:space-between;font-size:11px;color:var(--text-muted);background:var(--bg-card);flex-shrink:0;align-items:center; }
+.status-bar .left,.status-bar .right { display:flex;gap:14px; }
+.status-bar .save-indicator { display:flex;align-items:center;gap:4px; }
+.status-bar .save-dot { width:5px;height:5px;border-radius:50%; }
+.status-bar .save-dot.saved { background:var(--success); }
+.status-bar .save-dot.saving { background:var(--warning); animation:pulse 1s infinite; }
+.properties-panel { width:0;overflow:hidden;background:var(--bg-card);border-left:1px solid var(--border);transition:width 0.25s ease;flex-shrink:0; }
+.properties-panel.open { width:var(--props-w); overflow-y:auto; }
+.properties-panel .panel-header { padding:14px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center; }
+.properties-panel .panel-header h3 { font-size:13px;font-weight:600; }
+.properties-panel .panel-header .close-btn { border:none;background:transparent;cursor:pointer;font-size:16px;color:var(--text-muted); }
+.prop-section { padding:12px 16px;border-bottom:1px solid var(--border-light); }
+.prop-section h4 { font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;margin-bottom:8px; }
+.prop-row { display:flex;justify-content:space-between;padding:4px 0;font-size:12.5px; }
+.prop-row .label { color:var(--text-secondary); }
+.prop-row .value { color:var(--text);font-weight:500; }
+.kb-header { padding:12px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;background:var(--bg-card);flex-shrink:0;flex-wrap:wrap; }
+.kb-header h2 { font-size:17px;font-weight:600;flex-shrink:0; }
+.kb-header .kb-search { flex:1;min-width:180px;position:relative; }
+.kb-header .kb-search input { width:100%;padding:7px 12px 7px 32px;border:1px solid var(--border);border-radius:var(--radius);font-size:12.5px;outline:none;font-family:var(--font);background:var(--bg-card);color:var(--text); }
+.kb-header .kb-search input:focus { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-glow); }
+.kb-header .kb-search .icon { position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:13px;color:var(--text-muted); }
+.kb-header .kb-actions { display:flex; gap:6px; }
+.kb-header .kb-actions button { padding:6px 14px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg-card);cursor:pointer;font-size:12px;color:var(--text-secondary);font-family:var(--font);display:flex;align-items:center;gap:4px; }
+.kb-header .kb-actions button:hover { background:var(--border-light); }
+.kb-header .kb-actions .btn-primary { background:var(--accent);color:#fff;border-color:var(--accent); }
+.category-bar { padding:8px 24px;border-bottom:1px solid var(--border-light);background:var(--bg-card);display:flex;gap:6px;flex-wrap:wrap;align-items:center;flex-shrink:0; }
+.category-pill { padding:4px 12px;border-radius:14px;font-size:11.5px;background:var(--border-light);color:var(--text-secondary);cursor:pointer;border:1px solid transparent;white-space:nowrap; }
+.category-pill:hover { background:var(--accent-subtle); color:var(--accent); }
+.category-pill.active { background:var(--accent); color:#fff; }
+.category-pill .count { opacity:0.6;margin-left:3px;font-size:10px; }
+.kb-list-wrap { flex:1; overflow-y:auto; padding:12px 24px; }
+.kb-item { background:var(--bg-card);border:1px solid var(--border-light);border-radius:var(--radius-lg);padding:16px 18px;margin-bottom:8px;cursor:pointer;transition:var(--transition);display:flex;gap:14px;align-items:flex-start; }
+.kb-item:hover { border-color:var(--accent); box-shadow:var(--shadow-md); }
+.kb-item .file-type-icon { width:40px;height:40px;border-radius:var(--radius);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:20px; }
+.kb-item .file-type-icon.pdf { background:#fef2f2;color:#ef4444; }
+.kb-item .file-type-icon.docx { background:#eef2ff;color:#6366f1; }
+.kb-item .file-type-icon.code { background:#f5f3ff;color:#8b5cf6; }
+.kb-item .file-type-icon.xlsx { background:#ecfdf5;color:#10b981; }
+.kb-item .file-type-icon.pptx { background:#fef3c7;color:#f59e0b; }
+.kb-item .item-body { flex:1; min-width:0; }
+.kb-item .item-title { font-size:14.5px;font-weight:600;margin-bottom:4px;display:flex;align-items:center;gap:6px; }
+.kb-item .item-summary { font-size:12.5px;color:var(--text-secondary);line-height:1.6;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin-bottom:6px; }
+.kb-item .item-meta { display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text-muted);flex-wrap:wrap; }
+.kb-item .item-meta .tag { padding:1px 7px;border-radius:8px;font-size:10px;background:var(--accent-subtle);color:var(--accent); }
+.kb-item .item-right { flex-shrink:0;text-align:right;font-size:11px;color:var(--text-muted);display:flex;flex-direction:column;gap:4px;align-items:flex-end; }
+.kb-item .item-right .quality-score { font-size:10px; }
+.kb-item .item-right .quality-score.good { color:var(--success); }
+.status-badge { padding:2px 7px;border-radius:8px;font-size:9px;font-weight:500; }
+.status-published { background:rgba(16,185,129,0.15);color:var(--success); }
+.status-draft { background:rgba(99,102,241,0.15);color:var(--accent); }
+.status-archived { background:rgba(100,116,139,0.15);color:var(--text-muted); }
+.status-processing { background:rgba(251,191,36,0.15);color:var(--warning); }
+.viewer-header { padding:10px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;background:var(--bg-card);flex-shrink:0; }
+.viewer-header .back-btn { width:30px;height:30px;border-radius:var(--radius-sm);border:1px solid transparent;background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;color:var(--text-secondary); }
+.viewer-header .back-btn:hover { background:var(--border-light); }
+.viewer-header .v-title { font-size:15px;font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+.viewer-header .v-actions { display:flex; gap:4px; }
+.viewer-header .v-actions button { padding:5px 12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg-card);cursor:pointer;font-size:11.5px;color:var(--text-secondary);font-family:var(--font); }
+.viewer-header .v-actions .btn-primary { background:var(--accent);color:#fff;border-color:var(--accent); }
+.viewer-body { flex:1;display:flex;overflow:hidden; }
+.viewer-toc { width:var(--toc-w);border-right:1px solid var(--border);background:var(--bg-card);overflow-y:auto;flex-shrink:0;padding:12px 0; }
+.viewer-toc .toc-header { padding:0 14px 8px;font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase; }
+.viewer-toc .toc-item { padding:5px 14px;font-size:12px;color:var(--text-secondary);cursor:pointer;border-left:2px solid transparent; }
+.viewer-toc .toc-item:hover { background:var(--border-light); }
+.viewer-toc .toc-item.active { color:var(--accent); border-left-color:var(--accent); background:var(--accent-subtle); }
+.viewer-toc .toc-item.level-1 { padding-left:14px; font-weight:500; }
+.viewer-toc .toc-item.level-2 { padding-left:28px; font-size:11.5px; }
+.viewer-content { flex:1;overflow-y:auto;padding:24px 32px;background:var(--bg-card); }
+.viewer-content .doc-title { font-size:24px;font-weight:700;margin-bottom:6px;padding-bottom:12px;border-bottom:2px solid var(--accent); }
+.viewer-content .doc-meta-bar { display:flex;align-items:center;gap:12px;font-size:11.5px;color:var(--text-muted);padding:8px 0 16px;flex-wrap:wrap;border-bottom:1px solid var(--border-light);margin-bottom:16px; }
+.viewer-content .doc-meta-bar .tag { padding:1px 7px;border-radius:8px;font-size:10px;background:var(--accent-subtle);color:var(--accent); }
+.viewer-content .doc-summary { background:var(--accent-subtle);border-radius:var(--radius);padding:12px 16px;margin-bottom:20px;font-size:13px;color:var(--text-secondary);line-height:1.7;border-left:3px solid var(--accent); }
+.viewer-content .doc-summary .label { font-size:11px;font-weight:600;color:var(--accent);margin-bottom:4px; }
+.viewer-content .rendered { line-height:1.85;font-size:14px;color:var(--text-secondary); }
+.viewer-content .rendered h1 { font-size:22px;margin:24px 0 10px;color:var(--text);font-weight:700; }
+.viewer-content .rendered h2 { font-size:18px;margin:20px 0 8px;color:var(--text);font-weight:600; }
+.viewer-content .rendered h3 { font-size:15px;margin:16px 0 6px;color:var(--text-secondary);font-weight:600; }
+.viewer-content .rendered p { margin-bottom:10px;line-height:1.85; }
+.viewer-content .rendered strong { color:var(--text); }
+.viewer-content .rendered code { background:var(--border-light);padding:2px 6px;border-radius:4px;font-family:var(--font-mono);font-size:12.5px; }
+.viewer-content .rendered pre { background:var(--sidebar-bg);color:var(--sidebar-text);padding:16px 18px;border-radius:var(--radius);overflow-x:auto;margin:14px 0;font-size:12.5px;line-height:1.7; }
+.viewer-content .rendered ul,.viewer-content .rendered ol { margin:8px 0 8px 20px; }
+.viewer-content .rendered li { margin-bottom:3px; }
+.viewer-props { width:var(--viewer-props-w);border-left:1px solid var(--border);background:var(--bg-card);overflow-y:auto;flex-shrink:0; }
+.vp-section { padding:14px 16px;border-bottom:1px solid var(--border-light); }
+.vp-section h4 { font-size:10.5px;font-weight:600;color:var(--text-muted);text-transform:uppercase;margin-bottom:8px; }
+.vp-tags { display:flex;flex-wrap:wrap;gap:4px; }
+.vp-tag { padding:2px 8px;border-radius:8px;font-size:11px;background:var(--accent-subtle);color:var(--accent); }
+.vp-stat-row { display:flex;justify-content:space-between;padding:3px 0;font-size:11.5px; }
+.vp-stat-row .label { color:var(--text-secondary); }
+.vp-stat-row .value { color:var(--text);font-weight:500; }
+.vp-progress-bar { height:4px;background:var(--border-light);border-radius:2px;overflow:hidden;margin:6px 0; }
+.vp-progress-bar .fill { height:100%;background:var(--accent);border-radius:2px; }
+.vp-keyterm { padding:4px 0;font-size:12px;color:var(--text);display:flex;align-items:center;gap:6px; }
+.vp-keyterm .kt-type { font-size:9px;color:var(--text-muted);background:var(--border-light);padding:1px 5px;border-radius:4px; }
+.vp-entity { padding:5px 0;font-size:12px;display:flex;align-items:center;gap:6px;border-bottom:1px solid var(--border-light); }
+.vp-entity .entity-icon { flex-shrink:0;font-size:14px; }
+.vp-entity .entity-name { flex:1;font-weight:500; }
+.vp-entity .entity-type { font-size:10px;color:var(--text-muted); }
+.vp-related-item { padding:6px 0;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:6px;border-bottom:1px solid var(--border-light); }
+.vp-related-item:hover { color:var(--accent); }
+.vp-related-item .rel-score { margin-left:auto;font-size:10px;color:var(--text-muted); }
+.vp-comment { padding:8px 0;border-bottom:1px solid var(--border-light);font-size:12px; }
+.vp-comment .comment-author { font-weight:500;color:var(--text);margin-bottom:2px;display:flex;align-items:center;gap:4px; }
+.vp-comment .comment-author .role { font-size:9px;color:#fff;background:var(--accent);padding:1px 5px;border-radius:4px;font-weight:500; }
+.vp-comment .comment-text { color:var(--text-secondary);line-height:1.5; }
+.vp-comment .comment-time { font-size:10px;color:var(--text-muted);margin-top:2px; }
+.upload-overlay,.modal-overlay { display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);backdrop-filter:blur(6px);z-index:300;align-items:center;justify-content:center; }
+.upload-overlay.show,.modal-overlay.show { display:flex; }
+.upload-dialog,.modal { background:var(--bg-card);border-radius:var(--radius-xl);padding:28px;width:560px;max-width:94vw;box-shadow:var(--shadow-lg);max-height:90vh;overflow-y:auto; }
+.upload-dialog h2,.modal h2 { font-size:18px;margin-bottom:16px;display:flex;align-items:center;gap:8px; }
+.upload-dropzone { border:2px dashed var(--border);border-radius:var(--radius-lg);padding:36px 24px;text-align:center;cursor:pointer;transition:var(--transition);margin-bottom:16px; }
+.upload-dropzone:hover { border-color:var(--accent); background:var(--accent-subtle); }
+.upload-dropzone .dz-icon { font-size:40px;margin-bottom:8px;opacity:0.4; }
+.upload-dropzone .dz-text { font-size:14px;color:var(--text-secondary);margin-bottom:4px; }
+.upload-dropzone .dz-hint { font-size:11.5px;color:var(--text-muted); }
+.upload-field { margin-bottom:14px; }
+.upload-field label { display:block;font-size:12px;font-weight:500;margin-bottom:4px;color:var(--text-secondary); }
+.upload-field select,.upload-field input { width:100%;padding:7px 12px;border:1px solid var(--border);border-radius:var(--radius);font-size:13px;outline:none;font-family:var(--font);background:var(--bg-card);color:var(--text); }
+.upload-file-list { border:1px solid var(--border-light);border-radius:var(--radius);margin-bottom:14px;max-height:160px;overflow-y:auto; }
+.upload-file-item { display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--border-light);font-size:12.5px; }
+.upload-file-item .file-name { font-weight:500; }
+.upload-file-item .file-size { font-size:10.5px;color:var(--text-muted);margin-left:6px; }
+.upload-actions { display:flex;justify-content:flex-end;gap:8px;margin-top:16px; }
+.upload-actions button,.modal-actions button { padding:7px 18px;border-radius:var(--radius);font-size:12.5px;cursor:pointer;font-family:var(--font); }
+.upload-actions .btn-secondary,.modal-actions .btn-secondary { border:1px solid var(--border);background:var(--bg-card);color:var(--text); }
+.upload-actions .btn-primary,.modal-actions .btn-primary { background:var(--accent);color:#fff;border:1px solid var(--accent); }
+.share-option { display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border-light);cursor:pointer; }
+.share-option .so-radio { width:16px;height:16px;border-radius:50%;border:2px solid var(--border);flex-shrink:0;display:flex;align-items:center;justify-content:center; }
+.share-option .so-radio.selected { border-color:var(--accent); }
+.share-option .so-radio.selected::after { content:'';width:8px;height:8px;border-radius:50%;background:var(--accent); }
+.share-option .so-label { font-size:13px;font-weight:500; }
+.share-option .so-desc { font-size:11px;color:var(--text-muted); }
+.share-link-box { display:flex;align-items:center;gap:6px;padding:8px 12px;background:var(--border-light);border-radius:var(--radius);margin-top:10px; }
+.share-link-box .link-text { flex:1;font-size:12px;color:var(--text-secondary);font-family:var(--font-mono); }
+.share-link-box .copy-btn { padding:3px 10px;border-radius:4px;border:none;background:var(--accent);color:#fff;font-size:11px;cursor:pointer;font-family:var(--font); }
+.graph-overlay { display:none;position:fixed;inset:0;background:var(--sidebar-bg);z-index:200;flex-direction:column; }
+.graph-overlay.show { display:flex; }
+.graph-toolbar { padding:12px 20px;display:flex;align-items:center;gap:12px;border-bottom:1px solid rgba(255,255,255,0.06); }
+.graph-toolbar h2 { color:#fff;font-size:15px;font-weight:600;flex:1; }
+.graph-toolbar .graph-stats { color:var(--sidebar-muted);font-size:12px; }
+.graph-toolbar button { padding:6px 14px;border-radius:var(--radius-sm);border:1px solid rgba(255,255,255,0.1);background:transparent;color:var(--sidebar-text);cursor:pointer;font-size:12px;font-family:var(--font); }
+.graph-toolbar button:hover { background:rgba(255,255,255,0.06); }
+.graph-legend { display:flex;gap:12px;padding:8px 20px;border-bottom:1px solid rgba(255,255,255,0.06); }
+.graph-legend-item { display:flex;align-items:center;gap:4px;font-size:11px;color:var(--sidebar-muted); }
+.graph-legend-item .legend-dot { width:10px;height:10px;border-radius:50%;flex-shrink:0; }
+.graph-legend-item .legend-dot.doc { background:var(--accent); }
+.graph-legend-item .legend-dot.entity-tech { background:var(--success); }
+.graph-legend-item .legend-dot.entity-person { background:var(--info); }
+.graph-legend-item .legend-dot.entity-org { background:var(--warning); }
+.graph-canvas { flex:1;position:relative;overflow:hidden; }
+.graph-node { position:absolute;padding:6px 14px;border-radius:20px;font-size:12px;cursor:pointer;user-select:none;z-index:1; }
+.graph-node.doc-node { background:var(--accent-subtle);color:var(--accent);border:1px solid rgba(99,102,241,0.2); }
+.graph-node.entity-node { background:rgba(16,185,129,0.12);color:var(--success);border:1px solid rgba(16,185,129,0.2); }
+.graph-node:hover { transform:scale(1.08); }
+.graph-node.center { background:var(--accent);color:#fff;border-color:var(--accent); box-shadow:0 0 20px var(--accent-glow); transform:scale(1.1); }
+.graph-canvas svg.connections { position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:0; }
+.graph-canvas svg.connections line { stroke:rgba(255,255,255,0.06);stroke-width:1.5;stroke-dasharray:4,3; }
+.filter-panel { max-height:0;overflow:hidden;transition:max-height 0.3s ease,opacity 0.25s;opacity:0;background:var(--bg-card);border-bottom:1px solid var(--border-light); }
+.filter-panel.open { max-height:400px;opacity:1; }
+.filter-panel-inner { padding:14px 24px;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px; }
+.filter-section h4 { font-size:10.5px;font-weight:600;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px; }
+.filter-checkbox-group { display:flex;flex-direction:column;gap:3px; }
+.filter-checkbox { display:flex;align-items:center;gap:5px;font-size:12px;color:var(--text-secondary);cursor:pointer;padding:2px 0; }
+.filter-checkbox input { accent-color:var(--accent); }
+.filter-actions { padding:10px 24px;display:flex;gap:8px;border-top:1px solid var(--border-light); }
+.filter-actions button { padding:5px 14px;border-radius:var(--radius-sm);font-size:11.5px;cursor:pointer;font-family:var(--font); }
+.filter-actions .btn-clear { border:1px solid var(--border);background:transparent;color:var(--text-secondary); }
+.filter-actions .btn-apply { border:1px solid var(--accent);background:var(--accent);color:#fff; }
+.pipeline-container { background:var(--bg-card);border-radius:var(--radius);padding:16px 20px;margin-bottom:16px;border:1px solid var(--border-light); }
+.pipeline-header { font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:12px; }
+.pipeline-steps { display:flex;align-items:center;gap:0; }
+.pipeline-step { display:flex;flex-direction:column;align-items:center;gap:4px;flex:1;position:relative; }
+.pipeline-step .ps-icon { width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;border:2px solid var(--border);background:var(--bg-card);color:var(--text-muted);position:relative;z-index:2; }
+.pipeline-step.completed .ps-icon { border-color:var(--success);background:rgba(16,185,129,0.1);color:var(--success); }
+.pipeline-step.active .ps-icon { border-color:var(--accent);background:var(--accent-subtle);color:var(--accent);box-shadow:0 0 0 4px var(--accent-glow); }
+.pipeline-step .ps-label { font-size:10px;color:var(--text-muted);text-align:center; }
+.pipeline-connector { flex:1;height:2px;background:var(--border);margin:0 -1px;position:relative;top:-16px;z-index:1; }
+.pipeline-connector.completed { background:var(--success); }
+.pipeline-time { font-size:10.5px;color:var(--text-muted);margin-top:8px;text-align:center; }
+.toast-container { position:fixed;bottom:24px;right:24px;z-index:500;display:flex;flex-direction:column;gap:8px; }
+.toast { padding:10px 16px;border-radius:var(--radius);font-size:12.5px;box-shadow:var(--shadow-md);display:flex;align-items:center;gap:8px;max-width:360px; }
+.toast.success { background:var(--success);color:#fff; }
+.toast.error { background:var(--danger);color:#fff; }
+.toast.info { background:var(--sidebar-bg);color:var(--sidebar-text); }
+.faceted-toggle { display:flex;align-items:center;gap:4px;padding:5px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);cursor:pointer;font-size:11.5px;color:var(--text-secondary);font-family:var(--font); }
+.faceted-toggle:hover { background:var(--border-light); }
+.faceted-toggle.active { background:var(--accent-subtle);color:var(--accent);border-color:var(--accent); }
+.faceted-badge { font-size:9px;background:var(--accent);color:#fff;padding:0 5px;border-radius:6px;min-width:16px;text-align:center;display:none; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+@keyframes fadeSlideIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+@keyframes dialogIn { from{opacity:0;transform:scale(0.95) translateY(10px)} to{opacity:1;transform:scale(1) translateY(0)} }
+</style>
+</head>
+<body>
+<div class="desktop-frame">
+<div class="app">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-header"><div class="logo">✦</div><h1>NoteForge</h1>
+      <div class="actions"><button title="主题" onclick="toggleTheme()">🌓</button><button title="知识图谱" onclick="toggleGraph()">🕸</button></div>
+    </div>
+    <div class="search-box"><span class="icon">🔍</span><input type="text" id="globalSearch" placeholder="搜索笔记或知识库..." oninput="onGlobalSearch(this.value)"><span class="search-shortcut">⌘K</span></div>
+    <div class="mode-tabs">
+      <button class="mode-tab active" onclick="switchMode('notes')" id="tabNotes">📝 笔记</button>
+      <button class="mode-tab" onclick="switchMode('kb')" id="tabKb">🧠 知识库</button>
+    </div>
+    <!-- Notes Sidebar -->
+    <div id="notesSidebar" style="display:flex;flex-direction:column;flex:1;min-height:0;">
+      <button class="new-note-btn" onclick="newNote()">＋ 新建笔记</button>
+      <div class="nav-section">
+        <div class="nav-section-header">笔记本 <span>▾</span></div>
+        <button class="nav-item active" onclick="filterNotebook('all',this)">📂 全部笔记 <span class="count">12</span></button>
+        <button class="nav-item" onclick="filterNotebook('personal',this)">👤 个人 <span class="count">5</span></button>
+        <button class="nav-item" onclick="filterNotebook('work',this)">💼 工作 <span class="count">4</span></button>
+        <button class="nav-item" onclick="filterNotebook('tech',this)">💻 技术 <span class="count">3</span></button>
+      </div>
+      <div class="nav-divider"></div>
+      <div style="padding:4px 12px;display:flex;flex-wrap:wrap;gap:3px;">
+        <span class="tag-pill" style="font-size:10px;cursor:pointer;" onclick="filterByNoteTag('React')">React</span>
+        <span class="tag-pill" style="font-size:10px;cursor:pointer;" onclick="filterByNoteTag('Rust')">Rust</span>
+        <span class="tag-pill" style="font-size:10px;cursor:pointer;" onclick="filterByNoteTag('架构')">架构</span>
+        <span class="tag-pill" style="font-size:10px;cursor:pointer;" onclick="filterByNoteTag('UI')">UI</span>
+      </div>
+      <div class="nav-divider"></div>
+      <div class="note-list-wrap" id="noteList"></div>
+    </div>
+    <!-- KB Sidebar -->
+    <div id="kbSidebar" style="display:none;flex-direction:column;flex:1;min-height:0;">
+      <div class="nav-section">
+        <div class="nav-section-header">知识分类</div>
+        <button class="nav-item active" onclick="filterKbCategory('all',this)">📂 全部 <span class="count">7</span></button>
+        <button class="nav-item" onclick="filterKbCategory('技术文档',this)">📘 技术文档 <span class="count">3</span></button>
+        <button class="nav-item" onclick="filterKbCategory('代码库',this)">💻 代码库 <span class="count">2</span></button>
+        <button class="nav-item" onclick="filterKbCategory('数据报表',this)">📊 数据报表 <span class="count">1</span></button>
+        <button class="nav-item" onclick="filterKbCategory('项目管理',this)">📋 项目管理 <span class="count">1</span></button>
+      </div>
+      <div class="nav-divider"></div>
+      <div class="nav-section">
+        <div class="nav-section-header">状态</div>
+        <button class="nav-item" onclick="filterKbStatus('draft',this)">✏️ 草稿 <span class="count">1</span></button>
+        <button class="nav-item" onclick="filterKbStatus('published',this)">✅ 已发布 <span class="count">5</span></button>
+        <button class="nav-item" onclick="filterKbStatus('archived',this)">📦 已归档 <span class="count">1</span></button>
+      </div>
+      <div class="nav-divider"></div>
+      <div class="nav-section">
+        <button class="nav-item" onclick="showUpload()">📤 导入文件</button>
+        <button class="nav-item" onclick="toggleFacetedSearch()">🔍 分面搜索</button>
+      </div>
+    </div>
+    <div class="sidebar-footer"><span class="status-dot online"></span><span>已同步</span><span style="flex:1"></span></div>
+  </aside>
+
+  <!-- Main -->
+  <main class="main" id="mainContent">
+    <!-- Empty State -->
+    <div class="empty-state" id="emptyState"><div class="icon">📝</div><h2>选择一个笔记开始编辑</h2><p>从左侧列表中选择笔记，或新建一篇笔记开始写作。</p></div>
+
+    <!-- Editor View -->
+    <div id="editorView" style="display:none;flex-direction:column;flex:1;min-height:0;">
+      <div class="editor-header">
+        <input class="title-input" id="noteTitle" placeholder="笔记标题..." value="欢迎使用 NoteForge">
+        <div class="editor-actions">
+          <button title="属性" onclick="toggleProperties()" class="active">ℹ</button>
+          <button title="收藏" id="favBtn" onclick="this.textContent=this.textContent=='☆'?'★':'☆'">☆</button>
+          <button title="更多">⋯</button>
+        </div>
+      </div>
+      <div class="tags-bar">
+        <span class="tag-pill">React<span class="remove" onclick="this.parentElement.remove()">×</span></span>
+        <span class="tag-pill">入门<span class="remove" onclick="this.parentElement.remove()">×</span></span>
+        <button class="add-tag-btn">+ 添加标签</button>
+      </div>
+      <div class="toolbar">
+        <button title="粗体" onclick="wrapText('**')"><b>B</b></button>
+        <button title="斜体" onclick="wrapText('*')"><i>I</i></button>
+        <button title="删除线" onclick="wrapText('~~')"><s>S</s></button>
+        <div class="sep"></div>
+        <button title="标题" onclick="wrapText('## ')">H</button>
+        <button title="引用" onclick="wrapText('> ')">❝</button>
+        <button title="代码块" onclick="wrapText('```\n','\n```')">&lt;/&gt;</button>
+        <button title="列表" onclick="wrapText('- ')">•</button>
+        <button title="有序列表" onclick="wrapText('1. ')">1.</button>
+        <button title="链接" onclick="wrapText('[','](url)')">🔗</button>
+        <div class="sep"></div>
+        <div class="spacer"></div>
+        <span class="toggle-preview-btn" onclick="togglePreview()" id="previewToggle">👁 预览</span>
+      </div>
+      <div class="editor-container">
+        <div class="editor-pane">
+          <textarea id="editorTextarea" placeholder="开始写作..." oninput="updatePreview()">## 欢迎使用 NoteForge
+
+NoteForge 是一个全平台智能笔记系统，比 Notion 快，比 Obsidian 智能。
+
+### 特性
+
+- **AI 驱动** — 自动标签、智能搜索、知识图谱
+- **本地优先** — 支持离线编辑，端到端加密
+- **全平台** — 桌面 + Web + 移动端
+
+### 快速开始
+
+\`\`\`typescript
+const note = new Note({
+  title: '我的第一篇笔记',
+  content: 'Hello, NoteForge!'
+});
+await note.save();
+\`\`\`
+
+> 知识就是力量 — Francis Bacon</textarea>
+        </div>
+        <div class="preview-pane hidden" id="previewPane"></div>
+      </div>
+      <div class="status-bar">
+        <div class="left"><span id="wordCount">0 字</span><span class="save-indicator"><span class="save-dot saved" id="saveDot"></span> <span id="saveStatus">已保存</span></span></div>
+        <div class="right"><span>Markdown</span></div>
+      </div>
+    </div>
+
+    <!-- Properties Panel -->
+    <div class="properties-panel" id="propertiesPanel">
+      <div class="panel-header"><h3>笔记属性</h3><button class="close-btn" onclick="toggleProperties()">×</button></div>
+      <div class="prop-section"><h4>信息</h4>
+        <div class="prop-row"><span class="label">创建时间</span><span class="value">2026-06-28</span></div>
+        <div class="prop-row"><span class="label">更新时间</span><span class="value">2026-07-02</span></div>
+        <div class="prop-row"><span class="label">笔记本</span><span class="value">技术</span></div>
+        <div class="prop-row"><span class="label">字数</span><span class="value">342</span></div>
+      </div>
+      <div class="prop-section"><h4>反向链接</h4><div style="font-size:12px;color:var(--text-secondary);padding:4px 0;">🔗 React 入门指南<br>🔗 Rust 核心引擎</div></div>
+    </div>
+
+    <!-- KB List View -->
+    <div id="kbListView" style="display:none;flex:1;flex-direction:column;min-height:0;">
+      <div class="kb-header">
+        <h2>🧠 知识库</h2>
+        <div class="kb-search"><span class="icon">🔍</span><input type="text" placeholder="搜索所有知识文档..." id="kbSearchInput" oninput="onKbSearch(this.value)"></div>
+        <div class="kb-actions">
+          <span class="faceted-toggle" id="facetedToggle" onclick="toggleFacetedSearch()">🔎 筛选 <span class="faceted-badge" id="facetedBadge">0</span></span>
+          <button class="btn-primary" onclick="showUpload()">📤 导入</button>
+        </div>
+      </div>
+      <div class="category-bar" id="categoryBar">
+        <span class="category-pill active" onclick="selectCategoryPill(this,'all')">全部 <span class="count">7</span></span>
+        <span class="category-pill" onclick="selectCategoryPill(this,'技术文档')">📘 技术文档 <span class="count">3</span></span>
+        <span class="category-pill" onclick="selectCategoryPill(this,'代码库')">💻 代码库 <span class="count">2</span></span>
+        <span class="category-pill" onclick="selectCategoryPill(this,'数据报表')">📊 数据报表 <span class="count">1</span></span>
+        <span class="category-pill" onclick="selectCategoryPill(this,'项目管理')">📋 项目管理 <span class="count">1</span></span>
+      </div>
+      <div class="filter-panel" id="filterPanel">
+        <div class="filter-panel-inner">
+          <div class="filter-section"><h4>文件类型</h4><div class="filter-checkbox-group">
+            <label class="filter-checkbox"><input type="checkbox"> PDF</label>
+            <label class="filter-checkbox"><input type="checkbox"> DOCX</label>
+            <label class="filter-checkbox"><input type="checkbox"> 代码</label>
+            <label class="filter-checkbox"><input type="checkbox"> XLSX</label>
+          </div></div>
+          <div class="filter-section"><h4>状态</h4><div class="filter-checkbox-group">
+            <label class="filter-checkbox"><input type="checkbox"> 已发布</label>
+            <label class="filter-checkbox"><input type="checkbox"> 草稿</label>
+            <label class="filter-checkbox"><input type="checkbox"> 已归档</label>
+          </div></div>
+        </div>
+        <div class="filter-actions"><button class="btn-clear" onclick="clearFacetedFilters()">清除</button><button class="btn-apply" onclick="toggleFacetedSearch()">应用</button></div>
+      </div>
+      <div class="kb-list-wrap" id="kbList"></div>
+      <div class="status-bar" style="padding:4px 24px;"><span>共 <span id="kbTotalCount">7</span> 个知识文档</span><span>已索引 <span id="kbIndexedCount">6</span></span></div>
+    </div>
+
+    <!-- KB Viewer -->
+    <div id="kbViewerView" style="display:none;flex:1;flex-direction:column;min-height:0;">
+      <div class="viewer-header">
+        <button class="back-btn" onclick="backToList()">←</button>
+        <div class="v-title" id="viewerTitle">系统架构设计方案</div>
+        <div class="v-actions">
+          <button onclick="showToast('info','已下载')">⬇ 原文件</button>
+          <button onclick="showShareModal()">🔗 分享</button>
+          <button class="btn-primary" onclick="showToast('success','已重新提交 AI 处理')">🔄 重新处理</button>
+        </div>
+      </div>
+      <div class="viewer-body">
+        <div class="viewer-toc" id="viewerToc">
+          <div class="toc-header">📋 目录</div>
+          <div id="tocItems">
+            <div class="toc-item level-1 active">1. 项目背景</div>
+            <div class="toc-item level-2">1.1 业务痛点</div>
+            <div class="toc-item level-2">1.2 项目目标</div>
+            <div class="toc-item level-1">2. 技术选型</div>
+            <div class="toc-item level-2">2.1 后端框架</div>
+            <div class="toc-item level-2">2.2 数据库选择</div>
+            <div class="toc-item level-1">3. 架构设计</div>
+            <div class="toc-item level-2">3.1 分层架构</div>
+            <div class="toc-item level-2">3.2 微服务拆分</div>
+          </div>
+        </div>
+        <div class="viewer-content" id="viewerContent">
+          <div class="doc-title">系统架构设计方案</div>
+          <div class="doc-meta-bar">
+            <span>📄 架构设计方案.pdf</span><span>·</span><span>分类: 技术文档</span>
+            <span class="tag">架构</span><span class="tag">微服务</span>
+            <span style="margin-left:auto;">📅 2026-06-29</span>
+          </div>
+          <div class="doc-summary"><div class="label">📝 AI 摘要</div>本文详细描述了 NoteForge 系统的分层架构设计和关键技术选型理由。</div>
+          <div class="rendered">
+            <h1>1. 项目背景</h1>
+            <p>NoteForge 项目旨在构建一个全平台智能笔记系统，结合 <strong>Notion</strong> 的协作能力和 <strong>Obsidian</strong> 的本地优先理念，并融入 AI 原生能力。</p>
+            <h2>1.1 业务痛点</h2>
+            <p>现有笔记产品存在以下问题：</p>
+            <ul><li>Notion：纯云端，离线能力弱</li><li>Obsidian：移动端体验差，同步付费</li><li>Evernote：功能臃肿，性能不佳</li></ul>
+            <h2>1.2 项目目标</h2>
+            <p>打造一个本地优先、AI 原生、全平台覆盖的智能笔记系统。</p>
+            <h1>2. 技术选型</h1>
+            <p>采用 <strong>Tauri 2.x + React 19</strong> 作为桌面端技术栈，<strong>Rust</strong> 作为核心引擎。</p>
+            <h1>3. 架构设计</h1>
+            <p>系统采用分层架构，分为展示层、核心引擎层、后端服务层和数据存储层。</p>
+          </div>
+        </div>
+        <div class="viewer-props">
+          <div class="vp-section"><h4>📄 源文件</h4>
+            <div class="vp-stat-row"><span class="label">文件名</span><span class="value">架构设计方案.pdf</span></div>
+            <div class="vp-stat-row"><span class="label">类型</span><span class="value">PDF</span></div>
+            <div class="vp-stat-row"><span class="label">大小</span><span class="value">3.2 MB</span></div>
+          </div>
+          <div class="vp-section"><h4>📌 文档状态</h4>
+            <span class="status-badge status-published">已发布</span>
+            <div class="vp-progress-bar" style="margin:8px 0;"><div class="fill" style="width:100%"></div></div>
+            <div class="vp-stat-row"><span class="label">字数</span><span class="value">3,247</span></div>
+            <div class="vp-stat-row"><span class="label">综合质量</span><span class="value" style="color:var(--success);">88/100</span></div>
+          </div>
+          <div class="vp-section"><h4>🏷 标签</h4><div class="vp-tags"><span class="vp-tag">架构</span><span class="vp-tag">微服务</span></div></div>
+          <div class="vp-section"><h4>🔑 关键术语</h4>
+            <div class="vp-keyterm">微服务架构 <span class="kt-type">概念</span></div>
+            <div class="vp-keyterm">CQRS <span class="kt-type">模式</span></div>
+          </div>
+          <div class="vp-section"><h4>🎯 实体识别</h4>
+            <div class="vp-entity"><span class="entity-icon">⚙️</span><span class="entity-name">Spring Boot</span><span class="entity-type">技术栈</span></div>
+            <div class="vp-entity"><span class="entity-icon">🗄️</span><span class="entity-name">PostgreSQL</span><span class="entity-type">技术栈</span></div>
+          </div>
+          <div class="vp-section"><h4>🔗 关联知识</h4>
+            <div class="vp-related-item">📄 API 设计规范 <span class="rel-score" style="color:var(--success);">92%</span></div>
+            <div class="vp-related-item">📄 数据库设计 <span class="rel-score" style="color:var(--success);">87%</span></div>
+          </div>
+          <div class="vp-section"><h4>💬 评论</h4>
+            <div class="vp-comment"><div class="comment-author">Alice Chen <span class="role">审核人</span></div><div class="comment-text">建议补充容错机制说明。</div><div class="comment-time">2026-06-29</div></div>
+            <div class="vp-comment" style="border-bottom:none;"><div class="comment-author">Bob Zhang <span class="role">技术顾问</span></div><div class="comment-text">搜索模块计划在 Q3 升级为向量检索。</div><div class="comment-time">2026-06-28</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- Upload Dialog -->
+<div class="upload-overlay" id="uploadOverlay">
+  <div class="upload-dialog">
+    <h2>📤 导入知识文件</h2>
+    <div class="upload-dropzone" onclick="document.getElementById('fileInput').click()">
+      <div class="dz-icon">📁</div>
+      <div class="dz-text">拖拽文件到此处，或点击选择文件</div>
+      <div class="dz-hint">支持 PDF · DOCX · PPTX · XLSX · TXT · 代码文件</div>
+      <input type="file" id="fileInput" multiple style="display:none" onchange="onFileSelect(this.files)">
+    </div>
+    <div class="upload-field"><label>目标笔记本</label><select><option>自动归类</option><option>架构文档</option><option>技术手册</option></select></div>
+    <div class="upload-file-list" id="uploadFileList"><div style="padding:12px;text-align:center;font-size:12px;color:var(--text-muted);">暂未选择文件</div></div>
+    <div class="upload-actions"><button class="btn-secondary" onclick="closeUpload()">取消</button><button class="btn-primary" id="startImportBtn" onclick="startImport()" disabled>开始导入</button></div>
+  </div>
+</div>
+
+<!-- Share Modal -->
+<div class="modal-overlay" id="shareModal">
+  <div class="modal" style="width:480px;">
+    <h2>🔗 分享知识文档</h2>
+    <div class="share-option" onclick="selectShareOption(this,0)"><div class="so-radio selected"></div><div><div class="so-label">公开分享</div><div class="so-desc">任何人拥有链接即可查看</div></div></div>
+    <div class="share-option" onclick="selectShareOption(this,1)"><div class="so-radio"></div><div><div class="so-label">仅团队</div><div class="so-desc">需要登录 NoteForge 账号</div></div></div>
+    <div class="share-option" onclick="selectShareOption(this,2)"><div class="so-radio"></div><div><div class="so-label">密码保护</div><div class="so-desc">需要输入密码才能访问</div></div></div>
+    <div class="share-link-box"><span class="link-text">https://kb.noteforge.app/s/abc123xyz</span><button class="copy-btn" onclick="showToast('success','链接已复制')">复制</button></div>
+    <div class="modal-actions"><button class="btn-secondary" onclick="closeModal('shareModal')">关闭</button><button class="btn-primary" onclick="closeModal('shareModal');showToast('success','链接已生成')">生成链接</button></div>
+  </div>
+</div>
+
+<!-- Graph -->
+<div class="graph-overlay" id="graphOverlay">
+  <div class="graph-toolbar"><h2>🕸 知识图谱</h2><span class="graph-stats">文档: 6 · 实体: 12 · 连接: 28</span><button onclick="randomizeGraphLayout()">🔄 重排</button><button onclick="toggleGraph()">✕ 关闭</button></div>
+  <div class="graph-legend">
+    <span class="graph-legend-item"><span class="legend-dot doc"></span> 文档</span>
+    <span class="graph-legend-item"><span class="legend-dot entity-tech"></span> 技术栈</span>
+    <span class="graph-legend-item"><span class="legend-dot entity-person"></span> 人物</span>
+    <span class="graph-legend-item"><span class="legend-dot entity-org"></span> 组织</span>
+  </div>
+  <div class="graph-canvas" id="graphCanvas">
+    <svg class="connections"><line x1="50%" y1="45%" x2="30%" y2="25%"/><line x1="50%" y1="45%" x2="70%" y2="20%"/><line x1="50%" y1="45%" x2="20%" y2="55%"/><line x1="50%" y1="45%" x2="80%" y2="55%"/><line x1="50%" y1="45%" x2="45%" y2="10%"/><line x1="50%" y1="45%" x2="75%" y2="38%"/><line x1="50%" y1="45%" x2="25%" y2="40%"/></svg>
+    <div class="graph-node doc-node center" style="left:calc(50% - 75px);top:calc(45% - 16px)">系统架构设计方案</div>
+    <div class="graph-node doc-node" style="left:calc(50% - 220px);top:calc(25% - 16px)">API 设计规范</div>
+    <div class="graph-node doc-node" style="left:calc(50% + 100px);top:calc(20% - 16px)">数据库设计</div>
+    <div class="graph-node entity-node" style="left:calc(50% - 50px);top:calc(10% - 16px)">PostgreSQL</div>
+    <div class="graph-node entity-node" style="left:calc(50% + 200px);top:calc(38% - 16px)">Spring Boot</div>
+    <div class="graph-node entity-node" style="left:calc(50% - 320px);top:calc(40% - 16px)">React 18</div>
+  </div>
+</div>
+
+<div class="toast-container" id="toastContainer"></div>
+</div>
+
+<script>
+const NOTES = [
+  { id:'n1', title:'欢迎使用 NoteForge', preview:'NoteForge 是一个全平台智能笔记系统...', notebook:'tech', tags:['React','入门'], updated:'2026-07-02', words:342 },
+  { id:'n2', title:'React 18 新特性笔记', preview:'React 18 引入了并发模式、Suspense 改进...', notebook:'tech', tags:['React','前端'], updated:'2026-07-01', words:520 },
+  { id:'n3', title:'Rust 核心引擎设计思路', preview:'为什么选择 Rust 作为 NoteForge 核心引擎...', notebook:'tech', tags:['Rust','架构'], updated:'2026-06-30', words:890 },
+  { id:'n4', title:'项目架构会议记录', preview:'2026-06-28 架构评审会议纪要...', notebook:'work', tags:['架构'], updated:'2026-06-28', words:210 },
+  { id:'n5', title:'UI 设计规范 v2', preview:'统一的设计语言和组件规范...', notebook:'work', tags:['UI','设计'], updated:'2026-06-27', words:1560 },
+  { id:'n6', title:'个人周报 2026-W26', preview:'本周完成了笔记同步功能的初步实现...', notebook:'personal', tags:[], updated:'2026-06-26', words:430 },
+  { id:'n7', title:'API 接口文档', preview:'RESTful API 端点定义和请求/响应格式...', notebook:'work', tags:['API'], updated:'2026-06-25', words:1200 },
+  { id:'n8', title:'读书笔记：系统设计面试', preview:'第一章：从零开始设计 URL 缩短服务...', notebook:'personal', tags:['系统设计'], updated:'2026-06-24', words:780 },
+  { id:'n9', title:'TypeScript 高级类型', preview:'条件类型、映射类型、infer 关键字...', notebook:'tech', tags:['TypeScript'], updated:'2026-06-23', words:640 },
+  { id:'n10',title:'数据库表结构设计', preview:'用户表、笔记表、标签表的关系设计...', notebook:'work', tags:['数据库','架构'], updated:'2026-06-22', words:890 },
+  { id:'n11',title:'健身计划 7月', preview:'7 月训练目标：增肌期...', notebook:'personal', tags:['健身'], updated:'2026-06-21', words:320 },
+  { id:'n12',title:'Tauri 2 跨平台开发笔记', preview:'Tauri 2 的架构变化和迁移注意事项...', notebook:'tech', tags:['Tauri','Rust'], updated:'2026-06-20', words:950 },
+];
+const KB_DOCS = [
+  { id:'d1', title:'系统架构设计方案', summary:'本文详细描述了 NoteForge 的分层架构设计和技术选型。', fileName:'架构设计方案.pdf', fileType:'pdf', category:'技术文档', tags:['架构','微服务'], words:3247, status:'published', quality:88 },
+  { id:'d2', title:'API 设计规范文档', summary:'NoteForge RESTful API 设计规范，包含命名约定和认证方式。', fileName:'API设计规范.docx', fileType:'docx', category:'技术文档', tags:['API','REST'], words:2180, status:'published', quality:92 },
+  { id:'d3', title:'user_service.py 核心实现', summary:'用户微服务核心代码，JWT 认证和 CRUD。', fileName:'user_service.py', fileType:'code', category:'代码库', tags:['Python','JWT'], words:845, status:'published', quality:75 },
+  { id:'d4', title:'note_service.rs 核心模块', summary:'Rust 核心引擎实现，CRDT 同步和全文索引。', fileName:'note_service.rs', fileType:'code', category:'代码库', tags:['Rust','CRDT'], words:567, status:'draft', quality:60 },
+  { id:'d5', title:'Q2 数据分析报告', summary:'2026 年 Q2 产品数据分析，MAU 突破 50 万。', fileName:'Q2数据分析.xlsx', fileType:'xlsx', category:'数据报表', tags:['季度','分析'], words:1560, status:'published', quality:85 },
+  { id:'d6', title:'项目管理计划 v2.0', summary:'NoteForge 下半年项目管理计划，Scrum 框架。', fileName:'项目计划.pptx', fileType:'pptx', category:'项目管理', tags:['Scrum','里程碑'], words:1890, status:'archived', quality:70 },
+  { id:'d7', title:'数据库迁移方案', summary:'从 MySQL 到 PostgreSQL 16 的迁移方案。', fileName:'数据库迁移方案.pdf', fileType:'pdf', category:'技术文档', tags:['数据库','迁移'], words:2100, status:'processing', quality:0 },
+];
+
+let currentMode='notes', selectedNoteId='n1', currentKbCategory='all', currentKbStatus='all', searchQuery='';
+let selectedFiles=[], shareIdx=0, facetedOpen=false;
+
+function switchMode(mode){
+  currentMode=mode;
+  document.querySelectorAll('.mode-tab').forEach(e=>e.classList.remove('active'));
+  document.getElementById('tabNotes').classList.toggle('active',mode==='notes');
+  document.getElementById('tabKb').classList.toggle('active',mode==='kb');
+  document.getElementById('notesSidebar').style.display=mode==='notes'?'flex':'none';
+  document.getElementById('kbSidebar').style.display=mode==='kb'?'flex':'none';
+  hideAllViews();
+  if(mode==='notes'){if(selectedNoteId){showEditorView()}else{showEmptyView()}renderNoteList()}
+  else{showKbList()}
+}
+function hideAllViews(){
+  ['emptyState','editorView','kbListView','kbViewerView'].forEach(id=>document.getElementById(id).style.display='none');
+  document.getElementById('propertiesPanel').classList.remove('open');
+}
+function showEmptyView(){document.getElementById('emptyState').style.display='flex';}
+function showEditorView(){document.getElementById('editorView').style.display='flex';}
+function showKbList(){document.getElementById('kbListView').style.display='flex';document.getElementById('kbViewerView').style.display='none';renderKbList();}
+function backToList(){showKbList();}
+
+function renderNoteList(){
+  let notes=[...NOTES];
+  if(searchQuery){const q=searchQuery.toLowerCase();notes=notes.filter(n=>n.title.toLowerCase().includes(q)||n.tags.some(t=>t.toLowerCase().includes(q)));}
+  notes.sort((a,b)=>b.updated.localeCompare(a.updated));
+  const el=document.getElementById('noteList');
+  if(!notes.length){el.innerHTML='<div style="text-align:center;padding:24px;color:var(--sidebar-muted);font-size:12px;">暂无笔记</div>';return;}
+  el.innerHTML=notes.map(n=>`<div class="note-item ${n.id===selectedNoteId?'active':''}" onclick="selectNote('${n.id}')"><div class="active-bar"></div><div class="title">${n.title}</div><div class="preview">${n.preview}</div><div class="meta"><span>${n.updated}</span><span>${n.words} 字</span></div></div>`).join('');
+}
+function selectNote(id){
+  selectedNoteId=id;
+  renderNoteList();
+  hideAllViews();showEditorView();
+  const note=NOTES.find(n=>n.id===id);
+  if(note)document.getElementById('noteTitle').value=note.title;
+}
+function filterNotebook(nb,el){
+  document.querySelectorAll('#notesSidebar .nav-item').forEach(e=>e.classList.remove('active'));
+  if(el)el.classList.add('active');
+  renderNoteList();
+}
+function newNote(){
+  const id='n'+Date.now();
+  NOTES.unshift({id,title:'新笔记',preview:'',notebook:'personal',tags:[],updated:new Date().toISOString().slice(0,10),words:0});
+  selectNote(id);
+}
+function filterByNoteTag(tag){searchQuery=tag;renderNoteList();}
+function onGlobalSearch(q){searchQuery=q.trim();if(currentMode==='notes')renderNoteList();else renderKbList();}
+
+function updatePreview(){
+  const text=document.getElementById('editorTextarea').value;
+  const wc=text.replace(/\s/g,'').length;
+  document.getElementById('wordCount').textContent=wc+' 字';
+  const pw=document.getElementById('previewPane');
+  if(pw.classList.contains('hidden'))return;
+  let html='',inCode=false;
+  text.split('\n').forEach(line=>{
+    if(line.startsWith('```')){inCode=!inCode;html+=inCode?'<pre><code>':'</code></pre>';return;}
+    if(inCode){html+=line+'\n';return;}
+    if(line.startsWith('# '))html+='<h1>'+line.slice(2)+'</h1>';
+    else if(line.startsWith('## '))html+='<h2>'+line.slice(3)+'</h2>';
+    else if(line.startsWith('### '))html+='<h3>'+line.slice(4)+'</h3>';
+    else if(line.startsWith('> '))html+='<blockquote>'+line.slice(2)+'</blockquote>';
+    else if(line.startsWith('- '))html+='<li>'+line.slice(2)+'</li>';
+    else if(line.trim()==='')html+='<br>';
+    else html+='<p>'+line.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/\*(.+?)\*/g,'<em>$1</em>')+'</p>';
+  });
+  pw.innerHTML=html;
+}
+function togglePreview(){
+  const pw=document.getElementById('previewPane'),btn=document.getElementById('previewToggle');
+  pw.classList.toggle('hidden');
+  btn.textContent=pw.classList.contains('hidden')?'👁 预览':'✏️ 编辑';
+  if(!pw.classList.contains('hidden'))updatePreview();
+}
+function toggleProperties(){document.getElementById('propertiesPanel').classList.toggle('open');}
+function wrapText(before,after){
+  const ta=document.getElementById('editorTextarea'),s=ta.selectionStart,e=ta.selectionEnd;
+  const sel=ta.value.slice(s,e);after=after||before;
+  ta.value=ta.value.slice(0,s)+before+sel+after+ta.value.slice(e);
+  ta.focus();updatePreview();
+}
+
+function renderKbList(){
+  let docs=[...KB_DOCS];
+  if(currentKbCategory!=='all')docs=docs.filter(d=>d.category===currentKbCategory);
+  if(currentKbStatus!=='all')docs=docs.filter(d=>d.status===currentKbStatus);
+  if(searchQuery){const q=searchQuery.toLowerCase();docs=docs.filter(d=>d.title.toLowerCase().includes(q)||d.tags.some(t=>t.toLowerCase().includes(q)));}
+  const el=document.getElementById('kbList');
+  if(!docs.length){el.innerHTML='<div style="text-align:center;padding:48px;color:var(--text-muted);">无匹配文档</div>';document.getElementById('kbTotalCount').textContent='0';return;}
+  const icons={pdf:'📄',docx:'📃',code:'💻',xlsx:'📈',pptx:'📊'};
+  const statusMap={published:'已发布',draft:'草稿',archived:'已归档',processing:'处理中'};
+  el.innerHTML=docs.map(d=>`<div class="kb-item" onclick="openViewer('${d.id}')">
+    <div class="file-type-icon ${d.fileType}">${icons[d.fileType]||'📄'}</div>
+    <div class="item-body">
+      <div class="item-title">${d.title} <span class="status-badge status-${d.status}">${statusMap[d.status]}</span></div>
+      <div class="item-summary">${d.summary}</div>
+      <div class="item-meta"><span>${d.category}</span><span>·</span><span>${d.fileName}</span>${d.tags.map(t=>`<span class="tag">${t}</span>`).join('')}</div>
+    </div>
+    <div class="item-right"><span>${d.updated}</span>${d.quality>0?`<span class="quality-score good">🟢 ${d.quality}/100</span>`:'<span style="color:var(--warning);">⏳ 处理中</span>'}</div>
+  </div>`).join('');
+  document.getElementById('kbTotalCount').textContent=docs.length;
+  document.getElementById('kbIndexedCount').textContent=docs.filter(d=>d.status!=='processing').length;
+}
+function filterKbCategory(cat,el){
+  document.querySelectorAll('#kbSidebar .nav-item').forEach(e=>e.classList.remove('active'));
+  if(el)el.classList.add('active');currentKbCategory=cat;renderKbList();
+}
+function filterKbStatus(st,el){
+  document.querySelectorAll('#kbSidebar .nav-item').forEach(e=>e.classList.remove('active'));
+  if(el)el.classList.add('active');currentKbStatus=st;renderKbList();
+}
+function selectCategoryPill(el,cat){
+  document.querySelectorAll('.category-pill').forEach(e=>e.classList.remove('active'));
+  el.classList.add('active');currentKbCategory=cat;renderKbList();
+}
+function onKbSearch(q){searchQuery=q.trim();renderKbList();}
+function openViewer(id){
+  const doc=KB_DOCS.find(d=>d.id===id);
+  if(!doc)return;
+  document.getElementById('kbListView').style.display='none';
+  document.getElementById('kbViewerView').style.display='flex';
+  document.getElementById('viewerTitle').textContent=doc.title;
+}
+
+function showUpload(){document.getElementById('uploadOverlay').classList.add('show');document.getElementById('uploadFileList').innerHTML='<div style="padding:12px;text-align:center;font-size:12px;color:var(--text-muted);">暂未选择文件</div>';selectedFiles=[];document.getElementById('startImportBtn').disabled=true;}
+function closeUpload(){document.getElementById('uploadOverlay').classList.remove('show');}
+function onFileSelect(files){for(const f of files)selectedFiles.push({name:f.name,size:(f.size/1024).toFixed(1)+' KB'});updateUploadList();}
+function updateUploadList(){
+  const el=document.getElementById('uploadFileList');
+  if(!selectedFiles.length){el.innerHTML='<div style="padding:12px;text-align:center;color:var(--text-muted);font-size:12px;">暂未选择文件</div>';document.getElementById('startImportBtn').disabled=true;return;}
+  el.innerHTML=selectedFiles.map(f=>`<div class="upload-file-item"><span>📄</span><span class="file-name">${f.name}</span><span class="file-size">${f.size}</span></div>`).join('');
+  document.getElementById('startImportBtn').disabled=false;
+}
+function startImport(){
+  const btn=document.getElementById('startImportBtn');btn.disabled=true;btn.textContent='⏳ 导入中...';
+  let p=0;const iv=setInterval(()=>{p+=Math.random()*20;if(p>=100){clearInterval(iv);btn.textContent='✅ 导入完成';setTimeout(()=>{closeUpload();showToast('success','✅ 文件已加入处理队列');btn.disabled=false;btn.textContent='开始导入';selectedFiles=[];renderKbList();},600);}},300);
+}
+function showShareModal(){document.getElementById('shareModal').classList.add('show');}
+function selectShareOption(el,idx){shareIdx=idx;document.querySelectorAll('.share-option .so-radio').forEach(r=>r.classList.remove('selected'));el.querySelector('.so-radio').classList.add('selected');}
+function closeModal(id){document.getElementById(id).classList.remove('show');}
+function toggleGraph(){document.getElementById('graphOverlay').classList.toggle('show');}
+function toggleFacetedSearch(){facetedOpen=!facetedOpen;document.getElementById('filterPanel').classList.toggle('open',facetedOpen);}
+function clearFacetedFilters(){document.querySelectorAll('#filterPanel input[type="checkbox"]').forEach(c=>c.checked=false);}
+function randomizeGraphLayout(){showToast('info','🔄 图谱已重排');}
+function toggleTheme(){
+  const h=document.documentElement,cur=h.getAttribute('data-theme');
+  h.setAttribute('data-theme',cur==='dark'?'light':'dark');
+  showToast('info',cur==='dark'?'☀️ 浅色模式':'🌙 深色模式');
+}
+function showToast(type,msg){
+  const c=document.getElementById('toastContainer'),t=document.createElement('div');
+  t.className='toast '+type;t.textContent=msg;c.appendChild(t);
+  setTimeout(()=>{t.style.opacity='0';t.style.transition='opacity 0.3s';setTimeout(()=>t.remove(),300);},2500);
+}
+renderNoteList();renderKbList();
+document.getElementById('wordCount').textContent=(document.getElementById('editorTextarea').value.replace(/\s/g,'').length)+' 字';
+</script>
+</body>
+</html>
