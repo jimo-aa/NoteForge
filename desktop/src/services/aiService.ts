@@ -211,4 +211,66 @@ export function completeText(
   );
 }
 
+// ── Semantic Search ──
+
+export interface SemanticSearchResult {
+  noteId: string;
+  title: string;
+  snippet: string;
+  score: number;
+}
+
+export async function semanticSearch(
+  query: string,
+  mode: 'semantic' | 'fulltext' | 'hybrid' = 'hybrid',
+  limit = 20,
+  offset = 0,
+  signal?: AbortSignal,
+): Promise<{ results: SemanticSearchResult[]; total: number } | null> {
+  try {
+    const response = await fetch(`${AI_API_BASE}/search`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ query, mode, limit, offset }),
+      signal,
+    });
+    if (!response.ok) return null;
+    const json = await response.json();
+    if (json.code === 0 && json.data) {
+      return {
+        results: (json.data.results || []).map((r: SemanticSearchResult) => ({
+          noteId: r.noteId,
+          title: r.title || '',
+          snippet: r.snippet || '',
+          score: r.score || 0,
+        })),
+        total: json.data.total || 0,
+      };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Re-index a note's embedding (call after create/update).
+ */
+export async function indexNoteEmbedding(
+  noteId: string,
+  title: string,
+  content: string,
+): Promise<boolean> {
+  try {
+    const response = await fetch(`${AI_API_BASE}/search/init`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ noteId, title, content }),
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
 export { suggestTags, createEmbedding };

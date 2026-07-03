@@ -3,6 +3,7 @@ package com.noteforge.ai.controller;
 import com.noteforge.ai.service.AiWritingService;
 import com.noteforge.ai.service.AiTagService;
 import com.noteforge.ai.service.AiEmbeddingService;
+import com.noteforge.ai.service.AiSearchService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
@@ -25,12 +26,14 @@ public class AiController {
     private final AiWritingService writingService;
     private final AiTagService tagService;
     private final AiEmbeddingService embeddingService;
+    private final AiSearchService searchService;
     private final ExecutorService executor = Executors.newCachedThreadPool();
 
-    public AiController(AiWritingService writingService, AiTagService tagService, AiEmbeddingService embeddingService) {
+    public AiController(AiWritingService writingService, AiTagService tagService, AiEmbeddingService embeddingService, AiSearchService searchService) {
         this.writingService = writingService;
         this.tagService = tagService;
         this.embeddingService = embeddingService;
+        this.searchService = searchService;
     }
 
     /**
@@ -133,6 +136,63 @@ public class AiController {
             embeddingList.add((double) v);
         }
         return ResponseEntity.ok(Map.of("code", 0, "data", Map.of("embedding", embeddingList, "dimension", embedding.length)));
+    }
+
+    /**
+     * Hybrid search: combines vector similarity (pgvector) with full-text search.
+     *
+     * @param request { query, mode: "semantic"|"fulltext"|"hybrid", limit?, offset? }
+     * @return { results: [{ noteId, title, snippet, score }], total }
+     */
+    @PostMapping("/search")
+    public ResponseEntity<Map<String, Object>> search(@RequestBody Map<String, Object> request) {
+        String query = (String) request.getOrDefault("query", "");
+        String mode = (String) request.getOrDefault("mode", "hybrid");
+        int limit = (int) request.getOrDefault("limit", 20);
+        int offset = (int) request.getOrDefault("offset", 0);
+
+        if (query == null || query.isBlank()) {
+            return ResponseEntity.ok(Map.of("code", 0, "data", Map.of("results", List.of(), "total", 0)));
+        }
+
+        List<Map<String, Object>> results = searchService.search(query, mode, limit, offset);
+        return ResponseEntity.ok(Map.of("code", 0, "data", Map.of("results", results, "total", results.size())));
+    }
+
+    /**
+     * Initialize search index: ensure pgvector column and index notes.
+     * POST /api/v1/ai/search/init
+     * Body: { noteId, title, content } or { notes: [...] }
+     */
+    @PostMapping("/search/init")
+    public ResponseEntity<Map<String, Object>> initIndex(@RequestBody Map<String, Object> request) {
+        searchService.ensureEmbeddingColumn();
+
+        // Index a single note
+        if (request.containsKey("noteId")) {
+            String noteId = (String) request.get("noteId");
+            String title = (String) request.getOrDefault("title", "");
+            String content = (String) request.getOrDefault("content", "");
+            searchService.indexNoteEmbedding(noteId, title, content);
+            return ResponseEntity.ok(Map.of("code", 0, "message", "Note indexed"));
+        }
+
+        // Index multiple notes
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> notes = (List<Map<String, Object>>) request.get("notes");
+        if (notes != null) {
+            for (Map<String, Object> note : notes) {
+                searchService.indexNoteEmbedding(
+                    (String) note.get("noteId"),
+                    (String) note.getOrDefault("title", ""),
+                    (String) note.getOrDefault("content", "")
+                );
+            }
+            return ResponseEntity.ok(Map.of("code", 0, "message", notes.size() + " notes indexed"));
+        }
+
+        int count = searchService.getIndexedCount();
+        return ResponseEntity.ok(Map.of("code", 0, "data", Map.of("indexedCount", count)));
     }
 
     /**

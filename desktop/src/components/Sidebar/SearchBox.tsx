@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { Icon } from '@/components/Common/Icon';
 import { tauriInvoke } from '@/utils/invoke';
 import { searchCache } from '@/utils/searchCache';
+import * as aiService from '@/services/aiService';
 
 type SearchResult = {
   note_id: string;
@@ -108,6 +109,7 @@ export function SearchBox() {
   const [fuzzyFallback, setFuzzyFallback] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [searchHistory, setSearchHistory] = useState<string[]>(() => loadHistory());
+  const [searchMode, setSearchMode] = useState<'fulltext' | 'semantic' | 'hybrid'>('fulltext');
   const inputRef = useRef<HTMLInputElement>(null);
   const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -219,34 +221,40 @@ export function SearchBox() {
       setFuzzyFallback(false);
       const t0 = performance.now();
       try {
-        const page = await tauriInvoke<SearchPage>('search_notes_advanced', {
-          query: textQuery,
-          limit: pageSize,
-          offset: 0,
-        });
-
-        if (page && page.results.length > 0) {
-          searchCache.set('adv', textQuery, 0, page);
-          setTotalResults(page.total_hits);
-          setResults(
-            page.results.map((hit: SearchResult) => ({
-              id: hit.note_id,
-              title: hit.title,
-              snippet: hit.snippet || t('search.noPreview'),
-              score: hit.score,
-              updatedAt: new Date(hit.updated_at).toLocaleString(),
-              noteId: hit.note_id,
-            }))
-          );
-          setCurrentPage(0);
-        } else {
-          const fuzzyResults = await tauriInvoke<SearchResult[]>('search_notes_fuzzy', {
-            query: textQuery,
-          });
-          if (fuzzyResults && fuzzyResults.length > 0) {
-            setTotalResults(fuzzyResults.length);
+        if (searchMode !== 'fulltext') {
+          // Semantic or hybrid search via ai-service
+          const semResult = await aiService.semanticSearch(textQuery, searchMode, pageSize, 0);
+          if (semResult && semResult.results.length > 0) {
+            setTotalResults(semResult.total);
             setResults(
-              fuzzyResults.slice(0, pageSize).map((hit: SearchResult) => ({
+              semResult.results.map((hit) => ({
+                id: hit.noteId,
+                title: hit.title,
+                snippet: hit.snippet || t('search.noPreview'),
+                score: hit.score,
+                updatedAt: '',
+                noteId: hit.noteId,
+              }))
+            );
+            setCurrentPage(0);
+            setFuzzyFallback(false);
+          } else {
+            setResults([]);
+            setTotalResults(0);
+          }
+        } else {
+          // Full-text search via Tauri (Tantivy)
+          const page = await tauriInvoke<SearchPage>('search_notes_advanced', {
+            query: textQuery,
+            limit: pageSize,
+            offset: 0,
+          });
+
+          if (page && page.results.length > 0) {
+            searchCache.set('adv', textQuery, 0, page);
+            setTotalResults(page.total_hits);
+            setResults(
+              page.results.map((hit: SearchResult) => ({
                 id: hit.note_id,
                 title: hit.title,
                 snippet: hit.snippet || t('search.noPreview'),
@@ -255,10 +263,28 @@ export function SearchBox() {
                 noteId: hit.note_id,
               }))
             );
-            setFuzzyFallback(true);
+            setCurrentPage(0);
           } else {
-            setResults([]);
-            setTotalResults(0);
+            const fuzzyResults = await tauriInvoke<SearchResult[]>('search_notes_fuzzy', {
+              query: textQuery,
+            });
+            if (fuzzyResults && fuzzyResults.length > 0) {
+              setTotalResults(fuzzyResults.length);
+              setResults(
+                fuzzyResults.slice(0, pageSize).map((hit: SearchResult) => ({
+                  id: hit.note_id,
+                  title: hit.title,
+                  snippet: hit.snippet || t('search.noPreview'),
+                  score: hit.score,
+                  updatedAt: new Date(hit.updated_at).toLocaleString(),
+                  noteId: hit.note_id,
+                }))
+              );
+              setFuzzyFallback(true);
+            } else {
+              setResults([]);
+              setTotalResults(0);
+            }
           }
         }
       } catch (error) {
@@ -423,6 +449,13 @@ export function SearchBox() {
               <button type="button" className="search-modal__close" onClick={close}>
                 ×
               </button>
+            </div>
+
+            {/* Mode toggle */}
+            <div className="search-mode-toggle">
+              <button className={`search-mode-btn${searchMode === 'fulltext' ? ' active' : ''}`} onClick={() => setSearchMode('fulltext')}>{t('search.modeFulltext')}</button>
+              <button className={`search-mode-btn${searchMode === 'semantic' ? ' active' : ''}`} onClick={() => setSearchMode('semantic')}>{t('search.modeSemantic')}</button>
+              <button className={`search-mode-btn${searchMode === 'hybrid' ? ' active' : ''}`} onClick={() => setSearchMode('hybrid')}>{t('search.modeHybrid')}</button>
             </div>
 
             {/* Filter chips */}

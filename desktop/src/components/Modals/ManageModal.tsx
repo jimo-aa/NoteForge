@@ -30,7 +30,7 @@ const ACCENT_PRESETS = [
   '#a855f7', // violet
 ];
 
-type Tab = 'notebooks' | 'tags' | 'security' | 'appearance' | 'shortcuts' | 'stats';
+type Tab = 'notebooks' | 'tags' | 'security' | 'appearance' | 'shortcuts' | 'stats' | 'sync';
 
 export function ManageModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { t } = useTranslation();
@@ -44,6 +44,67 @@ export function ManageModal({ open, onClose }: { open: boolean; onClose: () => v
   const [encryptionOpen, setEncryptionOpen] = useState(false);
   const [metrics, setMetrics] = useState<MetricsData | null>(null);
   const [metricsLoading, setMetricsLoading] = useState(false);
+
+  // ── Sync state ──
+  const getSyncServiceFn = () => {
+    // Dynamic import to avoid circular dependency
+    return import('@/services/syncService').then(m => m.getSyncService());
+  };
+  const [syncStatus, setSyncStatus] = useState<string>('idle');
+  const [pendingCount, setPendingCount] = useState(0);
+  const [conflictCount, setConflictCount] = useState(0);
+  const [lastSyncAt, setLastSyncAt] = useState<number | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open || tab !== 'sync') return;
+    void getSyncServiceFn().then(svc => {
+      setSyncStatus(svc.getCurrentStatus());
+      setPendingCount(svc.getPendingCount());
+    });
+  }, [open, tab]);
+
+  const handleSyncNow = () => {
+    setIsSyncing(true);
+    setSyncError(null);
+    void getSyncServiceFn().then(svc => {
+      svc.sync(lastSyncAt ?? 0).then(result => {
+        setIsSyncing(false);
+        if (result) {
+          setLastSyncAt(result.serverVersion);
+          setPendingCount(svc.getPendingCount());
+          setSyncStatus('online');
+          showToast('success', t('sync.syncComplete'));
+        } else {
+          setSyncStatus('error');
+          setSyncError(t('sync.syncFailed'));
+        }
+      });
+    });
+  };
+
+  const handleResolveLocal = () => {
+    // Resolve conflicts by keeping local versions (clear pending queue)
+    void getSyncServiceFn().then(svc => {
+      // Mark all as accepted by clearing queue
+      import('@tauri-apps/api/core').then(({ invoke }) => {
+        void invoke('clear_sync_queue');
+      });
+      setConflictCount(0);
+      setPendingCount(0);
+      showToast('success', t('sync.resolvedLocal'));
+    });
+  };
+
+  const handleResolveRemote = () => {
+    // Resolve conflicts by accepting remote versions (force pull)
+    void getSyncServiceFn().then(svc => {
+      handleSyncNow();
+      setConflictCount(0);
+      showToast('success', t('sync.resolvedRemote'));
+    });
+  };
 
   useEffect(() => {
     if (!open || tab !== 'stats') return;
@@ -182,6 +243,7 @@ export function ManageModal({ open, onClose }: { open: boolean; onClose: () => v
           <button className={tab === 'appearance' ? 'tab active' : 'tab'} onClick={() => setTab('appearance')}>{t('manage.tabAppearance')}</button>
           <button className={tab === 'shortcuts' ? 'tab active' : 'tab'} onClick={() => setTab('shortcuts')}>{t('manage.tabShortcuts')}</button>
           <button className={tab === 'stats' ? 'tab active' : 'tab'} onClick={() => setTab('stats')}>{t('manage.tabStats')}</button>
+          <button className={tab === 'sync' ? 'tab active' : 'tab'} onClick={() => setTab('sync')}>{t('manage.tabSync')}</button>
         </div>
         <div className="manage-modal-body">
           {tab === 'notebooks' && (
@@ -336,6 +398,53 @@ export function ManageModal({ open, onClose }: { open: boolean; onClose: () => v
                 </div>
               ) : (
                 <div className="manage-empty">{t('manage.statsNever')}</div>
+              )}
+            </div>
+          )}
+          {tab === 'sync' && (
+            <div className="manage-list">
+              <h4>{t('sync.title')}</h4>
+              <div className="sync-state-section">
+                <div className="sync-state-item">
+                  <span className="sync-state-label">{t('sync.lastSync')}</span>
+                  <span className="sync-state-value">
+                    {syncStatus === 'online' || syncStatus === 'idle'
+                      ? t('sync.lastSync', { time: lastSyncAt ? new Date(lastSyncAt).toLocaleString() : t('common.none') })
+                      : t('sync.notSynced')}
+                  </span>
+                </div>
+                <div className="sync-state-item">
+                  <span className="sync-state-label">{t('sync.pending')}</span>
+                  <span className="sync-state-value sync-state-value--pending">
+                    {pendingCount > 0 ? t('sync.pendingChanges', { count: pendingCount }) : t('sync.nonePending')}
+                  </span>
+                </div>
+                <div className="sync-state-item">
+                  <span className="sync-state-label">{t('sync.conflicts')}</span>
+                  <span className="sync-state-value sync-state-value--conflict">
+                    {conflictCount > 0
+                      ? t('sync.conflicts', { count: conflictCount })
+                      : t('sync.noConflicts')}
+                  </span>
+                </div>
+              </div>
+              {pendingCount > 0 && (
+                <div className="sync-conflict-actions">
+                  <button className="primary-btn" onClick={handleSyncNow} disabled={isSyncing}>
+                    {isSyncing ? t('sync.syncing') : t('sync.startSync')}
+                  </button>
+                </div>
+              )}
+              {conflictCount > 0 && (
+                <div className="sync-conflict-actions">
+                  <p className="sync-conflict-desc">{t('sync.conflictDesc')}</p>
+                  <button className="primary-btn" onClick={handleResolveLocal}>
+                    {t('sync.resolveLocal')}
+                  </button>
+                  <button className="ghost-btn" onClick={handleResolveRemote}>
+                    {t('sync.resolveRemote')}
+                  </button>
+                </div>
               )}
             </div>
           )}
