@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../core/theme.dart';
+import '../l10n/locale_provider.dart';
 import '../providers/auth_provider.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
-
   @override
   State<LoginScreen> createState() => _LoginScreenState();
 }
@@ -16,22 +16,18 @@ class _LoginScreenState extends State<LoginScreen> {
   String? _error;
 
   @override
-  void dispose() {
-    _emailCtrl.dispose();
-    _pwdCtrl.dispose();
-    super.dispose();
-  }
+  void dispose() { _emailCtrl.dispose(); _pwdCtrl.dispose(); super.dispose(); }
 
   Future<void> _login() async {
     setState(() => _error = null);
-    final auth = context.read<AuthProvider>();
-    final err = await auth.login(_emailCtrl.text.trim(), _pwdCtrl.text);
-    if (err != null) setState(() => _error = err);
+    final err = await context.read<AuthProvider>().login(_emailCtrl.text.trim(), _pwdCtrl.text);
+    if (err != null && mounted) setState(() => _error = err);
   }
 
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
+    final l10n = context.watch<LocaleProvider>();
     return Scaffold(
       body: Center(
         child: SingleChildScrollView(
@@ -39,7 +35,7 @@ class _LoginScreenState extends State<LoginScreen> {
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             Text('⚒ NoteForge', style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
-            Text('Sign in to your account', style: TextStyle(color: AppTheme.textMuted, fontSize: 14)),
+            Text(l10n.tr('login.subtitle'), style: TextStyle(color: context.textMutedColor, fontSize: 14)),
             const SizedBox(height: 32),
             if (_error != null) Container(
               padding: const EdgeInsets.all(12),
@@ -47,13 +43,13 @@ class _LoginScreenState extends State<LoginScreen> {
               child: Text(_error!, style: const TextStyle(color: Colors.redAccent, fontSize: 13)),
             ),
             if (_error != null) const SizedBox(height: 16),
-            TextField(controller: _emailCtrl, decoration: const InputDecoration(labelText: 'Email'), keyboardType: TextInputType.emailAddress),
+            TextField(controller: _emailCtrl, decoration: InputDecoration(labelText: l10n.tr('login.email')), keyboardType: TextInputType.emailAddress),
             const SizedBox(height: 12),
-            TextField(controller: _pwdCtrl, decoration: const InputDecoration(labelText: 'Password'), obscureText: true),
+            TextField(controller: _pwdCtrl, decoration: InputDecoration(labelText: l10n.tr('login.password')), obscureText: true),
             const SizedBox(height: 24),
-            ElevatedButton(onPressed: auth.isLoading ? null : _login, child: Text(auth.isLoading ? 'Signing in...' : 'Sign In')),
+            ElevatedButton(onPressed: auth.isLoading ? null : _login, child: Text(auth.isLoading ? l10n.tr('login.signingIn') : l10n.tr('login.signIn'))),
             const SizedBox(height: 16),
-            TextButton(onPressed: () => Navigator.pushReplacementNamed(context, '/register'), child: const Text("Don't have an account? Register")),
+            TextButton(onPressed: () => Navigator.pushReplacementNamed(context, '/register'), child: Text(l10n.tr('login.dontHaveAccount'))),
           ]),
         ),
       ),

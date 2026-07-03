@@ -4,6 +4,25 @@ All notable changes to NoteForge will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.1.0] - 2026-07-03
+### Added
+- **三端打磨 — 移动端 UIUX 全面重设计 + i18n 国际化**
+  - Mobile: 新增完整 i18n 系统（LocaleProvider + zh/en 双语言字符串映射，默认中文）
+  - Mobile: 基于 mobile-ui-prototype.html 全面重写 UI，匹配像素级设计稿
+  - Mobile: 5-Tab 底部导航（笔记/搜索/笔记本/收藏/我的）+ IndexedStack 页面保持
+  - Mobile: 全新笔记首页 — Header头像、问候语、📌已固定分区、最近更新列表
+  - Mobile: 全新搜索页 — 搜索栏、最近搜索标签、快速搜索入口、防抖查询
+  - Mobile: 全新笔记本页 — 全部笔记卡片、笔记本列表、长按删除
+  - Mobile: 全新收藏页 — 星标笔记列表、空状态引导
+  - Mobile: 全新个人中心页 — 用户头像、4维统计卡片、7项菜单（同步/主题/加密/存储/反馈/关于/退出）
+  - Mobile: 全新全屏编辑器 — 工具栏(返回/收藏/保存/删除)、标签行、标题+正文编辑区、状态栏(保存状态/字数/时间)、浮动格式栏(B/I/S/`/H/•/☐/❝)
+  - Mobile: 底部弹窗系统 — 新建笔记(标题/笔记本/标签/内容)、新建笔记本(名称/图标网格/颜色选择/实时预览)、主题设置(浅色/深色/系统 + 字体大小 + 强调色)
+  - Mobile: Toast 通知系统 (success/error/info 三种类型，自动消失)
+  - Mobile: 完整 Light/Dark 双主题（精确匹配原型配色 #6366f1 强调色系）
+  - Desktop: 桌面端 i18n 已确认默认 zh-CN fallback（React i18next）
+  - Mobile: flutter analyze 零 issue 通过
+  - Docs: 三端对齐进度标记
+
 ## [2.0.0] - 2026-07-03
 ### Added
 - **V2.0 Sprint 1 — 基础设施加固**
