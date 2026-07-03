@@ -4,6 +4,63 @@ All notable changes to NoteForge will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.0.0] - 2026-07-03
+### Added
+- **V2.0 Sprint 1 — 基础设施加固**
+  - Backend: JWT Secret 隔离（USER_JWT_SECRET / NOTE_JWT_SECRET 独立环境变量）
+  - Desktop: Zustand 状态管理迁移（useAuthStore.ts）
+  - Desktop: 类型系统清理（NoteResponseItem extends NoteMeta）
+  - Backend: Testcontainers 集成测试基类（AbstractIntegrationTest）
+- **V2.0 Sprint 2 — AI 核心能力**
+  - Backend: ai-service 微服务模块（LlmClient + AiWritingService + AiTagService + AiEmbeddingService）
+  - Backend: AI 写作 API（续写/改写/翻译/补全，SSE 流式）
+  - Backend: 自动标签 API（LLM prompt + 关键词 fallback）
+  - Backend: Embedding API（文本向量化）
+  - Desktop: AIToolbar 浮动工具栏（选中文本 → 续写/改写/翻译/补全）
+  - Desktop: SSE 流式渲染（实时增量插入编辑器）
+  - Infrastructure: ai-service docker-compose 容器化
+- **V2.0 Sprint 3 — 桌面体验增强**
+  - Backend: 语义搜索（pgvector + BM25 混合搜索，POST /api/v1/ai/search）
+  - Desktop: SearchBox 全文/语义/混合三模式切换
+  - Desktop: SyncIndicator 侧边栏同步状态指示器
+  - Desktop: 管理面板「同步」Tab（冲突检测 + 本地保留/远程接受）
+  - Desktop: TipTap 富文本编辑器（WYSIWYG / Markdown 源码双模式）
+  - Desktop: RichTextToolbar 格式化工具栏（B/I/U/标题/列表/表格/链接/图片）
+  - Desktop: TipTap Table 扩展（行/列增删、编辑）
+- **V2.0 Sprint 4 — 知识图谱与发布冲刺**
+  - Desktop: GraphView NLP 实体提取 + 实体模式切换
+  - Desktop: Chunk 拆分 + GraphView 懒加载（1.2MB→264KB main chunk）
+  - Backend: API Gateway 微服务（Spring Cloud Gateway，端口 8000）
+  - Backend: Gateway JWT 鉴权过滤器 + 速率限制
+  - Infrastructure: Lighthouse CI GitHub Actions 工作流
+  - Core: 加密安全性强化（OsRng 替代 thread_rng，6 项新增安全测试）
+  - Docs: 安全审计报告（docs/security-audit-report.md，评级：通过）
+- **V3.0 Sprint 1 — Web 端 MVP**
+  - Web: Next.js 15 App Router 项目骨架
+  - Web: 共享 API 客户端（api-client.ts，封装全部后端服务）
+  - Web: JWT 认证（登录/注册，Zustand 持久化）
+  - Web: 主布局 + 侧边栏导航 + 认证守卫
+  - Web: 笔记列表（笔记本筛选、收藏筛选、Pin 标识、标签展示）
+  - Web: TipTap 富文本编辑器（WYSIWYG + Markdown 源码双模式、表格编辑）
+  - Web: 笔记属性面板（笔记本选择、标签管理、Pin/Favorite、日期、字数、版本）
+  - Web: AI 自动标签（创建笔记后自动推荐）
+  - Web: 笔记本管理（创建/删除/筛选）
+  - Web: 全文搜索页面 + 设置页面
+  - Web: PWA manifest + 中英文 i18n 完整支持
+
+- **V3.0 Sprint 2 — Flutter 移动端 MVP**
+  - Mobile: Flutter 3.x 项目骨架 + Provider 状态管理
+  - Mobile: 核心 API 客户端（与 backend REST API 集成）
+  - Mobile: JWT 认证（登录/注册，SharedPreferences 持久化）
+  - Mobile: 笔记列表（笔记本筛选、收藏筛选、Pin/Star 标识）
+  - Mobile: 笔记编辑器（标题/内容编辑、标签管理、Pin/Favorite）
+  - Mobile: 笔记本管理（创建/删除/筛选）
+  - Mobile: 全文搜索 + 设置页面
+  - Mobile: Material You 深色主题 + Provider 响应式状态
+
+### Changed
+- Vite 5.4 → Vite 8 回退（修复 __BUNDLED_DEV__ HMR 错误）
+
 ## [1.0.0] - 2026-07-02
 
 ### Added

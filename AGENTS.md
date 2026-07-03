@@ -11,7 +11,8 @@ Multi-platform smart notes system (MVP phase). Primary deliverable is a **Tauri 
 | `desktop/` | Tauri 2 + React 18 + Vite 5 | **Primary deliverable**, working |
 | `core/` | Rust lib crate `noteforge-core` (7 modules) | Working, used by desktop via path dep |
 | `backend/` | Java 21 + Spring Boot 3.3 (Gradle, multi-module) | Working: ~70 Java files across 3 submodules (common, note-service, user-service) |
-| `web/` | Next.js 15 (planned) | **Empty directory** |
+| `mobile/` | Flutter 3.x (Dart) | **MVP working** — notes CRUD, auth, sync with backend API |
+| `web/` | Next.js 15 App Router (React 19) | **MVP working** — notes CRUD, TipTap editor, auth, search |
 | `infra/` | Docker Compose (PostgreSQL+pgvector, Redis, MinIO, ES, Prometheus, Grafana, Nginx) | Ready for use |
 | `docs/` | Architecture & design docs (15 `.md` files) | Covers API, DB, sync, AI, deployment, UX, roadmap |
 | `scripts/` | Build/dev helper scripts (`.ps1`, `.bat`) | `up`, `down`, `test`, `security-audit` |
@@ -48,6 +49,10 @@ Run all from repo root:
 | `cd backend && ./gradlew build` | Build all backend services + JaCoCo (60% min), OWASP dep check |
 | `cd backend && ./gradlew :note-service:bootRun` | Run note-service |
 | `cd backend && ./gradlew :user-service:bootRun` | Run user-service |
+| `cd web && npm run dev` | Next.js Web dev server at `localhost:3000` |
+| `cd web && npm run build` | TypeScript check + Next.js build |
+| `cd mobile && flutter run` | Launch Flutter mobile app (requires device/emulator) |
+| `cd mobile && flutter build apk` | Build Android APK |
 | `scripts/up.ps1` | Docker up → Rust build → Tauri dev → Java backend |
 | `scripts/down.ps1` | Docker compose down |
 | `scripts/test.ps1` | Rust core tests (wrapper for `cargo test`) |
