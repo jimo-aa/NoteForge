@@ -19,7 +19,12 @@ public class VersionService {
 
     private final NoteVersionRepository noteVersionRepository;
 
-    public VersionResponse createVersion(String noteId, String userId, String title, String content, String contentPlain) {
+    /**
+     * Create a manual version snapshot (named checkpoint).
+     * Takes explicit content — the caller is responsible for providing the current note content.
+     */
+    public VersionResponse createSnapshot(String noteId, String userId, String title, String description,
+                                           String content, String contentPlain) {
         List<NoteVersionEntity> existing = noteVersionRepository.findByNoteIdAndUserIdOrderByVersionNumberDesc(noteId, userId);
         int nextVersion = existing.isEmpty() ? 1 : existing.get(0).getVersionNumber() + 1;
 
@@ -28,6 +33,26 @@ public class VersionService {
         entity.setUserId(userId);
         entity.setVersionNumber(nextVersion);
         entity.setTitle(title);
+        entity.setDescription(description);
+        entity.setContent(content != null ? content : "");
+        entity.setContentPlain(contentPlain);
+        noteVersionRepository.save(entity);
+
+        return VersionResponse.fromEntity(entity);
+    }
+
+    /**
+     * Create an auto-saved version snapshot (triggered on note update).
+     */
+    public VersionResponse createAutoSnapshot(String noteId, String userId, String content, String contentPlain) {
+        List<NoteVersionEntity> existing = noteVersionRepository.findByNoteIdAndUserIdOrderByVersionNumberDesc(noteId, userId);
+        int nextVersion = existing.isEmpty() ? 1 : existing.get(0).getVersionNumber() + 1;
+
+        NoteVersionEntity entity = new NoteVersionEntity();
+        entity.setNoteId(noteId);
+        entity.setUserId(userId);
+        entity.setVersionNumber(nextVersion);
+        entity.setTitle("Auto-save #" + nextVersion);
         entity.setContent(content != null ? content : "");
         entity.setContentPlain(contentPlain);
         noteVersionRepository.save(entity);

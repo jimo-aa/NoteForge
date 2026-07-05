@@ -12,7 +12,7 @@ import { NotebookModal } from '@/components/Modals/NotebookModal';
 import { ContextMenu } from '@/components/Common/ContextMenu';
 import { Toast } from '@/components/Common/Toast';
 import { EntityModal } from '@/components/Modals/EntityModal';
-import { AdvancedVersioningPanel } from '@/components/Features/AdvancedVersioningPanel';
+import { VersionHistoryDialog } from '@/components/Modals/VersionHistoryDialog';
 import { ErrorBoundary } from '@/components/Common/ErrorBoundary';
 import { ManageModal } from '@/components/Modals/ManageModal';
 import { DraftRecoveryModal } from '@/components/Modals/DraftRecoveryModal';
@@ -132,6 +132,13 @@ export default function App() {
     })();
   }, [store.isLoading, store.currentNote]);
 
+  // Listen for version history open event from Editor toolbar button
+  useEffect(() => {
+    const handler = () => setAdvancedVersioningOpen(true);
+    window.addEventListener('noteforge:open-version-history', handler);
+    return () => window.removeEventListener('noteforge:open-version-history', handler);
+  }, []);
+
   const draftRecoveryShownRef = useRef(false);
   useEffect(() => {
     if (!draftRecoveryShownRef.current && !store.isLoading && store.recoveryDrafts && store.recoveryDrafts.length > 0) {
@@ -213,12 +220,12 @@ export default function App() {
           }
           store.closeEntityModal();
         }} />
-        {advancedVersioningOpen && store.currentNoteId && (
-          <AdvancedVersioningPanel 
-            noteId={store.currentNoteId} 
-            onClose={() => setAdvancedVersioningOpen(false)}
-          />
-        )}
+        <VersionHistoryDialog 
+          open={advancedVersioningOpen} 
+          noteId={store.currentNoteId || ''} 
+          onClose={() => setAdvancedVersioningOpen(false)}
+          onRestore={() => store.showToast('success', t('version.restored'))}
+        />
         <ContextMenu />
         <Suspense fallback={null}><LazyGraphView /></Suspense>
         <ManageModal open={manageOpen} onClose={() => setManageOpen(false)} />

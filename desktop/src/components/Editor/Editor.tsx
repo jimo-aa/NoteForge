@@ -2,7 +2,6 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent 
 import { useTranslation } from 'react-i18next';
 import { useStore } from '../../stores/context';
 import { renderMarkdown, formatTable } from '@/utils/markdown';
-import { VersionControlModal } from '@/components/Modals/VersionControlModal';
 import { Icon } from '@/components/Common/Icon';
 import { AttachmentPanel } from '@/components/Editor/AttachmentPanel';
 import { CodeMirrorEditor, type CodeMirrorHandle } from './CodeMirrorEditor';
@@ -43,9 +42,6 @@ export function Editor() {
     saveDraft,
     loadDraft,
     clearDraft,
-    restoreVersion,
-    checkoutBranch,
-    createBranch,
     saveCursor,
     loadCursor,
     selectNote,
@@ -81,7 +77,6 @@ export function Editor() {
   const [editorWidth, setEditorWidth] = useState(52);
   const [isResizing, setIsResizing] = useState(false);
   const [jumpLine, setJumpLine] = useState<number | null>(null);
-  const [versionControlOpen, setVersionControlOpen] = useState(false);
   const [attachmentPanelOpen, setAttachmentPanelOpen] = useState(false);
   const [wikiQuery, setWikiQuery] = useState('');
   const [wikiSuggestions, setWikiSuggestions] = useState<string[]>([]);
@@ -138,23 +133,24 @@ export function Editor() {
     showToast('success', t('note.aiContentInserted'));
   }, [showToast, t]);
 
+  useLayoutEffect(() => {
+    if (!note) return;
+    // Load cursor for this note synchronously (before layout)
+    const saved = loadCursor(note.meta.id);
+    if (saved) {
+      cmRef.current?.focus();
+      cmRef.current?.setSelection(saved.start, saved.end);
+    }
+  }, [loadCursor, note, note?.meta.id]);
+
   useEffect(() => {
     if (!note) return;
-    const saved = loadCursor(note.meta.id);
-    if (saved) restoreCursorRef.current = saved;
     const draft = loadDraft(note.meta.id);
     if (draft && draft !== note.content) {
       updateNote(note.meta.id, { content: draft });
       showToast('info', t('note.draftRestored'));
     }
-  }, [loadCursor, loadDraft, note, showToast, updateNote, t]);
-
-  useLayoutEffect(() => {
-    if (!note || !restoreCursorRef.current) return;
-    const { start, end } = restoreCursorRef.current;
-    cmRef.current?.focus();
-    cmRef.current?.setSelection(start, end);
-  }, [note, note?.meta.id]);
+  }, [loadDraft, note, showToast, updateNote, t]);
 
   useEffect(() => {
     if (!note) return;
@@ -493,7 +489,7 @@ export function Editor() {
           </button>
         ))}
         <button className="editor-tab add" onClick={() => setTagModalOpen(true)}>{t('manage.tabTags')}</button>
-        <button className="editor-tab add" onClick={() => setVersionControlOpen(true)}>⏱ {t('version.title')}</button>
+        <button className="editor-tab add" onClick={() => window.dispatchEvent(new CustomEvent('noteforge:open-version-history'))}>⏱ {t('version.title')}</button>
       </div>
       <header className="document-header">
         <input className="document-title" value={meta.title} onChange={(event) => updateNote(meta.id, { title: event.target.value })} />
@@ -650,15 +646,7 @@ export function Editor() {
             : `${t('note.lastEditedAt')}${new Date(meta.updatedAt).toLocaleString()}`}
         </span>
       </footer>
-      <VersionControlModal
-        open={versionControlOpen}
-        noteId={meta.id}
-        onClose={() => setVersionControlOpen(false)}
-        onCheckoutVersion={(commitId) => restoreVersion(meta.id, commitId)}
-        onCheckoutBranch={(branch) => checkoutBranch(meta.id, branch)}
-        onCreateBranch={(branch, fromCommit) => createBranch(meta.id, branch, fromCommit)}
-        onRestore={() => { /* note will be updated via store */ }}
-      />
+
       {isPropertiesOpen && (
         <aside className="note-properties-drawer">
           <div className="drawer-header">

@@ -462,7 +462,11 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorHandle, CodeMirrorEditorPro
       setSelection: (from: number, to: number) => {
         const view = viewRef.current;
         if (!view) return;
-        view.dispatch({ selection: { anchor: from, head: to } });
+        const docLen = view.state.doc.length;
+        const safeFrom = Math.min(Math.max(0, from), docLen);
+        const safeTo = Math.min(Math.max(0, to), docLen);
+        if (safeFrom === safeTo && safeFrom === 0) return; // no-op on empty doc
+        view.dispatch({ selection: { anchor: safeFrom, head: safeTo } });
       },
       getContent: () => {
         const view = viewRef.current;

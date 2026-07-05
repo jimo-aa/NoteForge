@@ -37,13 +37,14 @@ public class VersionController {
         return ResponseEntity.ok(ApiResponse.success(version));
     }
 
-    @PostMapping
-    public ResponseEntity<ApiResponse<VersionResponse>> createVersion(
+    @PostMapping("/snapshot")
+    public ResponseEntity<ApiResponse<VersionResponse>> createSnapshot(
             Authentication auth,
             @PathVariable String noteId,
             @Valid @RequestBody VersionCreateRequest request) {
-        VersionResponse version = versionService.createVersion(
-                noteId, auth.getName(), request.getTitle(), request.getContent(), request.getContentPlain());
+        VersionResponse version = versionService.createSnapshot(
+                noteId, auth.getName(), request.getTitle(), request.getDescription(),
+                request.getContent(), request.getContentPlain());
         return ResponseEntity.ok(ApiResponse.success(version));
     }
 

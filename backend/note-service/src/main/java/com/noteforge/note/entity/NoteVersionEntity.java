@@ -31,6 +31,9 @@ public class NoteVersionEntity {
     @Column(columnDefinition = "TEXT")
     private String contentPlain;
 
+    @Column(columnDefinition = "TEXT")
+    private String description;
+
     @Column(nullable = false)
     private LocalDateTime createdAt;
 

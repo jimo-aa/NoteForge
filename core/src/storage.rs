@@ -7,7 +7,7 @@ use rusqlite::{Connection, params};
 use std::path::Path;
 use tracing::info;
 
-use crate::types::{self, Note, NoteMeta, Notebook, Tag, CreateNoteRequest, UpdateNoteRequest, SyncQueueItem, BacklinkEntry};
+use crate::types::{self, Note, NoteMeta, Notebook, Tag, CreateNoteRequest, UpdateNoteRequest, SyncQueueItem, BacklinkEntry, NoteSnapshot};
 use crate::encryption::EncryptionManager;
 use crate::error::CoreError;
 
@@ -147,11 +147,25 @@ impl LocalStorage {
                  payload    TEXT NOT NULL,
                  created_at INTEGER NOT NULL
              );
+
+             CREATE TABLE IF NOT EXISTS note_snapshots (
+                 id             TEXT PRIMARY KEY,
+                 note_id        TEXT NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
+                 version_number INTEGER NOT NULL,
+                 title          TEXT NOT NULL DEFAULT '',
+                 description    TEXT NOT NULL DEFAULT '',
+                 content        TEXT NOT NULL DEFAULT '',
+                 content_plain  TEXT NOT NULL DEFAULT '',
+                 word_count     INTEGER NOT NULL DEFAULT 0,
+                 is_auto_save   INTEGER NOT NULL DEFAULT 0,
+                 created_at     INTEGER NOT NULL
+             );
              "
         )?;
 
         self.ensure_note_columns()?;
         self.ensure_indexes()?;
+        self.ensure_snapshot_indexes()?;
         Ok(())
     }
 
@@ -165,6 +179,11 @@ impl LocalStorage {
         }
         self.conn.execute("CREATE INDEX IF NOT EXISTS idx_notes_notebook ON notes(notebook_id) WHERE is_deleted = 0", [])?;
         self.conn.execute("CREATE INDEX IF NOT EXISTS idx_notes_updated ON notes(updated_at DESC)", [])?;
+        Ok(())
+    }
+
+    fn ensure_snapshot_indexes(&self) -> Result<(), CoreError> {
+        self.conn.execute("CREATE INDEX IF NOT EXISTS idx_snapshots_note ON note_snapshots(note_id, version_number DESC)", [])?;
         Ok(())
     }
 
@@ -638,6 +657,165 @@ impl LocalStorage {
             |row| row.get::<_, String>(0),
         )?.collect::<Result<Vec<_>, _>>()?;
         Ok(targets)
+    }
+
+    // ============================================================
+    // 版本快照 (NoteSnapshot) — 替代旧的 git + milestone 体系
+    // ============================================================
+
+    /// 创建手动版本快照（用户主动保存的版本）
+    pub fn create_manual_snapshot(&self, note_id: &str, title: &str, description: &str) -> Result<NoteSnapshot, CoreError> {
+        let note = self.get_note(note_id)?;
+        let id = types::generate_id();
+        let now = types::now_ms();
+        let next_version = self.next_snapshot_version(note_id)?;
+
+        let content_encrypted = self.encrypt_content(&note.content)?;
+
+        self.conn.execute(
+            "INSERT INTO note_snapshots (id, note_id, version_number, title, description, content, content_plain, word_count, is_auto_save, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 0, ?9)",
+            params![id, note_id, next_version, title, description, content_encrypted, note.content_plain, note.meta.word_count as i32, now],
+        )?;
+
+        self.get_snapshot(&id)
+    }
+
+    /// 自动创建版本快照（编辑保存时触发）
+    pub fn create_auto_snapshot(&self, note_id: &str, content: &str, content_plain: &str, word_count: u32) -> Result<NoteSnapshot, CoreError> {
+        let id = types::generate_id();
+        let now = types::now_ms();
+        let next_version = self.next_snapshot_version(note_id)?;
+        let title = format!("自动保存 #{}", next_version);
+
+        let content_encrypted = self.encrypt_content(content)?;
+
+        self.conn.execute(
+            "INSERT INTO note_snapshots (id, note_id, version_number, title, description, content, content_plain, word_count, is_auto_save, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 1, ?9)",
+            params![id, note_id, next_version, title, "", content_encrypted, content_plain, word_count as i32, now],
+        )?;
+
+        self.get_snapshot(&id)
+    }
+
+    /// 列出笔记的所有快照（最新在前）
+    pub fn list_snapshots(&self, note_id: &str) -> Result<Vec<NoteSnapshot>, CoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, note_id, version_number, title, description, content, content_plain, word_count, is_auto_save, created_at
+             FROM note_snapshots WHERE note_id = ?1
+             ORDER BY version_number DESC"
+        )?;
+        let snapshots = stmt.query_map(params![note_id], |row| {
+            Ok(NoteSnapshot {
+                id: row.get(0)?,
+                note_id: row.get(1)?,
+                version_number: row.get::<_, i32>(2)? as u32,
+                title: row.get(3)?,
+                description: row.get(4)?,
+                content: row.get(5)?,
+                content_plain: row.get(6)?,
+                word_count: row.get::<_, i32>(7)? as u32,
+                is_auto_save: row.get::<_, i32>(8)? != 0,
+                created_at: row.get::<_, i64>(9)? as u64,
+            })
+        })?.collect::<Result<Vec<_>, _>>()?;
+
+        // Decrypt content for each snapshot
+        let mut result = Vec::with_capacity(snapshots.len());
+        for mut s in snapshots {
+            s.content = self.decrypt_content(&s.content)?;
+            result.push(s);
+        }
+        Ok(result)
+    }
+
+    /// 获取单个快照
+    pub fn get_snapshot(&self, id: &str) -> Result<NoteSnapshot, CoreError> {
+        let mut snapshot = self.conn.query_row(
+            "SELECT id, note_id, version_number, title, description, content, content_plain, word_count, is_auto_save, created_at
+             FROM note_snapshots WHERE id = ?1",
+            params![id],
+            |row| {
+                Ok(NoteSnapshot {
+                    id: row.get(0)?,
+                    note_id: row.get(1)?,
+                    version_number: row.get::<_, i32>(2)? as u32,
+                    title: row.get(3)?,
+                    description: row.get(4)?,
+                    content: row.get(5)?,
+                    content_plain: row.get(6)?,
+                    word_count: row.get::<_, i32>(7)? as u32,
+                    is_auto_save: row.get::<_, i32>(8)? != 0,
+                    created_at: row.get::<_, i64>(9)? as u64,
+                })
+            },
+        )?;
+        snapshot.content = self.decrypt_content(&snapshot.content)?;
+        Ok(snapshot)
+    }
+
+    /// 获取最新快照版本号 + 1（用于插入）
+    fn next_snapshot_version(&self, note_id: &str) -> Result<u32, CoreError> {
+        let max: Option<i32> = self.conn.query_row(
+            "SELECT MAX(version_number) FROM note_snapshots WHERE note_id = ?1",
+            params![note_id],
+            |row| row.get(0),
+        ).ok().flatten();
+        Ok(max.map(|v| v as u32 + 1).unwrap_or(1))
+    }
+
+    /// 删除快照
+    pub fn delete_snapshot(&self, id: &str) -> Result<bool, CoreError> {
+        let affected = self.conn.execute(
+            "DELETE FROM note_snapshots WHERE id = ?1",
+            params![id],
+        )?;
+        Ok(affected > 0)
+    }
+
+    /// 标记快照（给自动快照添加名称/描述）
+    pub fn tag_snapshot(&self, id: &str, title: &str, description: &str) -> Result<NoteSnapshot, CoreError> {
+        self.conn.execute(
+            "UPDATE note_snapshots SET title = ?1, description = ?2 WHERE id = ?3",
+            params![title, description, id],
+        )?;
+        self.get_snapshot(id)
+    }
+
+    /// 获取笔记的快照数量
+    pub fn count_snapshots(&self, note_id: &str) -> Result<u32, CoreError> {
+        let count: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM note_snapshots WHERE note_id = ?1",
+            params![note_id],
+            |row| row.get(0),
+        )?;
+        Ok(count as u32)
+    }
+
+    /// 获取指定数量的最近快照摘要（预览用）
+    pub fn list_snapshot_summaries(&self, note_id: &str, limit: u32) -> Result<Vec<NoteSnapshot>, CoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, note_id, version_number, title, description, '', content_plain, word_count, is_auto_save, created_at
+             FROM note_snapshots WHERE note_id = ?1
+             ORDER BY version_number DESC
+             LIMIT ?2"
+        )?;
+        let snapshots = stmt.query_map(params![note_id, limit as i32], |row| {
+            Ok(NoteSnapshot {
+                id: row.get(0)?,
+                note_id: row.get(1)?,
+                version_number: row.get::<_, i32>(2)? as u32,
+                title: row.get(3)?,
+                description: row.get(4)?,
+                content: String::new(),  // 摘要不加载内容
+                content_plain: row.get(5)?,
+                word_count: row.get::<_, i32>(7)? as u32,
+                is_auto_save: row.get::<_, i32>(8)? != 0,
+                created_at: row.get::<_, i64>(9)? as u64,
+            })
+        })?.collect::<Result<Vec<_>, _>>()?;
+        Ok(snapshots)
     }
 
     /// 获取笔记的反向链接（包含源笔记的标题）

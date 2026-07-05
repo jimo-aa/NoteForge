@@ -175,6 +175,58 @@ pub struct BacklinkEntry {
     pub source_title: String,
 }
 
+// ============================================================
+// 版本快照 (NoteSnapshot) — 替代旧的 git.git_history + milestone
+// ============================================================
+
+/// 笔记版本快照
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NoteSnapshot {
+    pub id: String,
+    pub note_id: String,
+    pub version_number: u32,
+    pub title: String,
+    pub description: String,
+    pub content: String,
+    pub content_plain: String,
+    pub word_count: u32,
+    pub is_auto_save: bool,
+    pub created_at: u64,
+}
+
+/// Diff 操作
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiffOperation {
+    pub op_type: String,  // "add" | "remove" | "equal"
+    pub line_num: u32,
+    pub old_text: Option<String>,
+    pub new_text: Option<String>,
+    pub context: String,
+}
+
+/// Diff 结果
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiffResult {
+    pub from_version: String,
+    pub to_version: String,
+    pub operations: Vec<DiffOperation>,
+    pub similarity: f32,
+    pub change_summary: ChangeSummary,
+}
+
+/// 变更摘要
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChangeSummary {
+    pub lines_added: u32,
+    pub lines_removed: u32,
+    pub lines_modified: u32,
+    pub word_count_delta: i32,
+}
+
 /// 获取当前时间戳（毫秒）
 pub fn now_ms() -> u64 {
     std::time::SystemTime::now()
