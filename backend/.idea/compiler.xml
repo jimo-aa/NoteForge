@@ -14,14 +14,22 @@
         <processorPath useClasspath="false">
           <entry name="$USER_HOME$/.gradle/caches/modules-2/files-2.1/org.projectlombok/lombok/1.18.32/17d46b3e205515e1e8efd3ee4d57ce8018914163/lombok-1.18.32.jar" />
         </processorPath>
-        <module name="noteforge-backend.note-service.main" />
         <module name="noteforge-backend.user-service.main" />
+        <module name="noteforge-backend.ai-service.main" />
+        <module name="noteforge-backend.note-service.main" />
+        <module name="noteforge-backend.gateway.main" />
       </profile>
     </annotationProcessing>
     <bytecodeTargetLevel target="21" />
   </component>
   <component name="JavacSettings">
     <option name="ADDITIONAL_OPTIONS_OVERRIDE">
+      <module name="noteforge-backend.ai-service" options="-parameters" />
+      <module name="noteforge-backend.ai-service.main" options="-parameters" />
+      <module name="noteforge-backend.ai-service.test" options="-parameters" />
+      <module name="noteforge-backend.gateway" options="-parameters" />
+      <module name="noteforge-backend.gateway.main" options="-parameters" />
+      <module name="noteforge-backend.gateway.test" options="-parameters" />
       <module name="noteforge-backend.note-service" options="-parameters" />
       <module name="noteforge-backend.note-service.main" options="-parameters" />
       <module name="noteforge-backend.note-service.test" options="-parameters" />

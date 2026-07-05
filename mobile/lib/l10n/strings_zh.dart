@@ -73,6 +73,11 @@ const Map<String, String> zhStrings = {
   'editor.todo': '待办',
   'editor.quote': '引用',
   'editor.justNow': '刚刚',
+  'editor.minutesAgo': '{m}分钟前',
+  'editor.hoursAgo': '{h}小时前',
+  'editor.daysAgo': '{d}天前',
+  'editor.untitled': '未命名笔记',
+  'editor.wordCountLabel': '字数 {count}',
 
   // ========== 首页 Tab 页 ==========
   'home.title': '笔记',
@@ -82,12 +87,17 @@ const Map<String, String> zhStrings = {
   'home.recent': '最近更新',
   'home.noNotes': '暂无笔记',
   'home.createFirstNote': '创建你的第一条笔记',
+  'home.greetingMorning': '早上好 🌅',
+  'home.greetingAfternoon': '下午好 ☀️',
+  'home.greetingEvening': '晚上好 🌙',
+  'home.greetingNight': '夜深了 🌃',
   'home.pinnedCount': '{count} 篇笔记',
 
   // ========== 笔记本 ==========
   'notebooks.title': '笔记本',
   'notebooks.allNotes': '全部笔记',
   'notebooks.noteCount': '{count} 条笔记',
+  'home.pinnedCountNum': '{count}',
   'notebooks.newNotebook': '📓 新建笔记本',
   'notebooks.nameHint': '给笔记本起个名字吧',
   'notebooks.cancel': '取消',
@@ -96,6 +106,8 @@ const Map<String, String> zhStrings = {
   'notebooks.deleteConfirm': '确定删除笔记本？',
   'notebooks.deleteTitle': '删除笔记本',
   'notebooks.deleteSuccess': '笔记本已删除',
+  'notebooks.delete': '删除',
+  'notebooks.deleteConfirmMsg': '确定删除"{name}"？',
 
   // ========== 收藏 ==========
   'favorites.title': '收藏',
@@ -117,6 +129,8 @@ const Map<String, String> zhStrings = {
   'profile.logout': '退出登录',
   'profile.logoutConfirm': '确认退出？',
   'profile.loggedOut': '已退出',
+  'profile.defaultUsername': 'Forge User',
+  'profile.defaultEmail': 'user@noteforge.app',
 
   // ========== 搜索 ==========
   'search.title': '搜索',
@@ -132,7 +146,7 @@ const Map<String, String> zhStrings = {
   'search.found': '找到 {count} 条相关笔记',
 
   // ========== 新建笔记/笔记本弹窗 ==========
-  'sheet.newNote': '✚ 新建笔记',
+  'sheet.newNote': '新建笔记',
   'sheet.newNoteTitle': '标题',
   'sheet.newNoteTitleHint': '笔记标题...',
   'sheet.newNoteContent': '内容预览（可选）',
@@ -140,7 +154,7 @@ const Map<String, String> zhStrings = {
   'sheet.newNoteTags': '标签（逗号分隔）',
   'sheet.newNoteTagsHint': '如: Rust, 架构',
   'sheet.noteCreated': '✓ 笔记已创建',
-  'sheet.newNotebook': '📓 新建笔记本',
+  'sheet.newNotebook': '新建笔记本',
   'sheet.notebookName': '名称',
   'sheet.notebookNameHint': '给笔记本起个名字吧',
   'sheet.icon': '图标',
@@ -149,11 +163,11 @@ const Map<String, String> zhStrings = {
   'sheet.create': '创建',
 
   // ========== 主题设置 ==========
-  'theme.title': '🎨 主题与外观',
+  'theme.title': '主题与外观',
   'theme.mode': '主题模式',
-  'theme.light': '☀️ 浅色',
-  'theme.dark': '🌙 深色',
-  'theme.system': '💻 系统',
+  'theme.light': '浅色',
+  'theme.dark': '深色',
+  'theme.system': '系统',
   'theme.fontSize': '字体大小',
   'theme.small': '小',
   'theme.medium': '中',

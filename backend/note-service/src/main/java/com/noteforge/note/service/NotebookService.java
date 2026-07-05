@@ -37,6 +37,12 @@ public class NotebookService {
                 .collect(Collectors.toList());
     }
 
+    @Cacheable(value = "notebooks:detail", key = "#notebookId", unless = "#result == null")
+    public NotebookResponse getNotebook(String notebookId, String userId) {
+        NotebookEntity entity = findNotebook(notebookId, userId);
+        return NotebookResponse.fromEntity(entity);
+    }
+
     @CacheEvict(value = "notebooks:list", key = "#userId")
     public NotebookResponse renameNotebook(String notebookId, String userId, String name) {
         NotebookEntity entity = findNotebook(notebookId, userId);

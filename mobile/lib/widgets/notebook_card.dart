@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../core/models.dart';
 import '../core/theme.dart';
+import '../l10n/locale_provider.dart';
 
 class NotebookCard extends StatelessWidget {
   final Notebook notebook;
@@ -10,6 +12,7 @@ class NotebookCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.watch<LocaleProvider>();
     return GestureDetector(
       onTap: onTap, onLongPress: onLongPress,
       child: Container(
@@ -26,7 +29,7 @@ class NotebookCard extends StatelessWidget {
           const SizedBox(width: 12),
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(notebook.name, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis),
-            Text('${notebook.noteCount} 条笔记', style: TextStyle(fontSize: 12, color: context.textMutedColor)),
+            Text(l10n.tr('notebooks.noteCount', args: {'count': '${notebook.noteCount}'}), style: TextStyle(fontSize: 12, color: context.textMutedColor)),
           ])),
           Container(width: 8, height: 8, decoration: BoxDecoration(color: _c(notebook.color), shape: BoxShape.circle)),
           const SizedBox(width: 8),

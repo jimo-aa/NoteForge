@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../core/app_icons.dart';
 import '../../core/theme.dart';
+import '../../l10n/locale_provider.dart';
 import '../../providers/note_provider.dart';
 
 Future<Map<String, dynamic>?> showNewNoteSheet(BuildContext context) {
@@ -30,6 +32,7 @@ class _NewNoteSheetState extends State<_NewNoteSheet> {
   @override
   Widget build(BuildContext context) {
     final np = context.watch<NoteProvider>();
+    final l10n = context.watch<LocaleProvider>();
     final bi = MediaQuery.of(context).viewInsets.bottom;
     return Padding(
       padding: EdgeInsets.only(bottom: bi),
@@ -37,29 +40,29 @@ class _NewNoteSheetState extends State<_NewNoteSheet> {
         Container(margin: const EdgeInsets.only(top: 12, bottom: 16), width: 36, height: 4,
           decoration: BoxDecoration(color: context.borderColor, borderRadius: BorderRadius.circular(2))),
         Padding(padding: const EdgeInsets.symmetric(horizontal: 16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('✚ 新建笔记', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppTheme.text)),
+          Row(children: [const Icon(AppIcons.add, size: 20, color: AppTheme.accent), const SizedBox(width: 8), Text(l10n.tr('sheet.newNote'), style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: context.textPrimary))]),
           const SizedBox(height: 16),
-          _f('标题', TextField(controller: _titleCtrl, decoration: const InputDecoration(hintText: '笔记标题...'), autofocus: true)),
+          _f(l10n.tr('sheet.newNoteTitle'), TextField(controller: _titleCtrl, decoration: InputDecoration(hintText: l10n.tr('sheet.newNoteTitleHint')), autofocus: true)),
           const SizedBox(height: 14),
-          _f('笔记本', DropdownButtonFormField<String?>(
+          _f(l10n.tr('editor.notebook'), DropdownButtonFormField<String?>(
             initialValue: _nbId,
-            decoration: InputDecoration(hintText: '无', filled: true, fillColor: context.surface,
+            decoration: InputDecoration(hintText: l10n.tr('editor.none'), filled: true, fillColor: context.surface,
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(AppTheme.radius), borderSide: BorderSide(color: context.borderLightColor))),
-            items: [DropdownMenuItem(value: null, child: Text('无', style: TextStyle(color: context.textMutedColor))),
+            items: [DropdownMenuItem(value: null, child: Text(l10n.tr('editor.none'), style: TextStyle(color: context.textMutedColor))),
               ...np.notebooks.map((nb) => DropdownMenuItem(value: nb.id, child: Text('${nb.icon} ${nb.name}')))],
             onChanged: (v) => setState(() => _nbId = v),
           )),
           const SizedBox(height: 14),
-          _f('标签（逗号分隔）', TextField(controller: _tagsCtrl, decoration: const InputDecoration(hintText: '如: Rust, 架构'))),
+          _f(l10n.tr('sheet.newNoteTags'), TextField(controller: _tagsCtrl, decoration: InputDecoration(hintText: l10n.tr('sheet.newNoteTagsHint')))),
           const SizedBox(height: 14),
-          _f('内容预览（可选）', TextField(controller: _contentCtrl, maxLines: 3, decoration: const InputDecoration(hintText: '可选的笔记内容...'))),
+          _f(l10n.tr('sheet.newNoteContent'), TextField(controller: _contentCtrl, maxLines: 3, decoration: InputDecoration(hintText: l10n.tr('sheet.newNoteContentHint')))),
           const SizedBox(height: 20),
           Row(children: [
             Expanded(child: TextButton(
               onPressed: () => Navigator.pop(context),
               style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 12), backgroundColor: AppTheme.borderLight, foregroundColor: AppTheme.textSecondary,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppTheme.radius))),
-              child: const Text('取消', style: TextStyle(fontWeight: FontWeight.w600)))),
+              child: Text(l10n.tr('sheet.cancel'), style: const TextStyle(fontWeight: FontWeight.w600)))),
             const SizedBox(width: 8),
             Expanded(child: ElevatedButton(
               onPressed: () => Navigator.pop(context, {
@@ -67,7 +70,7 @@ class _NewNoteSheetState extends State<_NewNoteSheet> {
                 'tags': _tagsCtrl.text.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList(),
                 'content': _contentCtrl.text,
               }),
-              child: const Text('创建', style: TextStyle(fontWeight: FontWeight.w600)))),
+              child: Text(l10n.tr('sheet.create'), style: const TextStyle(fontWeight: FontWeight.w600)))),
           ]),
           const SizedBox(height: 24),
         ])),

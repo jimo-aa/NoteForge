@@ -2,7 +2,9 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/ai-service/noteforge-backend.ai-service.main.iml" filepath="$PROJECT_DIR$/.idea/modules/ai-service/noteforge-backend.ai-service.main.iml" />
       <module fileurl="file://$PROJECT_DIR$/.idea/modules/common/noteforge-backend.common.main.iml" filepath="$PROJECT_DIR$/.idea/modules/common/noteforge-backend.common.main.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/gateway/noteforge-backend.gateway.main.iml" filepath="$PROJECT_DIR$/.idea/modules/gateway/noteforge-backend.gateway.main.iml" />
       <module fileurl="file://$PROJECT_DIR$/.idea/modules/note-service/noteforge-backend.note-service.main.iml" filepath="$PROJECT_DIR$/.idea/modules/note-service/noteforge-backend.note-service.main.iml" />
       <module fileurl="file://$PROJECT_DIR$/.idea/modules/user-service/noteforge-backend.user-service.main.iml" filepath="$PROJECT_DIR$/.idea/modules/user-service/noteforge-backend.user-service.main.iml" />
     </modules>

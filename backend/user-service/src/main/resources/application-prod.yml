@@ -5,20 +5,29 @@ spring:
   lifecycle:
     timeout-per-shutdown-phase: 30s
   datasource:
-    url: ${DB_URL}
-    username: ${DB_USER}
-    password: ${DB_PASS}
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/noteforge}
+    username: ${DB_USER:noteforge}
+    password: ${DB_PASS:noteforge123}
   jpa:
     hibernate:
-      ddl-auto: validate
+      ddl-auto: update
     show-sql: false
     properties:
       hibernate:
         format_sql: false
+  data:
+    redis:
+      host: ${REDIS_HOST:redis}
+      port: ${REDIS_PORT:6379}
 
 jwt:
-  secret: ${JWT_SECRET}
+  secret: ${JWT_SECRET:noteforge-shared-jwt-secret-key-2026}
   access-token-expiration: ${JWT_ACCESS_TOKEN_EXPIRATION:900000}
+
+management:
+  health:
+    redis:
+      enabled: false
 
 logging:
   level:

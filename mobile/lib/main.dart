@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
+import 'core/app_icons.dart';
 import 'core/theme.dart';
 import 'l10n/locale_provider.dart';
 import 'providers/auth_provider.dart';
 import 'providers/note_provider.dart';
+import 'providers/theme_provider.dart';
 import 'screens/login_screen.dart';
 import 'screens/register_screen.dart';
 import 'screens/notes_screen.dart';
@@ -20,15 +22,8 @@ void main() {
   runApp(const NoteForgeApp());
 }
 
-class NoteForgeApp extends StatefulWidget {
+class NoteForgeApp extends StatelessWidget {
   const NoteForgeApp({super.key});
-  @override
-  State<NoteForgeApp> createState() => _NoteForgeAppState();
-}
-
-class _NoteForgeAppState extends State<NoteForgeApp> {
-  final ThemeMode _themeMode = ThemeMode.dark;
-
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
@@ -36,6 +31,7 @@ class _NoteForgeAppState extends State<NoteForgeApp> {
         ChangeNotifierProvider(create: (_) => LocaleProvider()),
         ChangeNotifierProvider(create: (_) => AuthProvider()..hydrate()),
         ChangeNotifierProvider(create: (_) => NoteProvider()),
+        ChangeNotifierProvider(create: (_) => ThemeProvider()..hydrate()),
       ],
       child: Consumer<LocaleProvider>(
         builder: (ctx, localeProv, _) {
@@ -48,9 +44,9 @@ class _NoteForgeAppState extends State<NoteForgeApp> {
               GlobalWidgetsLocalizations.delegate,
               GlobalCupertinoLocalizations.delegate,
             ],
-            theme: AppTheme.light,
-            darkTheme: AppTheme.dark,
-            themeMode: _themeMode,
+            theme: AppTheme.lightWith(accentColor: ctx.watch<ThemeProvider>().accentColor, fontSizeScale: ctx.watch<ThemeProvider>().fontSizeScale),
+            darkTheme: AppTheme.darkWith(accentColor: ctx.watch<ThemeProvider>().accentColor, fontSizeScale: ctx.watch<ThemeProvider>().fontSizeScale),
+            themeMode: ctx.watch<ThemeProvider>().mode,
             debugShowCheckedModeBanner: false,
             home: const _AppShell(),
             onGenerateRoute: (settings) {
@@ -108,15 +104,16 @@ class _MainAppState extends State<_MainApp> {
       const FavoritesScreen(),
       const ProfileScreen(),
     ];
-    final items = [
-      ('📄', l10n.tr('home.title')),
-      ('🔍', l10n.tr('search.title')),
-      ('📓', l10n.tr('notebooks.title')),
-      ('⭐', l10n.tr('favorites.title')),
-      ('👤', l10n.tr('profile.title')),
+    final items = <(IconData, String)>[
+      (AppIcons.notes, l10n.tr('home.title')),
+      (AppIcons.search, l10n.tr('search.title')),
+      (AppIcons.notebooks, l10n.tr('notebooks.title')),
+      (AppIcons.favorites, l10n.tr('favorites.title')),
+      (AppIcons.profile, l10n.tr('profile.title')),
     ];
 
     return Scaffold(
+      resizeToAvoidBottomInset: false,
       body: IndexedStack(index: _tab, children: tabs),
       bottomNavigationBar: Container(
         color: context.surface,
@@ -137,7 +134,7 @@ class _MainAppState extends State<_MainApp> {
     );
   }
 
-  Widget _tabItem(int i, String icon, String label) {
+  Widget _tabItem(int i, IconData icon, String label) {
     final active = i == _tab;
     return Expanded(
       child: GestureDetector(
@@ -145,7 +142,7 @@ class _MainAppState extends State<_MainApp> {
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 4),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Text(icon, style: TextStyle(fontSize: 21, color: active ? null : context.textMutedColor)),
+            Icon(icon, size: 21, color: active ? AppTheme.accent : context.textMutedColor),
             const SizedBox(height: 2),
             Text(label, style: TextStyle(fontSize: 10, fontWeight: active ? FontWeight.w600 : FontWeight.w500, color: active ? AppTheme.accent : context.textMutedColor)),
           ]),
@@ -157,7 +154,7 @@ class _MainAppState extends State<_MainApp> {
   Future<void> _newNote() async {
     final result = await showNewNoteSheet(context);
     if (result != null && mounted) {
-      context.read<NoteProvider>().createNote(
+      await context.read<NoteProvider>().createNote(
         title: result['title'] as String? ?? '',
         content: result['content'] as String? ?? '',
         notebookId: result['notebookId'] as String?,

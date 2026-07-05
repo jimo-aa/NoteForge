@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../core/app_icons.dart';
 import '../core/models.dart';
 import '../core/theme.dart';
+import '../l10n/locale_provider.dart';
 
 class NoteCard extends StatelessWidget {
   final NoteItem note;
@@ -9,6 +12,7 @@ class NoteCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.watch<LocaleProvider>();
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -29,7 +33,7 @@ class NoteCard extends StatelessWidget {
           Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
             _icon(context.accentSubtleBg),
             const SizedBox(width: 8),
-            Expanded(child: Text(note.title.isNotEmpty ? note.title : '无标题',
+            Expanded(child: Text(note.title.isNotEmpty ? note.title : l10n.tr('noteCard.untitled'),
               style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, height: 1.4), maxLines: 2, overflow: TextOverflow.ellipsis)),
           ]),
           if (note.contentPlain.isNotEmpty || note.content.isNotEmpty) ...[
@@ -39,7 +43,7 @@ class NoteCard extends StatelessWidget {
           ],
           const SizedBox(height: 6),
           Row(children: [
-            Text(_relDate(note.updatedAt), style: TextStyle(fontSize: 11, color: context.textMutedColor)),
+            Text(_relDate(note.updatedAt, l10n), style: TextStyle(fontSize: 11, color: context.textMutedColor)),
             if (note.tags.isNotEmpty) ...[
               const SizedBox(width: 8),
               ...note.tags.take(2).map((t) => Container(
@@ -57,22 +61,22 @@ class NoteCard extends StatelessWidget {
   }
 
   Widget _icon(Color bg) {
-    final e = note.tags.contains('架构') ? '📘' : note.tags.contains('Rust') ? '⚡' : note.tags.contains('计划') ? '🎯' : note.isPinned ? '📌' : '📝';
+    final ic = note.tags.contains('架构') ? AppIcons.book : note.tags.contains('Rust') ? AppIcons.flash : note.tags.contains('计划') ? AppIcons.target : note.isPinned ? AppIcons.pin : AppIcons.note;
     return Container(width: 32, height: 32,
       decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(8)),
-      alignment: Alignment.center, child: Text(e, style: const TextStyle(fontSize: 15)));
+      alignment: Alignment.center, child: Icon(ic, size: 18, color: AppTheme.accent));
   }
 
-  String _relDate(int ts) {
+  String _relDate(int ts, LocaleProvider l10n) {
     if (ts == 0) return '';
     final d = DateTime.now().millisecondsSinceEpoch - ts;
     final m = d ~/ 60000;
-    if (m < 1) return '刚刚';
-    if (m < 60) return '$m分钟前';
+    if (m < 1) return l10n.tr('editor.justNow');
+    if (m < 60) return l10n.tr('editor.minutesAgo', args: {'m': '$m'});
     final h = m ~/ 60;
-    if (h < 24) return '$h小时前';
+    if (h < 24) return l10n.tr('editor.hoursAgo', args: {'h': '$h'});
     final da = h ~/ 24;
-    if (da < 30) return '$da天前';
+    if (da < 30) return l10n.tr('editor.daysAgo', args: {'d': '$da'});
     final dt = DateTime.fromMillisecondsSinceEpoch(ts);
     return '${dt.month}/${dt.day}';
   }

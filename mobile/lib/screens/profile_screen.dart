@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../core/app_icons.dart';
 import '../core/theme.dart';
+import '../l10n/locale_provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/note_provider.dart';
+import '../widgets/toast_manager.dart';
 import '../widgets/bottom_sheets/theme_sheet.dart';
 
 class ProfileScreen extends StatelessWidget {
@@ -11,28 +14,30 @@ class ProfileScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
     final np = context.watch<NoteProvider>();
+    final l10n = context.watch<LocaleProvider>();
     return Scaffold(
+      resizeToAvoidBottomInset: false,
       body: ListView(padding: const EdgeInsets.only(bottom: 80), children: [
-        Padding(padding: const EdgeInsets.fromLTRB(16, 12, 16, 8), child: Text('我的', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: context.textPrimary))),
+        Padding(padding: const EdgeInsets.fromLTRB(16, 12, 16, 8), child: Text(l10n.tr('profile.title'), style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: context.textPrimary))),
         Padding(padding: const EdgeInsets.fromLTRB(16, 8, 16, 16), child: Row(children: [
           _avatar(context, auth),
           const SizedBox(width: 16),
           Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(auth.user?.username ?? 'Forge User', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: context.textPrimary)),
-            Text(auth.user?.email ?? 'user@noteforge.app', style: TextStyle(fontSize: 13, color: context.textMutedColor)),
+            Text(auth.user?.username ?? l10n.tr('profile.defaultUsername'), style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: context.textPrimary)),
+            Text(auth.user?.email ?? l10n.tr('profile.defaultEmail'), style: TextStyle(fontSize: 13, color: context.textMutedColor)),
           ]),
         ])),
-        _statsRow(context, np),
+        _statsRow(context, np, l10n),
         const SizedBox(height: 16),
-        _menuRow(context, '☁️', '同步与备份', () {}),
-        _menuRow(context, '🎨', '主题与外观', () => showThemeSheet(context)),
-        _menuRow(context, '🔒', '加密与安全', () {}),
-        _menuRow(context, '💾', '存储管理', () {}),
+        _menuRow(context, AppIcons.syncBackup, l10n.tr('profile.syncBackup'), () => toastKey.currentState?.show(ToastType.info, '即将推出')),
+        _menuRow(context, AppIcons.theme, l10n.tr('profile.themeAppearance'), () => showThemeSheet(context)),
+        _menuRow(context, AppIcons.security, l10n.tr('profile.encryption'), () => toastKey.currentState?.show(ToastType.info, '即将推出')),
+        _menuRow(context, AppIcons.storage, l10n.tr('profile.storage'), () => toastKey.currentState?.show(ToastType.info, '即将推出')),
         const Divider(height: 24),
-        _menuRow(context, '💬', '意见反馈', () {}),
-        _menuRow(context, 'ℹ️', '关于 NoteForge', () {}),
+        _menuRow(context, AppIcons.feedback, l10n.tr('profile.feedback'), () => toastKey.currentState?.show(ToastType.info, '即将推出')),
+        _menuRow(context, AppIcons.about, l10n.tr('profile.about'), () => toastKey.currentState?.show(ToastType.info, '即将推出')),
         const Divider(height: 24),
-        _dangerRow(context, '🚪', '退出登录', () => _logout(context, auth)),
+        _dangerRow(context, AppIcons.logout, l10n.tr('profile.logout'), () => _logout(context, auth, l10n)),
       ]),
     );
   }
@@ -58,42 +63,42 @@ Widget _statCard(BuildContext ctx, String label, String value) {
   ));
 }
 
-Widget _statsRow(BuildContext ctx, NoteProvider np) {
+Widget _statsRow(BuildContext ctx, NoteProvider np, LocaleProvider l10n) {
   return Padding(padding: const EdgeInsets.symmetric(horizontal: 16), child: Row(children: [
-    _statCard(ctx, '笔记', '${np.totalNoteCount}'), const SizedBox(width: 8),
-    _statCard(ctx, '笔记本', '${np.notebooks.length}'), const SizedBox(width: 8),
-    _statCard(ctx, '版本', '${np.notes.fold(0, (s, n) => s + n.version)}'), const SizedBox(width: 8),
-    _statCard(ctx, '收藏', '${np.favoriteCount}'),
+    _statCard(ctx, l10n.tr('profile.notes'), '${np.totalNoteCount}'), const SizedBox(width: 8),
+    _statCard(ctx, l10n.tr('profile.notebooks'), '${np.notebooks.length}'), const SizedBox(width: 8),
+    _statCard(ctx, l10n.tr('profile.versions'), '${np.notes.fold(0, (s, n) => s + n.version)}'), const SizedBox(width: 8),
+    _statCard(ctx, l10n.tr('profile.favorites'), '${np.favoriteCount}'),
   ]));
 }
 
-Widget _menuRow(BuildContext ctx, String icon, String text, VoidCallback onTap) {
+Widget _menuRow(BuildContext ctx, IconData icon, String text, VoidCallback onTap) {
   return GestureDetector(onTap: onTap, child: Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
     child: Row(children: [
       Container(width: 32, height: 32, decoration: BoxDecoration(color: ctx.accentSubtleBg, borderRadius: BorderRadius.circular(8)),
-        alignment: Alignment.center, child: Text(icon, style: const TextStyle(fontSize: 15))),
+        alignment: Alignment.center, child: Icon(icon, size: 18, color: AppTheme.accent)),
       const SizedBox(width: 12),
       Expanded(child: Text(text, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: ctx.textPrimary))),
-      Text('›', style: TextStyle(fontSize: 14, color: ctx.textMutedColor)),
+      Icon(AppIcons.chevronRight, size: 18, color: ctx.textMutedColor),
     ])));
 }
 
-Widget _dangerRow(BuildContext ctx, String icon, String text, VoidCallback onTap) {
+Widget _dangerRow(BuildContext ctx, IconData icon, String text, VoidCallback onTap) {
   return GestureDetector(onTap: onTap, child: Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
     child: Row(children: [
       Container(width: 32, height: 32, decoration: BoxDecoration(color: AppTheme.danger.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
-        alignment: Alignment.center, child: Text(icon, style: const TextStyle(fontSize: 15))),
+        alignment: Alignment.center, child: Icon(icon, size: 18, color: AppTheme.danger)),
       const SizedBox(width: 12),
       Expanded(child: Text(text, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppTheme.danger))),
-      Text('›', style: TextStyle(fontSize: 14, color: ctx.textMutedColor)),
+      Icon(AppIcons.chevronRight, size: 18, color: ctx.textMutedColor),
     ])));
 }
 
-Future<void> _logout(BuildContext ctx, AuthProvider auth) async {
+Future<void> _logout(BuildContext ctx, AuthProvider auth, LocaleProvider l10n) async {
   final ok = await showDialog<bool>(context: ctx, builder: (_) => AlertDialog(
-    title: const Text('确认退出？'),
-    actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
-      TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('退出', style: TextStyle(color: Colors.red)))],
+    title: Text(l10n.tr('profile.logoutConfirm')),
+    actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(l10n.tr('sheet.cancel'))),
+      TextButton(onPressed: () => Navigator.pop(ctx, true), child: Text(l10n.tr('profile.logout'), style: const TextStyle(color: Colors.red)))],
   ));
   if (ok == true && ctx.mounted) { auth.logout(); Navigator.pushNamedAndRemoveUntil(ctx, '/login', (_) => false); }
 }

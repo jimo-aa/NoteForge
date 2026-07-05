@@ -122,6 +122,21 @@ public class NoteService {
         return entities.map(NoteResponse::fromEntity).getContent();
     }
 
+    public Page<NoteResponse> searchNotesFuzzy(String userId, String query, int page, int size) {
+        Pageable pageable = PageRequest.of(page, size);
+        if (query == null || query.isBlank()) {
+            return Page.empty(pageable);
+        }
+        try {
+            return noteRepository.searchByFuzzy(userId, query.trim(), pageable)
+                    .map(NoteResponse::fromEntity);
+        } catch (Exception e) {
+            // Fallback to LIKE for non-PostgreSQL DBs (e.g. H2 in tests)
+            return noteRepository.searchByLike(userId, query.trim(), pageable)
+                    .map(NoteResponse::fromEntity);
+        }
+    }
+
     public Page<NoteResponse> searchNotes(String userId, String query, int page, int size) {
         Pageable pageable = PageRequest.of(page, size);
         try {

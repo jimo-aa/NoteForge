@@ -29,6 +29,7 @@ class _LoginScreenState extends State<LoginScreen> {
     final auth = context.watch<AuthProvider>();
     final l10n = context.watch<LocaleProvider>();
     return Scaffold(
+      resizeToAvoidBottomInset: false,
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(32),

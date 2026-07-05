@@ -30,4 +30,20 @@ public class SearchController {
                 result.getContent(), page, size, result.getTotalElements(), result.getTotalPages());
         return ResponseEntity.ok(ApiResponse.success(pageResp));
     }
+
+    /**
+     * Fuzzy search — typo-tolerant matching using PostgreSQL ILIKE.
+     * Splits query into words, matches word boundaries and partial strings.
+     */
+    @GetMapping("/fuzzy")
+    public ResponseEntity<ApiResponse<PageResponse<NoteResponse>>> fuzzySearch(
+            Authentication auth,
+            @RequestParam String q,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        Page<NoteResponse> result = noteService.searchNotesFuzzy(auth.getName(), q, page, size);
+        PageResponse<NoteResponse> pageResp = new PageResponse<>(
+                result.getContent(), page, size, result.getTotalElements(), result.getTotalPages());
+        return ResponseEntity.ok(ApiResponse.success(pageResp));
+    }
 }

@@ -3,19 +3,10 @@ server:
   shutdown: graceful
 
 spring:
-  lifecycle:
-    timeout-per-shutdown-phase: 30s
-
-cors:
-  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:1420,tauri://localhost}
-
-noteforge:
-  rate-limit:
-    enabled: true
-
-spring:
   application:
     name: note-service
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
   profiles:
     active: dev
   jpa:
@@ -28,6 +19,13 @@ spring:
     redis:
       host: localhost
       port: 6379
+
+cors:
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:1420,tauri://localhost}
+
+noteforge:
+  rate-limit:
+    enabled: true
 
 jwt:
   # note-service validates tokens; secret must match user-service's signing secret in production.

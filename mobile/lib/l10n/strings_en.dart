@@ -31,6 +31,10 @@ const Map<String, String> enStrings = {
   'home.recent': 'Recent',
   'home.noNotes': 'No notes yet',
   'home.createFirstNote': 'Create your first note',
+  'home.greetingMorning': 'Good morning 🌅',
+  'home.greetingAfternoon': 'Good afternoon ☀️',
+  'home.greetingEvening': 'Good evening 🌙',
+  'home.greetingNight': 'Late night 🌃',
   'home.pinnedCount': '{count} notes',
 
   // ========== Notebooks ==========
@@ -45,6 +49,8 @@ const Map<String, String> enStrings = {
   'notebooks.deleteConfirm': 'Delete this notebook?',
   'notebooks.deleteTitle': 'Delete Notebook',
   'notebooks.deleteSuccess': 'Notebook deleted',
+  'notebooks.delete': 'Delete',
+  'notebooks.deleteConfirmMsg': 'Delete "{name}"?',
 
   // ========== Favorites ==========
   'favorites.title': 'Favorites',
@@ -66,6 +72,9 @@ const Map<String, String> enStrings = {
   'profile.logout': 'Logout',
   'profile.logoutConfirm': 'Confirm logout?',
   'profile.loggedOut': 'Logged out',
+  'profile.defaultUsername': 'Forge User',
+  'profile.defaultEmail': 'user@noteforge.app',
+  'home.pinnedCountNum': '{count}',
 
   // ========== Search ==========
   'search.title': 'Search',
@@ -122,9 +131,14 @@ const Map<String, String> enStrings = {
   'editor.todo': 'Todo',
   'editor.quote': 'Quote',
   'editor.justNow': 'just now',
+  'editor.minutesAgo': '{m} min ago',
+  'editor.hoursAgo': '{h} hr ago',
+  'editor.daysAgo': '{d} day ago',
+  'editor.untitled': 'Untitled note',
+  'editor.wordCountLabel': '{count} words',
 
   // ========== Bottom Sheets ==========
-  'sheet.newNote': '✚ New Note',
+  'sheet.newNote': 'New Note',
   'sheet.newNoteTitle': 'Title',
   'sheet.newNoteTitleHint': 'Note title...',
   'sheet.newNoteContent': 'Content (optional)',
@@ -132,7 +146,7 @@ const Map<String, String> enStrings = {
   'sheet.newNoteTags': 'Tags (comma separated)',
   'sheet.newNoteTagsHint': 'e.g. Rust, Architecture',
   'sheet.noteCreated': '✓ Note created',
-  'sheet.newNotebook': '📓 New Notebook',
+  'sheet.newNotebook': 'New Notebook',
   'sheet.notebookName': 'Name',
   'sheet.notebookNameHint': 'Give your notebook a name',
   'sheet.icon': 'Icon',
@@ -141,11 +155,11 @@ const Map<String, String> enStrings = {
   'sheet.create': 'Create',
 
   // ========== Theme ==========
-  'theme.title': '🎨 Theme & Appearance',
+  'theme.title': 'Theme & Appearance',
   'theme.mode': 'Theme Mode',
-  'theme.light': '☀️ Light',
-  'theme.dark': '🌙 Dark',
-  'theme.system': '💻 System',
+  'theme.light': 'Light',
+  'theme.dark': 'Dark',
+  'theme.system': 'System',
   'theme.fontSize': 'Font Size',
   'theme.small': 'Small',
   'theme.medium': 'Medium',

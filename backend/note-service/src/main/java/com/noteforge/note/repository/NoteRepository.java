@@ -39,6 +39,26 @@ public interface NoteRepository extends JpaRepository<NoteEntity, String> {
                                       @Param("query") String query,
                                       Pageable pageable);
 
+    // Fuzzy search — splits query into words, matches each with ILIKE (PostgreSQL only)
+    @Query(value = "SELECT * FROM notes n WHERE n.user_id = :userId AND n.is_deleted = false " +
+           "AND (" +
+           "  STRING_TO_ARRAY(:query, ' ') && STRING_TO_ARRAY(COALESCE(n.title, ''), ' ') " +
+           "  OR STRING_TO_ARRAY(:query, ' ') && STRING_TO_ARRAY(COALESCE(n.content_plain, ''), ' ') " +
+           "  OR n.title ILIKE '%' || :query || '%' " +
+           "  OR n.content_plain ILIKE '%' || :query || '%'" +
+           ") ORDER BY n.updated_at DESC",
+           countQuery = "SELECT count(*) FROM notes n WHERE n.user_id = :userId AND n.is_deleted = false " +
+                        "AND (" +
+                        "  STRING_TO_ARRAY(:query, ' ') && STRING_TO_ARRAY(COALESCE(n.title, ''), ' ') " +
+                        "  OR STRING_TO_ARRAY(:query, ' ') && STRING_TO_ARRAY(COALESCE(n.content_plain, ''), ' ') " +
+                        "  OR n.title ILIKE '%' || :query || '%' " +
+                        "  OR n.content_plain ILIKE '%' || :query || '%'" +
+                        ")",
+           nativeQuery = true)
+    Page<NoteEntity> searchByFuzzy(@Param("userId") String userId,
+                                   @Param("query") String query,
+                                   Pageable pageable);
+
     // LIKE fallback for H2 / non-PostgreSQL environments (e.g. tests)
     @Query("SELECT n FROM NoteEntity n WHERE n.userId = :userId AND n.isDeleted = false " +
            "AND (n.title LIKE %:query% OR n.contentPlain LIKE %:query%)")

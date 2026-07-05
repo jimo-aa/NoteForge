@@ -1,4 +1,3 @@
-version: '3.8'
 name: noteforge
 
 services:
@@ -11,7 +10,7 @@ services:
       POSTGRES_USER: noteforge
       POSTGRES_PASSWORD: noteforge123
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
@@ -33,7 +32,7 @@ services:
     networks:
       - noteforge-net
 
-  # === Elasticsearch (可选 — 全文搜索升级) ===
+  # === Elasticsearch ===
   elasticsearch:
     image: elasticsearch:8.12.0
     container_name: noteforge-es
@@ -49,7 +48,7 @@ services:
     networks:
       - noteforge-net
 
-  # === MinIO (对象存储) ===
+  # === MinIO ===
   minio:
     image: minio/minio
     container_name: noteforge-minio
@@ -65,98 +64,10 @@ services:
     networks:
       - noteforge-net
 
-  # === note-service ===
-  note-service:
-    image: eclipse-temurin:21-jdk-alpine
-    container_name: noteforge-note-service
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_started
-      minio:
-        condition: service_started
-    environment:
-      SPRING_PROFILES_ACTIVE: dev
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/noteforge
-      SPRING_DATASOURCE_USERNAME: noteforge
-      SPRING_DATASOURCE_PASSWORD: noteforge123
-      SPRING_DATA_REDIS_HOST: redis
-      SPRING_DATA_REDIS_PORT: 6379
-      MINIO_ENDPOINT: http://minio:9000
-      MINIO_ACCESS_KEY: noteforge
-      MINIO_SECRET_KEY: noteforge123
-      NOTE_JWT_SECRET: ${NOTE_JWT_SECRET:-${JWT_SECRET:-noteforge-shared-jwt-secret-key-2026}}
-      JWT_ACCESS_TOKEN_EXPIRATION: 3600000
-      JWT_REFRESH_TOKEN_EXPIRATION: 604800000
-    ports:
-      - "8081:8081"
-    volumes:
-      - ../backend:/app
-    working_dir: /app
-    command: >
-      sh -c "cd note-service && ../gradlew bootRun -x test"
-    networks:
-      - noteforge-net
-
-  # === user-service ===
-  user-service:
-    image: eclipse-temurin:21-jdk-alpine
-    container_name: noteforge-user-service
-    depends_on:
-      postgres:
-        condition: service_healthy
-    environment:
-      SPRING_PROFILES_ACTIVE: dev
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/noteforge
-      SPRING_DATASOURCE_USERNAME: noteforge
-      SPRING_DATASOURCE_PASSWORD: noteforge123
-      USER_JWT_SECRET: ${USER_JWT_SECRET:-${JWT_SECRET:-noteforge-shared-jwt-secret-key-2026}}
-      JWT_ACCESS_TOKEN_EXPIRATION: 3600000
-      JWT_REFRESH_TOKEN_EXPIRATION: 604800000
-    ports:
-      - "8082:8082"
-    volumes:
-      - ../backend:/app
-    working_dir: /app
-    command: >
-      sh -c "cd user-service && ../gradlew bootRun -x test"
-    networks:
-      - noteforge-net
-
-  # === ai-service ===
-  ai-service:
-    image: eclipse-temurin:21-jdk-alpine
-    container_name: noteforge-ai-service
-    depends_on:
-      postgres:
-        condition: service_healthy
-    environment:
-      SPRING_PROFILES_ACTIVE: dev
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/noteforge
-      SPRING_DATASOURCE_USERNAME: noteforge
-      SPRING_DATASOURCE_PASSWORD: noteforge123
-      AI_JWT_SECRET: ${AI_JWT_SECRET:-${JWT_SECRET:-noteforge-shared-jwt-secret-key-2026}}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
-    ports:
-      - "8083:8083"
-    volumes:
-      - ../backend:/app
-    working_dir: /app
-    command: >
-      sh -c "cd ai-service && ../gradlew bootRun -x test"
-    networks:
-      - noteforge-net
-
   # === Nginx ===
   nginx:
     image: nginx:alpine
     container_name: noteforge-nginx
-    depends_on:
-      - note-service
-      - user-service
-      - ai-service
     ports:
       - "80:80"
     volumes:

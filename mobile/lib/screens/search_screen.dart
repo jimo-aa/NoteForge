@@ -1,10 +1,11 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../core/api_client.dart';
 import '../core/models.dart';
+import '../core/app_icons.dart';
 import '../core/theme.dart';
 import '../l10n/locale_provider.dart';
-import '../providers/note_provider.dart';
 import '../widgets/note_card.dart';
 
 class SearchScreen extends StatefulWidget {
@@ -27,15 +28,29 @@ class _SearchScreenState extends State<SearchScreen> {
     _deb = Timer(const Duration(milliseconds: 200), () => _search(q));
   }
 
-  void _search(String q) {
+  Future<void> _search(String q) async {
     if (q.isEmpty) { setState(() { _results = []; _searched = false; }); return; }
-    setState(() { _results = context.read<NoteProvider>().searchNotes(q); _searched = true; });
+    final res = await ApiClient.searchNotes(q);
+    if (!mounted) return;
+    if (res.isSuccess && res.data != null) {
+      final data = res.data;
+      // Paginated response: {items: [...], page, size, total}
+      if (data is Map && data.containsKey('items')) {
+        final list = (data['items'] as List<dynamic>?) ?? [];
+        setState(() { _results = list.map((e) => NoteItem.fromJson(e as Map<String, dynamic>)).toList(); _searched = true; });
+      } else if (data is List) {
+        setState(() { _results = data.map((e) => NoteItem.fromJson(e as Map<String, dynamic>)).toList(); _searched = true; });
+      }
+    } else {
+      if (mounted) setState(() => _searched = true);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final l10n = context.watch<LocaleProvider>();
     return Scaffold(
+      resizeToAvoidBottomInset: false,
       body: Column(children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
@@ -59,10 +74,13 @@ class _SearchScreenState extends State<SearchScreen> {
             ),
           ),
         ),
-        Expanded(child: _searched ? _results.isEmpty
-          ? Center(child: Text(l10n.tr('search.noResults'), style: TextStyle(color: context.textSecondaryColor)))
-          : ListView.builder(padding: const EdgeInsets.fromLTRB(12, 0, 12, 80), itemCount: _results.length,
-              itemBuilder: (_, i) => NoteCard(note: _results[i], onTap: () => Navigator.pushNamed(context, '/note-editor', arguments: _results[i].id)))
+        Expanded(child: _searched
+          ? (_results.isEmpty
+            ? Center(child: Text(l10n.tr('search.noResults'), style: TextStyle(color: context.textSecondaryColor)))
+            : RefreshIndicator(
+                onRefresh: () => _search(_ctrl.text),
+                child: ListView.builder(padding: const EdgeInsets.fromLTRB(12, 0, 12, 80), itemCount: _results.length,
+                  itemBuilder: (_, i) => NoteCard(note: _results[i], onTap: () => Navigator.pushNamed(context, '/note-editor', arguments: _results[i].id)))))
           : _buildHints(l10n)),
       ]),
     );
@@ -88,9 +106,9 @@ class _SearchScreenState extends State<SearchScreen> {
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 6),
         child: Text(l10n.tr('search.quickSearch'), style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: context.textMutedColor, letterSpacing: 0.5)),
       ),
-      _hintItem('🏷', l10n.tr('search.byTag')),
-      _hintItem('📓', l10n.tr('search.byNotebook')),
-      _hintItem('🔍', l10n.tr('search.fullText')),
+      _hintItem(AppIcons.tag, l10n.tr('search.byTag')),
+      _hintItem(AppIcons.notebook, l10n.tr('search.byNotebook')),
+      _hintItem(AppIcons.search, l10n.tr('search.fullText')),
     ]);
   }
 
@@ -100,14 +118,14 @@ class _SearchScreenState extends State<SearchScreen> {
       decoration: BoxDecoration(color: context.surface, borderRadius: BorderRadius.circular(16), border: Border.all(color: context.borderLightColor)),
       child: Text(label, style: TextStyle(fontSize: 13, color: context.textSecondaryColor))));
 
-  Widget _hintItem(String icon, String text) => Padding(
+  Widget _hintItem(IconData icon, String text) => Padding(
     padding: const EdgeInsets.symmetric(horizontal: 16),
     child: Container(padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
       decoration: BoxDecoration(border: Border(bottom: BorderSide(color: context.borderLightColor))),
       child: Row(children: [
-        Container(width: 28, height: 28, decoration: BoxDecoration(color: context.accentSubtleBg, borderRadius: BorderRadius.circular(6)), alignment: Alignment.center, child: Text(icon, style: const TextStyle(fontSize: 13))),
+        Container(width: 28, height: 28, decoration: BoxDecoration(color: context.accentSubtleBg, borderRadius: BorderRadius.circular(6)), alignment: Alignment.center, child: Icon(icon, size: 16, color: AppTheme.accent)),
         const SizedBox(width: 12),
         Expanded(child: Text(text, style: TextStyle(fontSize: 14, color: context.textSecondaryColor))),
-        Text('→', style: TextStyle(fontSize: 14, color: context.textMutedColor)),
+        Icon(AppIcons.chevronRight, size: 18, color: context.textMutedColor),
       ])));
 }

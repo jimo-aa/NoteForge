@@ -18,6 +18,7 @@ dependencies:
   intl: ^0.20.0
   google_fonts: ^6.2.0
   flutter_markdown: ^0.7.6
+  flutter_svg: ^2.0.10+1
 
 dev_dependencies:
   flutter_test:

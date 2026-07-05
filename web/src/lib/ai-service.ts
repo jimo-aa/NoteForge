@@ -1,6 +1,6 @@
 // NoteForge Web — AI Service client (port of desktop/src/services/aiService.ts)
 
-const AI_API_BASE = process.env.NEXT_PUBLIC_AI_API_BASE || 'http://localhost:8083';
+const AI_API_BASE = process.env.NEXT_PUBLIC_AI_API_BASE || 'http://localhost:8000';
 const AUTH_TOKEN_KEY = 'noteforge:auth:access-token';
 
 function getToken(): string | null {

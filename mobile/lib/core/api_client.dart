@@ -2,118 +2,147 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
-class ApiResponse<T> {
+/// Generic API response — mirrors backend `ApiResponse<T>`.
+class ApiResponse {
   final int code;
-  final T? data;
+  final dynamic data;
   final String? message;
 
   ApiResponse({required this.code, this.data, this.message});
+
+  bool get isSuccess => code == 0;
 }
 
+/// REST client matching backend Spring Boot controllers.
+/// Base URL defaults to API Gateway (port 8000).
 class ApiClient {
-  static const String _baseUrl = String.fromEnvironment('API_BASE', defaultValue: 'http://10.0.2.2:8000');
-  static const String _tokenKey = 'noteforge:auth:access-token';
-  static const String _refreshKey = 'noteforge:auth:refresh-token';
+  static const String _base = String.fromEnvironment('API_BASE', defaultValue: 'http://10.0.2.2:8000');
+  static const _tokenKey = 'noteforge:access-token';
+  static const _refreshKey = 'noteforge:refresh-token';
 
-  static Future<String?> _getToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_tokenKey);
+  // ── Token management ──
+
+  static Future<String?> get accessToken async {
+    final p = await SharedPreferences.getInstance();
+    return p.getString(_tokenKey);
   }
 
   static Future<void> saveTokens(String access, String refresh) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_tokenKey, access);
-    await prefs.setString(_refreshKey, refresh);
+    final p = await SharedPreferences.getInstance();
+    await p.setString(_tokenKey, access);
+    await p.setString(_refreshKey, refresh);
   }
 
   static Future<void> clearTokens() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_tokenKey);
-    await prefs.remove(_refreshKey);
+    final p = await SharedPreferences.getInstance();
+    await p.remove(_tokenKey);
+    await p.remove(_refreshKey);
   }
 
-  static Future<ApiResponse<Map<String, dynamic>>> request(
-    String method,
-    String path, {
-    Map<String, dynamic>? body,
-  }) async {
-    final token = await _getToken();
-    final headers = <String, String>{
-      'Content-Type': 'application/json',
-    };
+  // ── Core request ──
+
+  static Future<ApiResponse> _request(String method, String path, {Map<String, dynamic>? body, Map<String, String>? params}) async {
+    final token = await accessToken;
+    final headers = <String, String>{'Content-Type': 'application/json'};
     if (token != null) headers['Authorization'] = 'Bearer $token';
 
-    final uri = Uri.parse('$_baseUrl$path');
-    late http.Response response;
+    var uri = Uri.parse('$_base$path');
+    if (params != null) uri = uri.replace(queryParameters: params);
 
     try {
+      late http.Response res;
+      final encoded = body != null ? jsonEncode(body) : null;
       switch (method) {
-        case 'GET':
-          response = await http.get(uri, headers: headers);
-          break;
-        case 'POST':
-          response = await http.post(uri, headers: headers, body: body != null ? jsonEncode(body) : null);
-          break;
-        case 'PUT':
-          response = await http.put(uri, headers: headers, body: body != null ? jsonEncode(body) : null);
-          break;
-        case 'DELETE':
-          response = await http.delete(uri, headers: headers);
-          break;
-        default:
-          return ApiResponse(code: -1, message: 'Unknown method');
+        case 'GET':    res = await http.get(uri, headers: headers); break;
+        case 'POST':   res = await http.post(uri, headers: headers, body: encoded); break;
+        case 'PUT':    res = await http.put(uri, headers: headers, body: encoded); break;
+        case 'DELETE': res = await http.delete(uri, headers: headers); break;
+        default: return ApiResponse(code: -1, message: 'Unknown method');
       }
-
-      final json = jsonDecode(response.body) as Map<String, dynamic>;
-      return ApiResponse(
-        code: json['code'] as int? ?? -1,
-        data: json['data'] as Map<String, dynamic>?,
-        message: json['message'] as String?,
-      );
+      final json = jsonDecode(res.body) as Map<String, dynamic>;
+      return ApiResponse(code: json['code'] as int? ?? -1, data: json['data'], message: json['message']);
     } catch (e) {
       return ApiResponse(code: -1, message: 'Network error: $e');
     }
   }
 
-  // ── Auth ──
+  /// GET with query params
+  static Future<ApiResponse> get(String path, {Map<String, String>? params}) => _request('GET', path, params: params);
 
-  static Future<ApiResponse<Map<String, dynamic>>> login(String email, String password) =>
-      request('POST', '/api/v1/auth/login', body: {'email': email, 'password': password});
+  /// POST with JSON body
+  static Future<ApiResponse> post(String path, {Map<String, dynamic>? body}) => _request('POST', path, body: body);
 
-  static Future<ApiResponse<Map<String, dynamic>>> register(String name, String email, String password) =>
-      request('POST', '/api/v1/auth/register', body: {'name': name, 'email': email, 'password': password});
+  /// PUT with JSON body
+  static Future<ApiResponse> put(String path, {Map<String, dynamic>? body}) => _request('PUT', path, body: body);
 
-  // ── Notes ──
+  /// DELETE
+  static Future<ApiResponse> delete(String path) => _request('DELETE', path);
 
-  static Future<ApiResponse<Map<String, dynamic>>> listNotes() => request('GET', '/api/v1/notes');
+  // ═══════════════════════════════════════════════════════════════
+  // Auth API — user-service via gateway
+  // ═══════════════════════════════════════════════════════════════
 
-  static Future<ApiResponse<Map<String, dynamic>>> getNote(String id) => request('GET', '/api/v1/notes/$id');
+  static Future<ApiResponse> login(String email, String password) =>
+      post('/api/v1/auth/login', body: {'email': email, 'password': password});
 
-  static Future<ApiResponse<Map<String, dynamic>>> createNote(Map<String, dynamic> data) =>
-      request('POST', '/api/v1/notes', body: data);
+  static Future<ApiResponse> register(String name, String email, String password) =>
+      post('/api/v1/auth/register', body: {'name': name, 'email': email, 'password': password});
 
-  static Future<ApiResponse<Map<String, dynamic>>> updateNote(String id, Map<String, dynamic> data) =>
-      request('PUT', '/api/v1/notes/$id', body: data);
+  static Future<ApiResponse> getProfile() => get('/api/v1/auth/me');
 
-  static Future<ApiResponse<Map<String, dynamic>>> deleteNote(String id) =>
-      request('DELETE', '/api/v1/notes/$id');
+  // ═══════════════════════════════════════════════════════════════
+  // Notes API — note-service via gateway
+  // ═══════════════════════════════════════════════════════════════
 
-  // ── Notebooks ──
+  /// List notes with optional filters. Returns paginated `data.items`.
+  static Future<ApiResponse> listNotes({String? notebookId, bool? isFavorite, bool? isPinned, int page = 0, int size = 50}) {
+    final p = <String, String>{'page': '$page', 'size': '$size'};
+    if (notebookId != null) p['notebookId'] = notebookId;
+    if (isFavorite != null) p['isFavorite'] = '$isFavorite';
+    if (isPinned != null) p['isPinned'] = '$isPinned';
+    return get('/api/v1/notes', params: p);
+  }
 
-  static Future<ApiResponse<Map<String, dynamic>>> listNotebooks() => request('GET', '/api/v1/notebooks');
+  static Future<ApiResponse> getNote(String id) => get('/api/v1/notes/$id');
 
-  static Future<ApiResponse<Map<String, dynamic>>> createNotebook(Map<String, dynamic> data) =>
-      request('POST', '/api/v1/notebooks', body: data);
+  static Future<ApiResponse> createNote(Map<String, dynamic> data) => post('/api/v1/notes', body: data);
 
-  static Future<ApiResponse<Map<String, dynamic>>> deleteNotebook(String id) =>
-      request('DELETE', '/api/v1/notebooks/$id');
+  static Future<ApiResponse> updateNote(String id, Map<String, dynamic> data) => put('/api/v1/notes/$id', body: data);
 
-  // ── Tags ──
+  static Future<ApiResponse> deleteNote(String id) => delete('/api/v1/notes/$id');
 
-  static Future<ApiResponse<Map<String, dynamic>>> listTags() => request('GET', '/api/v1/tags');
+  /// Full-text search. Returns paginated `data.items`.
+  static Future<ApiResponse> searchNotes(String query, {int page = 0, int size = 20}) =>
+      get('/api/v1/notes/search', params: {'q': query, 'page': '$page', 'size': '$size'});
 
-  // ── AI ──
+  // ═══════════════════════════════════════════════════════════════
+  // Notebooks API
+  // ═══════════════════════════════════════════════════════════════
 
-  static Future<ApiResponse<Map<String, dynamic>>> aiTag(String title, String content) =>
-      request('POST', '/api/v1/ai/tag', body: {'title': title, 'content': content});
+  static Future<ApiResponse> listNotebooks() => get('/api/v1/notebooks');
+
+  static Future<ApiResponse> createNotebook(String name, {String? icon, String? color}) {
+    final p = <String, String>{'name': name};
+    if (icon != null) p['icon'] = icon;
+    if (color != null) p['color'] = color;
+    return _request('POST', '/api/v1/notebooks', params: p);
+  }
+
+  static Future<ApiResponse> deleteNotebook(String id) => delete('/api/v1/notebooks/$id');
+
+  // ═══════════════════════════════════════════════════════════════
+  // Tags API
+  // ═══════════════════════════════════════════════════════════════
+
+  static Future<ApiResponse> listTags() => get('/api/v1/tags');
+
+  // ═══════════════════════════════════════════════════════════════
+  // Search API (global)
+  // ═══════════════════════════════════════════════════════════════
+
+  static Future<ApiResponse> globalSearch(String query, {String mode = 'fulltext', String? tag, int page = 0, int size = 20}) {
+    final p = <String, String>{'q': query, 'mode': mode, 'page': '$page', 'size': '$size'};
+    if (tag != null) p['tag'] = tag;
+    return get('/api/v1/search', params: p);
+  }
 }

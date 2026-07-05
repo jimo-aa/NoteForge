@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../core/app_icons.dart';
 import '../core/theme.dart';
+import '../l10n/locale_provider.dart';
 import '../providers/note_provider.dart';
 import '../widgets/format_bar.dart';
 import '../widgets/toast_manager.dart';
@@ -19,6 +21,7 @@ class _EditorScreenState extends State<EditorScreen> {
   final _tagCtrl = TextEditingController();
   bool _isLoading = true;
   bool _isFavorite = false;
+  bool _isPinned = false;
   List<String> _tags = [];
   String? _notebookId;
   int _wordCount = 0;
@@ -36,7 +39,7 @@ class _EditorScreenState extends State<EditorScreen> {
     if (n != null) {
       _titleCtrl.text = n.title; _contentCtrl.text = n.content;
       _notebookId = n.notebookId; _tags = List.from(n.tags);
-      _isFavorite = n.isFavorite; _wordCount = n.wordCount;
+      _isFavorite = n.isFavorite; _isPinned = n.isPinned; _wordCount = n.wordCount;
     }
     setState(() => _isLoading = false);
   }
@@ -48,35 +51,40 @@ class _EditorScreenState extends State<EditorScreen> {
     _saveTimer = Timer(const Duration(milliseconds: 400), () { if (mounted) setState(() => _saveStatus = 'saved'); });
   }
 
-  void _save() {
+  Future<void> _save() async {
     setState(() => _saveStatus = 'saving');
     final np = context.read<NoteProvider>();
+    final l10n = context.read<LocaleProvider>();
+    bool ok;
     if (widget.noteId == 'new') {
-      np.createNote(title: _titleCtrl.text.isNotEmpty ? _titleCtrl.text : '未命名笔记',
-        content: _contentCtrl.text, notebookId: _notebookId, tags: _tags, isFavorite: _isFavorite);
+      ok = (await np.createNote(title: _titleCtrl.text.isNotEmpty ? _titleCtrl.text : l10n.tr('editor.untitled'),
+        content: _contentCtrl.text, notebookId: _notebookId, tags: _tags, isPinned: _isPinned, isFavorite: _isFavorite)) != null;
     } else {
-      np.updateNote(widget.noteId, title: _titleCtrl.text, content: _contentCtrl.text, notebookId: _notebookId, tags: _tags, isFavorite: _isFavorite);
+      ok = (await np.updateNote(widget.noteId, title: _titleCtrl.text, content: _contentCtrl.text, notebookId: _notebookId, tags: _tags, isPinned: _isPinned, isFavorite: _isFavorite)) != null;
     }
-    setState(() => _saveStatus = 'saved');
-    toastKey.currentState?.show(ToastType.success, '✓');
-    Future.delayed(const Duration(milliseconds: 300), () { if (mounted) Navigator.pop(context); });
+    if (!mounted) return;
+    setState(() => _saveStatus = ok ? 'saved' : 'unsaved');
+    if (ok) {
+      toastKey.currentState?.show(ToastType.success, '✓');
+      Future.delayed(const Duration(milliseconds: 300), () { if (mounted) Navigator.pop(context); });
+    }
   }
 
   Future<void> _delete() async {
+    final l10n = context.read<LocaleProvider>();
     final ok = await showDialog<bool>(context: context, builder: (_) => AlertDialog(
-      title: const Text('删除笔记'), content: const Text('确定要删除吗？'),
-      actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')),
-        TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('删除', style: TextStyle(color: Colors.red)))],
+      title: Text(l10n.tr('editor.deleteTitle')), content: Text(l10n.tr('editor.deleteConfirm')),
+      actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: Text(l10n.tr('editor.cancel'))),
+        TextButton(onPressed: () => Navigator.pop(context, true), child: Text(l10n.tr('editor.delete'), style: const TextStyle(color: Colors.red)))],
     ));
     if (ok == true && widget.noteId != 'new' && mounted) {
-      context.read<NoteProvider>().deleteNote(widget.noteId);
-      Navigator.pop(context);
+      await context.read<NoteProvider>().deleteNote(widget.noteId);
+      if (mounted) Navigator.pop(context);
     }
   }
 
   void _fmt(String a) {
-    final t = _contentCtrl.text;
-    final sel = _contentCtrl.selection;
+    final t = _contentCtrl.text; final sel = _contentCtrl.selection;
     String r; int p;
     switch (a) {
       case 'bold': r = _wrap(t, sel, '**', '**'); p = sel.isValid && sel.start != sel.end ? sel.start + 2 : sel.baseOffset + 2;
@@ -102,23 +110,53 @@ class _EditorScreenState extends State<EditorScreen> {
   void _addTag() { final tag = _tagCtrl.text.trim(); if (tag.isNotEmpty && !_tags.contains(tag)) { setState(() => _tags.add(tag)); _tagCtrl.clear(); } }
   void _removeTag(String t) => setState(() => _tags.remove(t));
 
+  Widget _notebookSelector(BuildContext ctx, LocaleProvider l10n) {
+    final np = ctx.watch<NoteProvider>();
+    final nb = _notebookId != null ? np.notebooks.where((n) => n.id == _notebookId).firstOrNull : null;
+    return GestureDetector(
+      onTap: () async {
+        final result = await showModalBottomSheet<String>(
+          context: ctx, backgroundColor: ctx.surface,
+          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(AppTheme.radiusXl))),
+          builder: (_) => Column(mainAxisSize: MainAxisSize.min, children: [
+            Padding(padding: const EdgeInsets.all(16), child: Text('移动到笔记本', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: ctx.textPrimary))),
+            ListTile(title: Text('无', style: TextStyle(color: ctx.textPrimary)), onTap: () => Navigator.pop(ctx, null)),
+            ...np.notebooks.map((nb) => ListTile(
+              leading: Text(nb.icon, style: const TextStyle(fontSize: 18)),
+              title: Text(nb.name, style: TextStyle(color: ctx.textPrimary)),
+              trailing: nb.id == _notebookId ? const Icon(Icons.check, size: 18, color: AppTheme.accent) : null,
+              onTap: () => Navigator.pop(ctx, nb.id),
+            )),
+          ]),
+        );
+        if (result != null) setState(() => _notebookId = result);
+      },
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Text(nb != null ? '${nb.icon} ${nb.name}' : l10n.tr('editor.none'), style: TextStyle(fontSize: 13, color: context.textSecondaryColor)),
+        const SizedBox(width: 4),
+        Icon(AppIcons.chevronRight, size: 14, color: context.textMutedColor),
+      ]),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    final l10n = context.watch<LocaleProvider>();
+    if (_isLoading) return const Scaffold(resizeToAvoidBottomInset: false, body: Center(child: CircularProgressIndicator()));
 
     return Scaffold(
+      resizeToAvoidBottomInset: false,
       body: Column(children: [
-        // Toolbar
         Container(padding: const EdgeInsets.fromLTRB(4, 8, 12, 8), color: context.surface,
           child: Row(children: [
-            IconButton(icon: const Icon(Icons.arrow_back, size: 20), onPressed: () => Navigator.pop(context)),
-            Expanded(child: Text(widget.noteId == 'new' ? '新建笔记' : (_titleCtrl.text.isNotEmpty ? _titleCtrl.text : '编辑笔记'),
+            IconButton(icon: const Icon(AppIcons.back, size: 20), onPressed: () => Navigator.pop(context)),
+            Expanded(child: Text(widget.noteId == 'new' ? l10n.tr('editor.newNote') : (_titleCtrl.text.isNotEmpty ? _titleCtrl.text : l10n.tr('editor.editNote')),
               style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: context.textPrimary), maxLines: 1, overflow: TextOverflow.ellipsis)),
-            IconButton(icon: Icon(_isFavorite ? Icons.star : Icons.star_border, size: 20, color: _isFavorite ? AppTheme.warning : context.textSecondaryColor), onPressed: () => setState(() => _isFavorite = !_isFavorite)),
-            IconButton(icon: const Icon(Icons.check, size: 20), onPressed: _save),
-            if (widget.noteId != 'new') IconButton(icon: Icon(Icons.delete_outline, size: 20, color: AppTheme.danger.withValues(alpha: 0.7)), onPressed: _delete),
+            IconButton(icon: Icon(AppIcons.pin, size: 20, color: _isPinned ? AppTheme.warning : context.textSecondaryColor), onPressed: () => setState(() => _isPinned = !_isPinned)),
+            IconButton(icon: Icon(_isFavorite ? AppIcons.favorite : AppIcons.favoriteBorder, size: 20, color: _isFavorite ? AppTheme.warning : context.textSecondaryColor), onPressed: () => setState(() => _isFavorite = !_isFavorite)),
+            IconButton(icon: const Icon(AppIcons.save, size: 20), onPressed: _save),
+            if (widget.noteId != 'new') IconButton(icon: Icon(AppIcons.delete, size: 20, color: AppTheme.danger.withValues(alpha: 0.7)), onPressed: _delete),
           ])),
-        // Tags
         Container(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6), color: context.surface,
           child: Wrap(spacing: 4, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
             ..._tags.map((t) => Container(
@@ -127,37 +165,48 @@ class _EditorScreenState extends State<EditorScreen> {
               child: Row(mainAxisSize: MainAxisSize.min, children: [
                 Text(t, style: const TextStyle(fontSize: 12, color: AppTheme.accent)),
                 const SizedBox(width: 4),
-                GestureDetector(onTap: () => _removeTag(t), child: const Text('×', style: TextStyle(fontSize: 14, color: AppTheme.accent))),
+                GestureDetector(onTap: () => _removeTag(t), child: const Icon(AppIcons.close, size: 14, color: AppTheme.accent)),
               ]),
             )),
             SizedBox(width: 60, height: 24, child: TextField(
               controller: _tagCtrl, decoration: const InputDecoration(hintText: '+', hintStyle: TextStyle(fontSize: 12, color: AppTheme.textMuted), border: InputBorder.none, isDense: true, contentPadding: EdgeInsets.only(left: 4)),
               style: const TextStyle(fontSize: 12), onSubmitted: (_) => _addTag())),
           ])),
-        // Content
+        // Properties: notebook + pin status
+        Container(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6), color: context.surface,
+          child: Row(children: [
+            Icon(AppIcons.folder, size: 16, color: context.textMutedColor),
+            const SizedBox(width: 6),
+            Expanded(child: _notebookSelector(context, l10n)),
+            if (_isPinned) ...[
+              const SizedBox(width: 8),
+              Icon(AppIcons.pin, size: 14, color: AppTheme.warning),
+              const SizedBox(width: 4),
+              Text('已置顶', style: TextStyle(fontSize: 11, color: AppTheme.warning)),
+            ],
+          ])),
         Expanded(child: SingleChildScrollView(padding: const EdgeInsets.all(16), child: Column(children: [
           TextField(controller: _titleCtrl,
-            decoration: InputDecoration(hintText: '笔记标题...', hintStyle: TextStyle(color: context.textMutedColor), border: InputBorder.none, contentPadding: EdgeInsets.zero),
+            decoration: InputDecoration(hintText: l10n.tr('editor.titleHint'), hintStyle: TextStyle(color: context.textMutedColor), border: InputBorder.none, contentPadding: EdgeInsets.zero),
             style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, height: 1.3, color: context.textPrimary),
             onChanged: (_) => _onChanged(_contentCtrl.text)),
           const SizedBox(height: 8),
           TextField(controller: _contentCtrl,
-            decoration: InputDecoration(hintText: '开始写作...', hintStyle: TextStyle(color: context.textMutedColor), border: InputBorder.none, contentPadding: EdgeInsets.zero),
+            decoration: InputDecoration(hintText: l10n.tr('editor.contentHint'), hintStyle: TextStyle(color: context.textMutedColor), border: InputBorder.none, contentPadding: EdgeInsets.zero),
             style: TextStyle(fontSize: 15, height: 1.8, color: context.textPrimary),
             maxLines: null, minLines: 12, onChanged: _onChanged),
           const SizedBox(height: 80),
         ]))),
-        // Status bar
         Container(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6), color: context.surface,
           child: Row(children: [
             Container(width: 6, height: 6,
               decoration: BoxDecoration(shape: BoxShape.circle, color: _saveStatus == 'saved' ? AppTheme.success : AppTheme.warning)),
             const SizedBox(width: 4),
-            Text(_saveStatus == 'saved' ? '已保存' : '保存中...', style: TextStyle(fontSize: 11, color: context.textMutedColor)),
+            Text(_saveStatus == 'saved' ? l10n.tr('editor.saved') : l10n.tr('editor.saving'), style: TextStyle(fontSize: 11, color: context.textMutedColor)),
             const SizedBox(width: 16),
-            Text('字数 $_wordCount', style: TextStyle(fontSize: 11, color: context.textMutedColor)),
+            Text(l10n.tr('editor.wordCountLabel', args: {'count': '$_wordCount'}), style: TextStyle(fontSize: 11, color: context.textMutedColor)),
             const Spacer(),
-            Text('刚刚', style: TextStyle(fontSize: 11, color: context.textMutedColor)),
+            Text(l10n.tr('editor.justNow'), style: TextStyle(fontSize: 11, color: context.textMutedColor)),
           ])),
       ]),
       floatingActionButton: Padding(padding: const EdgeInsets.only(bottom: 8), child: FormatBar(onFormat: _fmt)),

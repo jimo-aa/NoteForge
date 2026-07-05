@@ -3,14 +3,21 @@ package com.noteforge.note.controller;
 import com.noteforge.common.response.ApiResponse;
 import com.noteforge.common.response.PageResponse;
 import com.noteforge.note.dto.*;
+import com.noteforge.note.service.ExportService;
 import com.noteforge.note.service.NoteService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.core.io.ByteArrayResource;
+import org.springframework.core.io.Resource;
 import org.springframework.data.domain.Page;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 @RestController
@@ -19,6 +26,7 @@ import java.util.List;
 public class NoteController {
 
     private final NoteService noteService;
+    private final ExportService exportService;
 
     @PostMapping
     public ResponseEntity<ApiResponse<NoteResponse>> createNote(
@@ -87,5 +95,55 @@ public class NoteController {
             @PathVariable String id) {
         List<NoteLinkResponse> backlinks = noteService.getBacklinks(id, auth.getName());
         return ResponseEntity.ok(ApiResponse.success(backlinks));
+    }
+
+    /**
+     * Export a note in the specified format.
+     * GET /api/v1/notes/{id}/export?format=markdown|html|json
+     */
+    @GetMapping("/{id}/export")
+    public ResponseEntity<Resource> exportNote(
+            Authentication auth,
+            @PathVariable String id,
+            @RequestParam(defaultValue = "markdown") String format) {
+        NoteResponse note = noteService.getNote(id, auth.getName());
+        byte[] content;
+        String extension;
+        MediaType mediaType;
+
+        switch (format) {
+            case "html" -> {
+                content = exportService.exportNoteAsHtml(id, auth.getName());
+                extension = ".html";
+                mediaType = MediaType.TEXT_HTML;
+            }
+            case "json" -> {
+                content = exportService.exportNoteAsJson(id, auth.getName());
+                extension = ".json";
+                mediaType = MediaType.APPLICATION_JSON;
+            }
+            default -> {
+                content = exportService.exportNoteAsMarkdown(id, auth.getName());
+                extension = ".md";
+                mediaType = MediaType.parseMediaType("text/markdown");
+            }
+        }
+
+        String filename = sanitizeFilename(note.getTitle()) + extension;
+        ByteArrayResource resource = new ByteArrayResource(content);
+
+        ContentDisposition disposition = ContentDisposition.attachment()
+                .filename(filename, StandardCharsets.UTF_8)
+                .build();
+
+        return ResponseEntity.ok()
+                .contentType(mediaType)
+                .contentLength(content.length)
+                .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
+                .body(resource);
+    }
+
+    private String sanitizeFilename(String title) {
+        return title.replaceAll("[\\\\/:*?\"<>|]", "_").replaceAll("\\s+", "_");
     }
 }

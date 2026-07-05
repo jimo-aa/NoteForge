@@ -38,12 +38,13 @@ class AppTheme {
   static const fontFamily = '-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei","Noto Sans SC",sans-serif';
   static const fontMono = '"JetBrains Mono","SF Mono","Consolas",monospace';
 
-  static ThemeData get light => ThemeData(
+  /// Light theme with optional custom accent + fontSizeScale
+  static ThemeData lightWith({Color accentColor = accent, double fontSizeScale = 1.0}) => ThemeData(
         brightness: Brightness.light,
         scaffoldBackgroundColor: bg,
-        colorScheme: const ColorScheme.light(
-          primary: accent,
-          secondary: accent,
+        colorScheme: ColorScheme.light(
+          primary: accentColor,
+          secondary: accentColor,
           surface: bgCard,
           error: danger,
         ),
@@ -58,14 +59,16 @@ class AppTheme {
         dividerTheme: const DividerThemeData(color: borderLight, thickness: 1),
         snackBarTheme: const SnackBarThemeData(behavior: SnackBarBehavior.floating),
         fontFamily: fontFamily,
+        textTheme: _textScale(fontSizeScale),
       );
 
-  static ThemeData get dark => ThemeData(
+  /// Dark theme with optional custom accent + fontSizeScale
+  static ThemeData darkWith({Color accentColor = accent, double fontSizeScale = 1.0}) => ThemeData(
         brightness: Brightness.dark,
         scaffoldBackgroundColor: bgDark,
-        colorScheme: const ColorScheme.dark(
-          primary: accent,
-          secondary: accent,
+        colorScheme: ColorScheme.dark(
+          primary: accentColor,
+          secondary: accentColor,
           surface: bgCardDark,
           error: danger,
         ),
@@ -80,7 +83,36 @@ class AppTheme {
         dividerTheme: const DividerThemeData(color: borderDark, thickness: 1),
         snackBarTheme: const SnackBarThemeData(behavior: SnackBarBehavior.floating),
         fontFamily: fontFamily,
+        textTheme: _textScale(fontSizeScale),
       );
+
+  /// Apply fontSizeScale to the default TextTheme
+  static TextTheme _textScale(double scale) {
+    if (scale == 1.0) return const TextTheme();
+    final base = const TextTheme();
+    return TextTheme(
+      displayLarge: base.displayLarge?.copyWith(fontSize: 57 * scale),
+      displayMedium: base.displayMedium?.copyWith(fontSize: 45 * scale),
+      displaySmall: base.displaySmall?.copyWith(fontSize: 36 * scale),
+      headlineLarge: base.headlineLarge?.copyWith(fontSize: 32 * scale),
+      headlineMedium: base.headlineMedium?.copyWith(fontSize: 28 * scale),
+      headlineSmall: base.headlineSmall?.copyWith(fontSize: 24 * scale),
+      titleLarge: base.titleLarge?.copyWith(fontSize: 22 * scale),
+      titleMedium: base.titleMedium?.copyWith(fontSize: 16 * scale),
+      titleSmall: base.titleSmall?.copyWith(fontSize: 14 * scale),
+      bodyLarge: base.bodyLarge?.copyWith(fontSize: 16 * scale),
+      bodyMedium: base.bodyMedium?.copyWith(fontSize: 14 * scale),
+      bodySmall: base.bodySmall?.copyWith(fontSize: 12 * scale),
+      labelLarge: base.labelLarge?.copyWith(fontSize: 14 * scale),
+      labelMedium: base.labelMedium?.copyWith(fontSize: 12 * scale),
+      labelSmall: base.labelSmall?.copyWith(fontSize: 11 * scale),
+    );
+  }
+
+  /// Convenience — light with defaults
+  static ThemeData get light => lightWith();
+  /// Convenience — dark with defaults
+  static ThemeData get dark => darkWith();
 }
 
 /// Theme‑aware color helpers — use in widget build methods.

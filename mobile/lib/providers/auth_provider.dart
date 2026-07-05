@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import '../core/api_client.dart';
 import '../core/models.dart';
 
 class AuthProvider extends ChangeNotifier {
@@ -10,29 +11,56 @@ class AuthProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   bool get isAuthenticated => _isAuthenticated;
 
+  /// Restore session from stored token
   Future<void> hydrate() async {
-    _user = AuthUser(id: 'mock-user-001', username: 'Forge User', email: 'user@noteforge.app');
-    _isAuthenticated = true;
-    notifyListeners();
+    final token = await ApiClient.accessToken;
+    if (token != null) {
+      _isAuthenticated = true;
+      // Fetch fresh profile
+      final res = await ApiClient.getProfile();
+      if (res.isSuccess && res.data != null) {
+        _user = AuthUser.fromJson(res.data as Map<String, dynamic>);
+      }
+      notifyListeners();
+    }
   }
 
   Future<String?> login(String email, String password) async {
     _isLoading = true; notifyListeners();
-    await Future.delayed(const Duration(milliseconds: 300));
-    _user = AuthUser(id: 'mock-user-001', username: email.split('@').first, email: email);
-    _isAuthenticated = true; _isLoading = false; notifyListeners();
-    return null;
+    final res = await ApiClient.login(email, password);
+    if (res.isSuccess && res.data != null) {
+      final d = res.data as Map<String, dynamic>;
+      await ApiClient.saveTokens(d['accessToken'] as String, d['refreshToken'] as String);
+      final userData = d['user'] as Map<String, dynamic>;
+      _user = AuthUser.fromJson(userData);
+      _isAuthenticated = true;
+      _isLoading = false; notifyListeners();
+      return null;
+    }
+    _isLoading = false; notifyListeners();
+    return res.message ?? '登录失败';
   }
 
   Future<String?> register(String name, String email, String password) async {
     _isLoading = true; notifyListeners();
-    await Future.delayed(const Duration(milliseconds: 300));
-    _user = AuthUser(id: 'mock-user-001', username: name, email: email);
-    _isAuthenticated = true; _isLoading = false; notifyListeners();
-    return null;
+    final res = await ApiClient.register(name, email, password);
+    if (res.isSuccess && res.data != null) {
+      final d = res.data as Map<String, dynamic>;
+      await ApiClient.saveTokens(d['accessToken'] as String, d['refreshToken'] as String);
+      final userData = d['user'] as Map<String, dynamic>;
+      _user = AuthUser.fromJson(userData);
+      _isAuthenticated = true;
+      _isLoading = false; notifyListeners();
+      return null;
+    }
+    _isLoading = false; notifyListeners();
+    return res.message ?? '注册失败';
   }
 
   Future<void> logout() async {
-    _user = null; _isAuthenticated = false; notifyListeners();
+    await ApiClient.clearTokens();
+    _user = null;
+    _isAuthenticated = false;
+    notifyListeners();
   }
 }

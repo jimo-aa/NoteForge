@@ -16,11 +16,11 @@ RUN gradle :common:build --no-daemon --build-cache 2>/dev/null || true
 # Copy source & build
 COPY common/ common/
 COPY user-service/ user-service/
-RUN ./gradlew :user-service:bootJar --no-daemon --build-cache -x test
+RUN gradle :user-service:bootJar --no-daemon --build-cache -x test
 
 # === Stage 2: Runtime ===
 FROM eclipse-temurin:21-jre-alpine
-WORKDIR /app
+WORKDIR /opt/noteforge
 
 RUN apk add --no-cache curl
 
@@ -31,4 +31,4 @@ EXPOSE 8082
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
   CMD curl -f http://localhost:8082/actuator/health || exit 1
 
-ENTRYPOINT ["java", "-jar", "/app/app.jar"]
+ENTRYPOINT ["java", "-jar", "/opt/noteforge/app.jar"]

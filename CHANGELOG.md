@@ -21,8 +21,56 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - Mobile: 完整 Light/Dark 双主题（精确匹配原型配色 #6366f1 强调色系）
   - Desktop: 桌面端 i18n 已确认默认 zh-CN fallback（React i18next）
   - Mobile: flutter analyze 零 issue 通过
-  - Docs: 三端对齐进度标记
-
+- **三端打磨 — 移动端优化**
+  - i18n 全部落地：15 个文件约 80 处硬编码中文字符串替换为 l10n.tr() 调用
+  - 新增 ThemeProvider（ChangeNotifier），主题切换实时生效
+  - theme_sheet 选择模式后立即通过 ThemeProvider 切换 MaterialApp themeMode
+  - 清理死代码：移除未使用的 api_client.dart（92 行）
+  - 新增 l10n 键：时间相对格式（X分钟前/X小时前/X天前）、默认用户名/邮箱、删除确认、打招呼时间变体
+  - note_card/notebook_card 日期格式、数量文本全部走 l10n
+  - 所有 AlertDialog 标题/按钮/确认文案走 l10n
+  - flutter analyze 零 issue 通过
+- **三端打磨 — 移动端图标系统向量化**
+  - 新增 `core/app_icons.dart` — 全局图标常量（Material IconData 统一映射）
+  - 底部 Tab 导航：emoji → Material Icons（description/search/menu_book/star/person）
+  - Tab 图标选中态 accent 色，未选中态 textMutedColor
+  - Profile 菜单 7 项 + 退出登录图标全部替换为 Material 向量图标
+  - 笔记本图标选择器：16 emoji → 16 Material 向量图标
+  - 主题模式选择器：light_mode/dark_mode/settings_remote
+  - 笔记卡片类型图标：book/bolt/note/target/push_pin
+  - 编辑器、搜索提示、笔记本列表图标全部向量化
+  - 新增 `flutter_svg: ^2.0.10+1` 依赖
+  - flutter analyze 零 issue 通过
+- **三端打磨 — 移动端接入真实后端 API**
+  - `core/api_client.dart` 重写：基于后端 Spring Boot 控制器完整实现 REST 调用
+  - Auth: POST /api/v1/auth/login, /register, GET /me（Bearer JWT）
+  - Notes: GET/POST/PUT/DELETE /api/v1/notes + /search（分页 `PageResponse`）
+  - Notebooks: GET/POST /api/v1/notebooks（query params 传 name/icon/color）
+  - Tags: GET /api/v1/tags
+  - Search: GET /api/v1/search?q=&mode=fulltext
+  - `auth_provider.dart`：hydrate() 从 SharedPreferences 取 token 后调用 GET /me 刷新用户
+  - `note_provider.dart`：移除全部模拟数据，`loadData()` 并行请求 notes/notebooks/tags
+  - CRUD 方法改为 async，返回 Future<bool/NoteItem?>
+  - editor_screen/main/notebooks_screen 同步改为 await 异步调用
+  - API 响应统一解析：`ApiResponse.code==0` 判定成功，支持分页/列表/单对象三种 data 格式
+- **移动端问题修复（P0/P1/P2）**
+  - P0: Profile 菜单 5 项空回调 → 点击弹出"即将推出" Toast
+  - P0: 搜索页切换至后端 GET /api/v1/notes/search 接口
+  - P0: 新增全局网络错误处理 — NoteProvider.error 字段 + 笔记页错误横幅（含重试按钮）
+  - P1: 编辑器新增置顶切换按钮（Pin），工具栏显示置顶状态
+  - P1: 编辑器新增笔记本选择器 — 点击当前笔记本弹出底部弹窗切换
+  - P1: 编辑器保存时传递 isPinned/isFavorite 到后端
+  - P2: 搜索页 RefreshIndicator 下拉刷新
+  - P2: 移除 search_screen 中不再使用的 NoteProvider 导入
+- **移动端主题系统完整化**
+  - ThemeProvider 扩展：fontSize scale（small/medium/large/extraLarge）+ accentColor 自定义
+  - 主题设置持久化：mode/fontSize/accentColor 通过 SharedPreferences 保存
+  - theme.dart 新增 `lightWith()`/`darkWith()` 方法，接收 accentColor + fontSizeScale 参数
+  - main.dart MaterialApp 使用 ThemeProvider 的动态值构建 theme/darkTheme
+  - theme_sheet 字体大小下拉选择生效，强调色 6 色选择生效
+  - 修复 `Color.value` 弃用警告 → 改用 `Color.toARGB32()`
+  - flutter analyze 零 issue 通过
+- **Docs: 三端对齐进度标记
 ## [2.0.0] - 2026-07-03
 ### Added
 - **V2.0 Sprint 1 — 基础设施加固**

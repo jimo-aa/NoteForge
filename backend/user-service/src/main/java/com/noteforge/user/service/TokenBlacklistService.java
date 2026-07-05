@@ -26,7 +26,12 @@ public class TokenBlacklistService {
     }
 
     public boolean isBlacklisted(String token) {
-        return Boolean.TRUE.equals(redisTemplate.hasKey(KEY_PREFIX + token));
+        try {
+            return Boolean.TRUE.equals(redisTemplate.hasKey(KEY_PREFIX + token));
+        } catch (Exception e) {
+            // Redis unavailable — treat as not blacklisted (fail open for auth)
+            return false;
+        }
     }
 
     /** No-op — Redis handles TTL eviction automatically */

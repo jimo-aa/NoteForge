@@ -1,0 +1,45 @@
+server:
+  shutdown: graceful
+
+spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USER}
+    password: ${DB_PASS}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+
+ai:
+  provider: ${AI_PROVIDER:openai}
+  openai:
+    api-key: ${OPENAI_API_KEY}
+    model: ${OPENAI_MODEL:gpt-4o-mini}
+    endpoint: ${OPENAI_ENDPOINT:https://api.openai.com/v1}
+    max-tokens: ${OPENAI_MAX_TOKENS:2048}
+    temperature: ${OPENAI_TEMPERATURE:0.7}
+  embedding:
+    model: ${EMBEDDING_MODEL:text-embedding-3-small}
+    dimension: ${EMBEDDING_DIMENSION:1536}
+  rate-limit:
+    tokens-per-minute: ${AI_RATE_LIMIT_TPM:100000}
+    requests-per-minute: ${AI_RATE_LIMIT_RPM:60}
+
+jwt:
+  secret: ${JWT_SECRET}
+
+logging:
+  level:
+    com.noteforge: INFO
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      show-details: always

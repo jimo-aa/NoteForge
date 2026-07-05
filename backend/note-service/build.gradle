@@ -47,6 +47,9 @@ dependencies {
     // MinIO (object storage for attachments)
     implementation 'io.minio:minio:8.5.10'
 
+    // CommonMark (Markdown → HTML conversion for exports)
+    implementation 'org.commonmark:commonmark:0.22.0'
+
     // API Documentation (SpringDoc OpenAPI)
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0'
 

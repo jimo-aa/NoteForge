@@ -1,28 +1,73 @@
 # NoteForge — Production Override
 # Usage: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# Pre-build images first:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml build
+# Or build individually:
+#   docker build --build-arg SERVICE=note-service -t noteforge/note-service backend/
+#   docker build --build-arg SERVICE=user-service -t noteforge/user-service backend/
+#   docker build -t noteforge/gateway -f backend/gateway/Dockerfile backend/
+#   docker build -t noteforge/ai-service -f backend/ai-service/Dockerfile backend/
 version: '3.8'
 
+# Shared JWT secret for all services (override via env var)
+x-shared-env: &shared-env
+  JWT_SECRET: ${JWT_SECRET:-noteforge-prod-jwt-secret-change-me}
+  DB_URL: jdbc:postgresql://postgres:5432/noteforge
+  DB_USER: noteforge
+  DB_PASS: noteforge123
+
 services:
-  # === note-service (production) ===
+  # === Gateway (API Gateway) — entry point for all clients ===
+  gateway:
+    build:
+      context: ../backend
+      dockerfile: gateway/Dockerfile
+    image: noteforge/gateway:latest
+    container_name: noteforge-gateway-prod
+    command: []
+    environment:
+      <<: *shared-env
+    ports:
+      - "8000:8000"
+    depends_on:
+      note-service:
+        condition: service_healthy
+      user-service:
+        condition: service_healthy
+      ai-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/actuator/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
+    networks:
+      - noteforge-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # === note-service ===
   note-service:
     build:
       context: ../backend
-      args:
-        SERVICE: note-service
+      dockerfile: note-service/Dockerfile
     image: noteforge/note-service:latest
     container_name: noteforge-note-service-prod
+    command: []
     environment:
+      <<: *shared-env
       SPRING_PROFILES_ACTIVE: prod
-      DB_URL: jdbc:postgresql://postgres:5432/noteforge
-      DB_USER: noteforge
-      DB_PASS: noteforge123
       REDIS_HOST: redis
       REDIS_PORT: 6379
       MINIO_ENDPOINT: http://minio:9000
       MINIO_ACCESS_KEY: noteforge
       MINIO_SECRET_KEY: noteforge123
       MINIO_BUCKET: noteforge-attachments
-      NOTE_JWT_SECRET: ${NOTE_JWT_SECRET:-${JWT_SECRET:-noteforge-prod-jwt-secret-change-me}}
       CORS_ALLOWED_ORIGINS: http://localhost:1420,tauri://localhost
     ports:
       - "8081:8081"
@@ -48,23 +93,19 @@ services:
         max-size: "10m"
         max-file: "3"
 
-  # === user-service (production) ===
+  # === user-service ===
   user-service:
     build:
       context: ../backend
-      args:
-        SERVICE: user-service
+      dockerfile: user-service/Dockerfile
     image: noteforge/user-service:latest
     container_name: noteforge-user-service-prod
+    command: []
     environment:
+      <<: *shared-env
       SPRING_PROFILES_ACTIVE: prod
-      DB_URL: jdbc:postgresql://postgres:5432/noteforge
-      DB_USER: noteforge
-      DB_PASS: noteforge123
       REDIS_HOST: redis
       REDIS_PORT: 6379
-      USER_JWT_SECRET: ${USER_JWT_SECRET:-${JWT_SECRET:-noteforge-prod-jwt-secret-change-me}}
-      CORS_ALLOWED_ORIGINS: http://localhost:1420,tauri://localhost
     ports:
       - "8082:8082"
     depends_on:
@@ -74,6 +115,41 @@ services:
         condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8082/actuator/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
+    networks:
+      - noteforge-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # === ai-service ===
+  ai-service:
+    build:
+      context: ../backend
+      dockerfile: ai-service/Dockerfile
+    image: noteforge/ai-service:latest
+    container_name: noteforge-ai-service-prod
+    command: []
+    environment:
+      <<: *shared-env
+      SPRING_PROFILES_ACTIVE: prod
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      OPENAI_ENDPOINT: ${OPENAI_ENDPOINT:-https://api.openai.com/v1}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-text-embedding-3-small}
+    ports:
+      - "8083:8083"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8083/actuator/health"]
       interval: 30s
       timeout: 5s
       retries: 5

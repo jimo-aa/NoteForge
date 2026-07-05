@@ -2,6 +2,7 @@ package com.noteforge.note.controller;
 
 import com.noteforge.common.response.ApiResponse;
 import com.noteforge.note.dto.VersionCreateRequest;
+import com.noteforge.note.dto.VersionDiffResponse;
 import com.noteforge.note.dto.VersionResponse;
 import com.noteforge.note.service.VersionService;
 import jakarta.validation.Valid;
@@ -44,5 +45,20 @@ public class VersionController {
         VersionResponse version = versionService.createVersion(
                 noteId, auth.getName(), request.getTitle(), request.getContent(), request.getContentPlain());
         return ResponseEntity.ok(ApiResponse.success(version));
+    }
+
+    /**
+     * Compute LCS-based diff between two versions of a note.
+     * GET /api/v1/notes/{noteId}/versions/{versionNumber}/diff?target={targetVersionNumber}
+     */
+    @GetMapping("/{versionNumber}/diff")
+    public ResponseEntity<ApiResponse<VersionDiffResponse>> compareVersionDiff(
+            Authentication auth,
+            @PathVariable String noteId,
+            @PathVariable int versionNumber,
+            @RequestParam int target) {
+        VersionDiffResponse diff = versionService.compareVersionsDiff(
+                noteId, auth.getName(), versionNumber, target);
+        return ResponseEntity.ok(ApiResponse.success(diff));
     }
 }
