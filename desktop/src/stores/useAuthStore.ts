@@ -50,6 +50,7 @@ interface AuthState {
   user: AuthUser | null;
   accessToken: string | null;
   refreshToken: string | null;
+  isAuthenticated: boolean;
   isLoading: boolean;
 }
 
@@ -60,7 +61,7 @@ interface AuthActions {
   clearAuth: () => void;
 }
 
-type AuthStore = AuthState & AuthActions;
+export type AuthStore = AuthState & AuthActions;
 
 // ── Helpers ──
 
@@ -76,7 +77,7 @@ function persistTokens(
   refresh: string | null,
   userData: AuthUser | null,
 ): void {
-  set({ accessToken: access, refreshToken: refresh, user: userData });
+  set({ accessToken: access, refreshToken: refresh, user: userData, isAuthenticated: !!access && !!userData });
   if (access) safeWrite(`${STORAGE_PREFIX}:access-token`, access);
   else safeRemove(`${STORAGE_PREFIX}:access-token`);
   if (refresh) safeWrite(`${STORAGE_PREFIX}:refresh-token`, refresh);
@@ -93,6 +94,7 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
   user: safeRead<AuthUser | null>(`${STORAGE_PREFIX}:user`, null),
   accessToken: safeRead<string | null>(`${STORAGE_PREFIX}:access-token`, null),
   refreshToken: safeRead<string | null>(`${STORAGE_PREFIX}:refresh-token`, null),
+  isAuthenticated: (() => { const t = safeRead<string | null>(`${STORAGE_PREFIX}:access-token`, null); const u = safeRead<AuthUser | null>(`${STORAGE_PREFIX}:user`, null); return !!t && !!u; })(),
   isLoading: false,
 
   // Actions

@@ -770,7 +770,25 @@ function isBackendAvail(): boolean {
 function markBackendUnavail(): void { _backendAvail = false; }
 
 let isComputingDerived = false;
+let initStarted = false;
 
+// ── Auto-initialization: called once on first access ──
+// This replaces the old useEffect inside noteStore's useNoteStore() hook.
+function autoInit() {
+  if (initStarted) return;
+  initStarted = true;
+  // Defer to next microtask so React can mount first
+  Promise.resolve().then(() => {
+    useNoteStore.getState().initialize().catch(() => {
+      // Silently handle init errors — components will show empty state
+    });
+  });
+}
+
+// Trigger initialization immediately (safe because it's deferred to microtask)
+autoInit();
+
+// ── Derived state subscription (reactively compute filteredNotes, currentNote, etc.) ──
 useNoteStore.subscribe(() => {
   if (isComputingDerived) return;
   isComputingDerived = true;

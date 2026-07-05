@@ -1,14 +1,12 @@
 // 状态管理上下文 — 统一导出
-// V1: Context-based providers (legacy, from noteStore.tsx and authStore.tsx)
-// V2: Zustand stores (new, incremental migration path)
+// Zustand stores are preferred over Context providers.
 //
-// Migration strategy:
-// 1. New components should import from useAuthStore / useNoteStore / useUIStore directly
-// 2. Existing components continue to use useStore() / useAuth() via Context
-// 3. When all consumers are migrated, remove Context providers
+// Migration: New components should import from the specific store file directly.
+// Context providers (NoteProvider, AuthProvider) are no-ops kept for backward compat.
 
 export { useStore, NoteProvider } from './noteStore';
 export { useAuth, AuthProvider } from './authStore';
 
-// Zustand stores — preferred for new code
+// Zustand stores — preferred for new code (supports selectors)
+export { useNoteStore } from './useNoteStore';
 export { useAuthStore } from './useAuthStore';
