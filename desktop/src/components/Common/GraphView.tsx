@@ -135,6 +135,7 @@ export function GraphView() {
     });
 
     return { nodes, edges };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clusterMode, positions, graphKey]);
 
   const clusters = useMemo(() => {
@@ -226,6 +227,41 @@ export function GraphView() {
 
   const closeGraph = () => store.setIsGraphOpen(false);
 
+  const exportSvg = () => {
+    const svgEl = document.querySelector('.graph-links') as SVGSVGElement | null;
+    if (!svgEl) return;
+    const serializer = new XMLSerializer();
+    const svgStr = serializer.serializeToString(svgEl);
+    const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `graph-${Date.now()}.svg`;
+    a.click(); URL.revokeObjectURL(url);
+  };
+
+  const exportPng = () => {
+    const svgEl = document.querySelector('.graph-links') as SVGSVGElement | null;
+    if (!svgEl) return;
+    const serializer = new XMLSerializer();
+    const svgStr = serializer.serializeToString(svgEl);
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    const img = new Image();
+    img.onload = () => {
+      canvas.width = img.width * 2; canvas.height = img.height * 2;
+      ctx?.scale(2, 2);
+      ctx?.drawImage(img, 0, 0);
+      canvas.toBlob((blob) => {
+        if (!blob) return;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = `graph-${Date.now()}.png`;
+        a.click(); URL.revokeObjectURL(url);
+      }, 'image/png');
+    };
+    img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgStr)));
+  };
+
   if (!store.isGraphOpen) return null;
 
   const maxDegree = Math.max(1, ...graph.nodes.map((node) => node.degree));
@@ -290,6 +326,8 @@ export function GraphView() {
         >
           ⟳
         </button>
+        <button className="graph-btn-icon" onClick={exportSvg} title="导出 SVG">SVG</button>
+        <button className="graph-btn-icon" onClick={exportPng} title="导出 PNG">PNG</button>
         <span className="graph-info">
           {filteredGraph.nodes.length}/{graph.nodes.length} 节点 · {filteredGraph.edges.length} 连接
         </span>

@@ -10,24 +10,16 @@ interface ToolbarProps {
   editor: Editor | null;
   mode: 'wysiwyg' | 'source';
   onModeSwitch: () => void;
+  onAddLink?: () => void;
+  onAddImage?: () => void;
 }
 
-export function RichTextToolbar({ editor, mode, onModeSwitch }: ToolbarProps) {
+export function RichTextToolbar({ editor, mode, onModeSwitch, onAddLink, onAddImage }: ToolbarProps) {
   const { t } = useTranslation();
 
   const addTable = useCallback(() => {
     editor?.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
   }, [editor]);
-
-  const addLink = useCallback(() => {
-    const url = window.prompt(t('editor.linkUrl'));
-    if (url) editor?.chain().focus().setLink({ href: url }).run();
-  }, [editor, t]);
-
-  const addImage = useCallback(() => {
-    const url = window.prompt(t('editor.imageUrl'));
-    if (url) editor?.chain().focus().setImage({ src: url }).run();
-  }, [editor, t]);
 
   if (!editor) return null;
 
@@ -65,7 +57,7 @@ export function RichTextToolbar({ editor, mode, onModeSwitch }: ToolbarProps) {
         <ToolBtn onClick={() => editor.chain().focus().toggleBulletList().run()} active={editor.isActive('bulletList')} title={t('note.unorderedList')}>•</ToolBtn>
         <ToolBtn onClick={() => editor.chain().focus().toggleOrderedList().run()} active={editor.isActive('orderedList')} title={t('note.orderedList')}>1.</ToolBtn>
         <ToolBtn onClick={() => editor.chain().focus().toggleBlockquote().run()} active={editor.isActive('blockquote')} title={t('note.blockquote')}>"</ToolBtn>
-        <ToolBtn onClick={() => editor.chain().focus().toggleCodeBlock().run()} active={editor.isActive('codeBlock')} title={t('note.codeBlock')}>&lt;/&gt;</ToolBtn>
+        <ToolBtn onClick={() => editor.chain().focus().toggleCodeBlock().run()} active={editor.isActive('codeBlock')} title={t('note.codeBlock')}>{'</>'}</ToolBtn>
       </div>
 
       <div className="rich-toolbar-divider" />
@@ -88,8 +80,8 @@ export function RichTextToolbar({ editor, mode, onModeSwitch }: ToolbarProps) {
       <div className="rich-toolbar-divider" />
 
       <div className="rich-toolbar-group">
-        <ToolBtn onClick={addLink} active={editor.isActive('link')} title={t('note.link')}>🔗</ToolBtn>
-        <ToolBtn onClick={addImage} title={t('note.image')}>🖼</ToolBtn>
+        <ToolBtn onClick={onAddLink || (() => {})} active={editor.isActive('link')} title={t('note.link', '链接')}>🔗</ToolBtn>
+        <ToolBtn onClick={onAddImage || (() => {})} title="图片">🖼</ToolBtn>
       </div>
 
       <div className="rich-toolbar-spacer" />
@@ -97,7 +89,7 @@ export function RichTextToolbar({ editor, mode, onModeSwitch }: ToolbarProps) {
       {/* Mode switch */}
       <div className="rich-toolbar-group">
         <ToolBtn onClick={onModeSwitch} title={mode === 'wysiwyg' ? t('editor.sourceMode') : t('editor.visualMode')}>
-          {mode === 'wysiwyg' ? '&lt;/&gt;' : '👁'}
+          {mode === 'wysiwyg' ? '</>' : '👁'}
         </ToolBtn>
       </div>
     </div>

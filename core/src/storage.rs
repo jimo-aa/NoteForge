@@ -682,7 +682,18 @@ impl LocalStorage {
     }
 
     /// 自动创建版本快照（编辑保存时触发）
-    pub fn create_auto_snapshot(&self, note_id: &str, content: &str, content_plain: &str, word_count: u32) -> Result<NoteSnapshot, CoreError> {
+    /// 如果离上一个自动快照不足 AUTO_SNAPSHOT_INTERVAL_MS，则跳过。
+    pub fn create_auto_snapshot(&self, note_id: &str, content: &str, content_plain: &str, word_count: u32) -> Result<Option<NoteSnapshot>, CoreError> {
+        // Check minimum interval: don't create auto-snapshots more than once per 5 minutes
+        const MIN_INTERVAL_MS: u64 = 5 * 60 * 1000;
+        
+        if let Ok(Some(last_time)) = self.last_auto_snapshot_time(note_id) {
+            let elapsed = types::now_ms().saturating_sub(last_time);
+            if elapsed < MIN_INTERVAL_MS {
+                return Ok(None); // Skip — too soon
+            }
+        }
+
         let id = types::generate_id();
         let now = types::now_ms();
         let next_version = self.next_snapshot_version(note_id)?;
@@ -696,7 +707,17 @@ impl LocalStorage {
             params![id, note_id, next_version, title, "", content_encrypted, content_plain, word_count as i32, now],
         )?;
 
-        self.get_snapshot(&id)
+        self.get_snapshot(&id).map(Some)
+    }
+
+    /// 获取最近一次自动快照的时间戳
+    fn last_auto_snapshot_time(&self, note_id: &str) -> Result<Option<u64>, CoreError> {
+        let result: Result<Option<i64>, _> = self.conn.query_row(
+            "SELECT MAX(created_at) FROM note_snapshots WHERE note_id = ?1 AND is_auto_save = 1",
+            params![note_id],
+            |row| row.get(0),
+        );
+        Ok(result.ok().flatten().map(|v| v as u64))
     }
 
     /// 列出笔记的所有快照（最新在前）

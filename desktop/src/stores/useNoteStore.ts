@@ -9,8 +9,6 @@ import { countWords } from '@/utils/markdown';
 import { tauriInvoke } from '@/utils/invoke';
 import { getSyncService } from '@/services/syncService';
 import * as localStore from '@/services/localStoreService';
-import type { NoteVersion } from '@/services/localStoreService';
-
 // ── Constants ──
 
 const ALL_NOTEBOOK: Notebook = { id: 'all', name: '全部笔记', icon: '📋', color: '', parentId: null, sortOrder: 0, noteCount: 0, createdAt: 0, updatedAt: 0 };
@@ -39,7 +37,6 @@ let toastIdCounter = 0;
 const autosaveTimers: Record<string, ReturnType<typeof setTimeout> | null> = {};
 let lastSyncVersion = 0;
 const syncService = getSyncService();
-const lastCommittedContent: Record<string, string> = {};
 const WELCOME_COMPLETED_KEY = 'noteforge:welcome:completed';
 
 // ── Store types ──
@@ -139,6 +136,9 @@ interface NoteActions {
   batchDeleteNotes: () => void;
   batchMoveNotes: (targetNotebookId: string) => void;
   batchTagNotes: (tag: string) => void;
+  batchPinNotes: () => void;
+  batchFavoriteNotes: () => void;
+  batchExportNotes: () => Promise<void>;
 
   // Sync
   queueSyncChange: (noteId: string, note: Note, isDeleted?: boolean) => void;
@@ -355,7 +355,8 @@ export const useNoteStore = create<NoteStore>()((set, get) => ({
       const updatedNotes = s.notes.map((n) => {
         if (n.meta.id !== id) return n;
         const nextContent = updates.content ?? n.content;
-        const { content: _unused, ...metaUpdates } = updates;
+        const metaUpdates = { ...updates };
+        delete metaUpdates.content;
         const next: Note = {
           meta: {
             ...n.meta,
@@ -377,38 +378,17 @@ export const useNoteStore = create<NoteStore>()((set, get) => ({
       return { notes: updatedNotes };
     });
 
-    const needsPersist = updates.title !== undefined || updates.content !== undefined || updates.tags !== undefined || updates.isPinned !== undefined || updates.isFavorite !== undefined;
-    if (needsPersist) {
-      // Try Tauri backend first, fallback to localStorage
-      const persistToBackend = () => {
-        if (!isBackendAvail()) return false;
-        try {
-          void tauriInvoke('update_note', { id, title: updates.title ?? null, content: updates.content ?? null, tags: updates.tags ?? null, isPinned: updates.isPinned ?? null, isFavorite: updates.isFavorite ?? null });
-          return true;
-        } catch {
-          markBackendUnavail();
-          return false;
-        }
-      };
-      const localUpdated = localStore.updateLocalNote(id, {
+    // Sync to localStorage immediately for draft recovery
+    if (updates.content !== undefined) {
+      localStore.updateLocalNote(id, { content: updates.content });
+    }
+    if (updates.title !== undefined || updates.tags !== undefined || updates.isPinned !== undefined || updates.isFavorite !== undefined) {
+      localStore.updateLocalNote(id, {
         title: updates.title,
-        content: updates.content,
         tags: updates.tags,
         isPinned: updates.isPinned,
         isFavorite: updates.isFavorite,
       });
-      if (!persistToBackend() && !localUpdated) {
-        // no-op: note may only exist in backend mode
-      }
-      if (updates.content !== undefined) {
-        const prev = lastCommittedContent[id];
-        if (updates.content !== prev) {
-          lastCommittedContent[id] = updates.content;
-          if (isBackendAvail()) {
-            void tauriInvoke('create_note_version', { noteId: id, title: `自动保存 ${new Date().toLocaleString('zh-CN')}`, description: null }).catch(() => {});
-          }
-        }
-      }
     }
 
     const updatedNote = get().notes.find((n) => n.meta.id === id);
@@ -701,6 +681,38 @@ export const useNoteStore = create<NoteStore>()((set, get) => ({
     set({ selectedNoteIds: [] });
     get().showToast('success', `已为 ${ids.length} 条笔记添加标签「${tag}」`);
   },
+  batchPinNotes: () => {
+    const ids = get().selectedNoteIds;
+    const allPinned = ids.every((id) => get().notes.find((n) => n.meta.id === id)?.meta.isPinned);
+    for (const id of ids) get().updateNote(id, { isPinned: !allPinned });
+    set({ selectedNoteIds: [] });
+    get().showToast('success', allPinned ? `已取消 ${ids.length} 条笔记的置顶` : `已置顶 ${ids.length} 条笔记`);
+  },
+  batchFavoriteNotes: () => {
+    const ids = get().selectedNoteIds;
+    const allFav = ids.every((id) => get().notes.find((n) => n.meta.id === id)?.meta.isFavorite);
+    for (const id of ids) get().updateNote(id, { isFavorite: !allFav });
+    set({ selectedNoteIds: [] });
+    get().showToast('success', allFav ? `已取消 ${ids.length} 条笔记的收藏` : `已收藏 ${ids.length} 条笔记`);
+  },
+  batchExportNotes: async () => {
+    const ids = get().selectedNoteIds;
+    const selectedNotes = ids.map((id) => get().notes.find((n) => n.meta.id === id)).filter(Boolean) as Note[];
+    if (selectedNotes.length === 0) return;
+    // Build a bundled markdown string from all selected notes
+    const bundle = selectedNotes.map((n) => `# ${n.meta.title}\n\n${n.content}\n\n---\n`).join('\n');
+    const blob = new Blob([bundle], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `noteforge-export-${Date.now()}.md`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    set({ selectedNoteIds: [] });
+    get().showToast('success', `已导出 ${selectedNotes.length} 条笔记`);
+  },
 
   // Sync
   queueSyncChange: (noteId, note, isDeleted) => {
@@ -803,7 +815,9 @@ useNoteStore.subscribe(() => {
 
     // Compare with JSON.stringify to avoid infinite loop from new object references
     const needsFiltered = JSON.stringify(filtered) !== JSON.stringify(s.filteredNotes);
-    const needsCurrent = current?.meta.id !== s.currentNote?.meta.id;
+    const needsCurrent = current?.meta.id !== s.currentNote?.meta.id
+      || current?.content !== s.currentNote?.content
+      || current?.meta.updatedAt !== s.currentNote?.meta.updatedAt;
     const needsTags = JSON.stringify(tags) !== JSON.stringify(s.tags);
     const needsTotal = totalCount !== s.totalCount;
     const needsFav = favoriteCount !== s.favoriteCount;

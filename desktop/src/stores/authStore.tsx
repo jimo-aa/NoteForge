@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 // NoteForge — 认证状态管理
 // Compat layer — re-exports from Zustand useAuthStore
 // @deprecated Import directly from '@/stores/useAuthStore' for new code

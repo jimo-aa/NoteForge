@@ -311,4 +311,65 @@ mod tests {
         let result = em.decrypt("abcd1234");
         assert!(result.is_err());
     }
+
+    #[test]
+    fn test_short_ciphertext_returns_error() {
+        let password = "pwd123";
+        let salt = EncryptionManager::generate_salt();
+        let key = EncryptionManager::derive_key_from_password(password, &salt).unwrap();
+        let mut em = EncryptionManager::new();
+        em.initialize(key);
+
+        // 5 bytes < minimum 28
+        let result = em.decrypt("aabbccddee");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_repeated_encrypt_cycles_differ() {
+        let password = "pwd123";
+        let salt = EncryptionManager::generate_salt();
+        let key = EncryptionManager::derive_key_from_password(password, &salt).unwrap();
+        let mut em = EncryptionManager::new();
+        em.initialize(key);
+
+        let ct1 = em.encrypt("same text").unwrap();
+        let ct2 = em.encrypt("same text").unwrap();
+        // Nonce ensures different ciphertexts each time
+        assert_ne!(ct1, ct2);
+    }
+
+    #[test]
+    fn test_unicode_content_roundtrip() {
+        let password = "pwd123";
+        let salt = EncryptionManager::generate_salt();
+        let key = EncryptionManager::derive_key_from_password(password, &salt).unwrap();
+        let mut em = EncryptionManager::new();
+        em.initialize(key);
+
+        let texts = vec![
+            "日本語のノート内容",
+            "한국어 메모 내용",
+            "中文笔记内容",
+            "English notes with emoji 🎉",
+            "Mélanges d'accents",
+        ];
+        for text in texts {
+            let encrypted = em.encrypt(text).unwrap();
+            let decrypted = em.decrypt(&encrypted).unwrap();
+            assert_eq!(text, decrypted);
+        }
+    }
+
+    #[test]
+    fn test_different_salts_different_keys() {
+        let password = "same_password";
+        let salt1 = EncryptionManager::generate_salt();
+        let salt2 = EncryptionManager::generate_salt();
+
+        let key1 = EncryptionManager::derive_key_from_password(password, &salt1).unwrap();
+        let key2 = EncryptionManager::derive_key_from_password(password, &salt2).unwrap();
+
+        assert_ne!(key1, key2);
+    }
 }

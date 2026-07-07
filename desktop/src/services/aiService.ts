@@ -1,7 +1,15 @@
 // NoteForge — AI Service client
 // Communicates with ai-service backend for writing, tagging, and search.
 
-const AI_API_BASE = 'http://localhost:8083/api/v1/ai';
+// AI API — routed through API Gateway (port 8000) instead of direct to ai-service
+// Custom gateway URL via localStorage key 'noteforge:api:gateway-url'
+const AI_API_BASE = (() => {
+  try {
+    const custom = window.localStorage.getItem('noteforge:api:gateway-url');
+    if (custom) return `${custom.replace(/\/+$/, '')}/api/v1/ai`;
+  } catch { /* localStorage unavailable */ }
+  return 'http://localhost:8000/api/v1/ai';
+})();
 const AUTH_TOKEN_KEY = 'noteforge:auth:access-token';
 
 function getToken(): string | null {

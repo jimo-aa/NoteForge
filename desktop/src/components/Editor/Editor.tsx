@@ -5,9 +5,9 @@ import { renderMarkdown, formatTable } from '@/utils/markdown';
 import { Icon } from '@/components/Common/Icon';
 import { AttachmentPanel } from '@/components/Editor/AttachmentPanel';
 import { CodeMirrorEditor, type CodeMirrorHandle } from './CodeMirrorEditor';
+import { RichTextEditor, type RichTextHandle } from './RichTextEditor';
 import { AIToolbar } from './AIToolbar';
-import hljs from 'highlight.js';
-import 'highlight.js/styles/github.css';
+
 
 
 const MARKDOWN_ACTIONS_BASE = [
@@ -68,7 +68,7 @@ export function Editor() {
   }), [t]);
 
   const note = currentNote;
-  const cmRef = useRef<CodeMirrorHandle>(null);
+  const cmRef = useRef<CodeMirrorHandle & Partial<RichTextHandle>>(null);
   const autosaveTimerRef = useRef<number | null>(null);
   const lastSavedSnapshotRef = useRef('');
   const restoreCursorRef = useRef<{ start: number; end: number } | null>(null);
@@ -83,25 +83,51 @@ export function Editor() {
   const [wikiOpen, setWikiOpen] = useState(false);
   const [wikiActiveIndex, setWikiActiveIndex] = useState(0);
   const [searchMatchInfo, setSearchMatchInfo] = useState<{ current: number; total: number } | null>(null);
+  const [editorMode, setEditorMode] = useState<'wysiwyg' | 'source'>('wysiwyg');
 
   // ── AI Toolbar state ──
   const [aiSelectedText, setAiSelectedText] = useState('');
   const [aiToolbarPos, setAiToolbarPos] = useState<{ top: number; left: number } | null>(null);
   const [aiToolbarVisible, setAiToolbarVisible] = useState(false);
   const editorContainerRef = useRef<HTMLDivElement>(null);
-
-  const handleEditorSelectionChange = useCallback((from: number, to: number) => {
-    if (!note || !cmRef.current) return;
-    const text = note.content.slice(from, to);
+  const handleEditorSelectionChange = useCallback((from: number, to: number, selectedText?: string) => {
+    if (!note) return;
+    let text = selectedText;
+    if (!text && cmRef.current) {
+      try { text = note.content.slice(from, to); } catch { text = ''; }
+    }
     if (text && text.length > 0 && text.length <= 5000) {
       setAiSelectedText(text);
-      // Position toolbar near the selection
-      if (editorContainerRef.current) {
-        // Position toolbar near the selection (simplified for now)
-        setAiToolbarPos({ top: 20, left: 10 });
+      // Position using DOM selection coordinates with fixed positioning
+      const domSel = window.getSelection();
+      if (domSel && domSel.rangeCount > 0) {
+        const r = domSel.getRangeAt(0).getBoundingClientRect();
+        if (r && r.top > 0) {
+          setAiToolbarPos({ top: r.top - 44, left: r.left });
+        } else {
+          setAiToolbarPos({ top: 60, left: 10 });
+        }
+      } else {
+        setAiToolbarPos({ top: 60, left: 10 });
       }
       setAiToolbarVisible(text.length > 0 && text.length <= 2000);
     } else {
+      // ProseMirror may have collapsed the selection internally (click handler on mouseup)
+      // but the DOM selection may still hold the user's selected text.
+      const domSel = window.getSelection();
+      if (domSel && !domSel.isCollapsed) {
+        const domText = domSel.toString();
+        if (domText.length > 0 && domText.length <= 2000) {
+          setAiSelectedText(domText);
+          try {
+            const r = domSel.getRangeAt(0).getBoundingClientRect();
+            if (r && r.top > 0) {
+              setAiToolbarPos({ top: r.top - 44, left: r.left });
+            }
+          } catch { /* ignore */ }
+          return; // Keep visible — DOM still has a real selection
+        }
+      }
       setAiToolbarVisible(false);
     }
   }, [note]);
@@ -176,16 +202,45 @@ export function Editor() {
 
   const wikiCandidates = useMemo(() => notes.map((item) => item.meta.title).filter(Boolean), [notes]);
 
-  const renderedHtml = useMemo(() => note ? renderMarkdown(note.content ?? '', searchQuery) : '', [note?.content, searchQuery]);
+  const renderedHtml = useMemo(() => note ? renderMarkdown(note.content ?? '', searchQuery) : '',
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [note?.content, searchQuery]);
 
   // ── Syntax highlight for preview ──
   const previewRef = useRef<HTMLElement>(null);
   useEffect(() => {
     if (!renderedHtml || !previewRef.current) return;
-    const codes = previewRef.current.querySelectorAll<HTMLElement>('pre code[class*="language-"]');
-    codes.forEach((el) => {
-      hljs.highlightElement(el);
+    let cancelled = false;
+    void import('highlight.js/lib/core').then(async (hljsCore) => {
+      // Dynamically register only the languages we need
+      const { default: markdown } = await import('highlight.js/lib/languages/markdown');
+      const { default: javascript } = await import('highlight.js/lib/languages/javascript');
+      const { default: typescript } = await import('highlight.js/lib/languages/typescript');
+      const { default: python } = await import('highlight.js/lib/languages/python');
+      const { default: rust } = await import('highlight.js/lib/languages/rust');
+      const { default: css } = await import('highlight.js/lib/languages/css');
+      const { default: json } = await import('highlight.js/lib/languages/json');
+      const { default: bash } = await import('highlight.js/lib/languages/bash');
+      const { default: xml } = await import('highlight.js/lib/languages/xml');
+      await import('highlight.js/styles/github.css');
+
+      hljsCore.default.registerLanguage('markdown', markdown);
+      hljsCore.default.registerLanguage('javascript', javascript);
+      hljsCore.default.registerLanguage('typescript', typescript);
+      hljsCore.default.registerLanguage('python', python);
+      hljsCore.default.registerLanguage('rust', rust);
+      hljsCore.default.registerLanguage('css', css);
+      hljsCore.default.registerLanguage('json', json);
+      hljsCore.default.registerLanguage('bash', bash);
+      hljsCore.default.registerLanguage('xml', xml);
+
+      if (cancelled || !previewRef.current) return;
+      const codes = previewRef.current.querySelectorAll<HTMLElement>('pre code[class*="language-"]');
+      codes.forEach((el) => {
+        hljsCore.default.highlightElement(el);
+      });
     });
+    return () => { cancelled = true; };
   }, [renderedHtml]);
 
   // ── Wiki Link 导航 ──
@@ -206,7 +261,7 @@ export function Editor() {
     });
   }, [note, note?.meta.id]);
 
-  const updateContent = (content: string) => {
+  const updateContent = useCallback((content: string) => {
     if (!note) return;
     updateNote(note.meta.id, { content });
     if (autosaveTimerRef.current) window.clearTimeout(autosaveTimerRef.current);
@@ -218,7 +273,7 @@ export function Editor() {
       saveDraft(note.meta.id, content);
       lastSavedSnapshotRef.current = content;
     }, 300);
-  };
+  }, [note, updateNote, saveDraft]);
 
   // 处理预览区点击：Wiki Link 导航 + 任务列表切换 + 代码复制
   const handlePreviewClick = useCallback((e: React.MouseEvent<HTMLElement>) => {
@@ -503,22 +558,36 @@ export function Editor() {
           <button className={attachmentPanelOpen ? 'state-button active' : 'plain-action'} onClick={() => setAttachmentPanelOpen((v) => !v)} title={t('attachment.title')}>📎</button>
         </div>
       </header>
-      <div className="markdown-toolbar">
-        <div className="markdown-buttons">
-          {MARKDOWN_ACTIONS_BASE.map((action) => (
-            <button key={action.label} className="markdown-button" title={actionTitles[action.label]} onClick={() => insertMarkdown(action.before, action.after)}>
-              {action.label}
+      {/* Markdown toolbar — only for source mode */}
+      {editorMode === 'source' && (
+        <div className="markdown-toolbar">
+          <div className="markdown-buttons">
+            {MARKDOWN_ACTIONS_BASE.map((action) => (
+              <button key={action.label} className="markdown-button" title={actionTitles[action.label]} onClick={() => insertMarkdown(action.before, action.after)}>
+                {action.label}
+              </button>
+            ))}
+            <button className="markdown-button" title={t('note.formatTable')} onClick={handleFormatTable}>
+              ⊞ {t('note.table')}
             </button>
-          ))}
-          <button className="markdown-button" title={t('note.formatTable')} onClick={handleFormatTable}>
-            ⊞ {t('note.table')}
+          </div>
+          <button className={editorMode === 'source' ? 'preview-toggle active' : 'preview-toggle'} onClick={() => setEditorMode('wysiwyg')} title={t('editor.visualMode')}>
+            👁 {t('editor.visualMode')}
+          </button>
+          <button className={isPreviewVisible ? 'preview-toggle active' : 'preview-toggle'} onClick={() => setIsPreviewVisible(!isPreviewVisible)}>👁 {t('editor.preview')}</button>
+        </div>
+      )}
+      {/* WYSIWYG toggle bar (minimal) */}
+      {editorMode === 'wysiwyg' && (
+        <div className="markdown-toolbar" style={{ borderBottom: '1px solid var(--line)', padding: '2px 8px', display: 'flex', justifyContent: 'flex-end', gap: 4 }}>
+          <button className="preview-toggle" onClick={() => setEditorMode('source')} title={t('editor.sourceMode')}>
+            &lt;/&gt; {t('editor.sourceMode')}
           </button>
         </div>
-        <button className={isPreviewVisible ? 'preview-toggle active' : 'preview-toggle'} onClick={() => setIsPreviewVisible(!isPreviewVisible)}>👁 {t('editor.preview')}</button>
-      </div>
-      <div className={isPreviewVisible ? 'split-editor' : 'split-editor no-preview'}>
-        <div className="markdown-editor-pane" style={{ flexBasis: isPreviewVisible ? `${editorWidth}%` : '100%' }}>
-          {searchQuery && (
+      )}
+      <div className={editorMode === 'wysiwyg' ? 'split-editor' : (isPreviewVisible ? 'split-editor' : 'split-editor no-preview')}>
+        <div className="markdown-editor-pane" style={{ flexBasis: editorMode === 'wysiwyg' ? '100%' : (isPreviewVisible ? `${editorWidth}%` : '100%') }}>
+          {searchQuery && editorMode === 'source' && (
             <div className="editor-search-bar">
               <span className="editor-search-label">🔍 {searchQuery}</span>
               {searchMatchInfo ? (
@@ -528,55 +597,54 @@ export function Editor() {
               ) : (
                 <span className="editor-search-count">0 {t('search.searchResults')}</span>
               )}
-              <button
-                className="editor-search-nav"
-                title={t('note.prevMatch')}
-                onClick={() => {
-                  cmRef.current?.highlightPrev();
-                  setSearchMatchInfo(cmRef.current?.getMatchInfo() ?? null);
-                }}
-              >▲</button>
-              <button
-                className="editor-search-nav"
-                title={t('note.nextMatch')}
-                onClick={() => {
-                  cmRef.current?.highlightNext();
-                  setSearchMatchInfo(cmRef.current?.getMatchInfo() ?? null);
-                }}
-              >▼</button>
-              <button
-                className="editor-search-close"
-                title={t('note.clearSearch')}
-                onClick={() => setSearchQuery('')}
-              >✕</button>
+              <button className="editor-search-nav" title={t('note.prevMatch')} onClick={() => { cmRef.current?.highlightPrev?.(); setSearchMatchInfo(cmRef.current?.getMatchInfo?.() ?? null); }}>▲</button>
+              <button className="editor-search-nav" title={t('note.nextMatch')} onClick={() => { cmRef.current?.highlightNext?.(); setSearchMatchInfo(cmRef.current?.getMatchInfo?.() ?? null); }}>▼</button>
+              <button className="editor-search-close" title={t('note.clearSearch')} onClick={() => setSearchQuery('')}>✕</button>
             </div>
           )}
           <div ref={editorContainerRef} style={{ position: 'relative', flex: 1, minHeight: 0 }}>
-            <CodeMirrorEditor
-              ref={cmRef}
-              initialContent={note.content ?? ''}
-              searchQuery={searchQuery}
-              onChange={(next) => {
-                updateContent(next);
-                if (wikiOpen) openWikiSuggestions();
-              }}
-              onSelectionChange={(from, to) => {
-                persistCursor();
-                if (wikiOpen) openWikiSuggestions();
-                handleEditorSelectionChange(from, to);
-              }}
-              onImagePaste={handleImagePaste}
-              onImageDrop={handleImageDrop}
-              onWikiLinkClick={(title) => {
-                const found = notes.find((n) => n.meta.title.toLowerCase() === title.toLowerCase());
-                if (found) {
-                  selectNote(found.meta.id);
-                  showToast('info', t('note.jumpedToNote', { title: found.meta.title }));
-                } else {
-                  showToast('error', t('note.noteNotFound', { title }));
-                }
-              }}
-            />
+            {editorMode === 'wysiwyg' ? (
+              <RichTextEditor
+                ref={cmRef}
+                initialContent={note.content ?? ''}
+                searchQuery={searchQuery}
+                onChange={(next) => {
+                  updateContent(next);
+                  if (wikiOpen) openWikiSuggestions();
+                }}
+                onSelectionChange={(from, to) => {
+                  persistCursor();
+                  handleEditorSelectionChange(from, to);
+                }}
+                placeholderText="开始编写笔记..."
+              />
+            ) : (
+              <CodeMirrorEditor
+                ref={cmRef}
+                initialContent={note.content ?? ''}
+                searchQuery={searchQuery}
+                onChange={(next) => {
+                  updateContent(next);
+                  if (wikiOpen) openWikiSuggestions();
+                }}
+                onSelectionChange={(from, to) => {
+                  persistCursor();
+                  if (wikiOpen) openWikiSuggestions();
+                  handleEditorSelectionChange(from, to);
+                }}
+                onImagePaste={handleImagePaste}
+                onImageDrop={handleImageDrop}
+                onWikiLinkClick={(title) => {
+                  const found = notes.find((n) => n.meta.title.toLowerCase() === title.toLowerCase());
+                  if (found) {
+                    selectNote(found.meta.id);
+                    showToast('info', t('note.jumpedToNote', { title: found.meta.title }));
+                  } else {
+                    showToast('error', t('note.noteNotFound', { title }));
+                  }
+                }}
+              />
+            )}
             <AIToolbar
               selectedText={aiSelectedText}
               noteContent={note.content}
@@ -586,7 +654,7 @@ export function Editor() {
               onClose={() => setAiToolbarVisible(false)}
             />
           </div>
-          {wikiOpen && (
+          {wikiOpen && editorMode === 'source' && (
             <div className="wiki-autocomplete" onKeyDown={handleEditorKeyDown}>
               <div className="wiki-autocomplete-header">Wiki Link {wikiQuery ? `：${wikiQuery}` : ''}</div>
               {wikiSuggestions.length ? wikiSuggestions.map((title, index) => (
@@ -598,7 +666,8 @@ export function Editor() {
             </div>
           )}
         </div>
-        {isPreviewVisible && (
+        {/* Preview panel — only for source mode */}
+        {editorMode === 'source' && isPreviewVisible && (
           <>
             <div className="editor-resizer" onMouseDown={startResize} role="separator" aria-orientation="vertical"><span /></div>
             <article
@@ -610,12 +679,8 @@ export function Editor() {
               onMouseOver={handlePreviewMouseOver}
               onMouseOut={() => { setHoveredWikiLink(null); setHoverPreviewContent(null); }}
             />
-            {/* Wiki Link 悬停预览 */}
             {hoveredWikiLink && (
-              <div
-                className="wiki-link-preview"
-                style={{ left: hoveredWikiLink.x - 300, top: hoveredWikiLink.y + 16 }}
-              >
+              <div className="wiki-link-preview" style={{ left: hoveredWikiLink.x - 300, top: hoveredWikiLink.y + 16 }}>
                 <div className="wiki-link-preview-title">{hoveredWikiLink.title}</div>
                 {hoverPreviewContent ? (
                   <div className="wiki-link-preview-content">{hoverPreviewContent}</div>

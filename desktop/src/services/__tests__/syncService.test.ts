@@ -82,7 +82,7 @@ describe('SyncService', () => {
     const calls = mockFetch.mock.calls;
     expect(calls.length).toBeGreaterThan(0);
     const [url, opts] = calls[0] as [string, RequestInit];
-    expect(url).toBe('http://localhost:8081/api/v1/sync/pull');
+    expect(url).toBe('http://localhost:8000/api/v1/sync/pull');
     expect(opts.method).toBe('POST');
     expect(JSON.parse(opts.body as string)).toEqual({ lastVersion: 0 });
   });

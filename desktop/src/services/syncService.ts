@@ -10,7 +10,15 @@ import type {
 } from '@/types';
 
 const AUTH_TOKEN_KEY = 'noteforge:auth:access-token';
-const SYNC_API_BASE = 'http://localhost:8081/api/v1/sync';
+// Sync API — routed through API Gateway (port 8000) instead of direct to note-service
+// Configure the gateway URL via localStorage key 'noteforge:api:gateway-url' if needed
+const SYNC_API_BASE = (() => {
+  try {
+    const custom = window.localStorage.getItem('noteforge:api:gateway-url');
+    if (custom) return `${custom.replace(/\/+$/, '')}/api/v1/sync`;
+  } catch { /* localStorage unavailable */ }
+  return 'http://localhost:8000/api/v1/sync';
+})();
 const PENDING_QUEUE_KEY = 'noteforge:sync:pending-queue';
 
 const MAX_RETRIES = 3;

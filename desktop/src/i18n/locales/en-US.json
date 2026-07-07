@@ -55,7 +55,9 @@
     "preview": "Preview",
     "edit": "Edit",
     "welcomeTitle": "Select a note to start editing",
-    "welcomeDesc": "Choose a note from the sidebar, or create a new one."
+    "welcomeDesc": "Choose a note from the sidebar, or create a new one.",
+    "sourceMode": "Source",
+    "visualMode": "Visual"
   },
   "auth": {
     "login": "Login",

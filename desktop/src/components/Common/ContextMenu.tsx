@@ -37,6 +37,7 @@ export function ContextMenu() {
     }
 
     return [];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [kind, noteId, notebookId, store, visible]);
 
   if (!visible || !kind || actions.length === 0) return null;

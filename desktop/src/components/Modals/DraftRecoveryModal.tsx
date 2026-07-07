@@ -30,11 +30,11 @@ function getDateGroup(ts: number): string {
 
 export function DraftRecoveryModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { t } = useTranslation();
-  const { recoveryDrafts, notes, clearRecovery, selectNote, showToast } = useStore();
+  const { notes, recoveryDrafts, clearRecovery, selectNote, showToast } = useStore();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
-  const safeNotes = notes || [];
-  const safeDrafts = recoveryDrafts || [];
+  const safeNotes = useMemo(() => notes || [], [notes]);
+  const safeDrafts = useMemo(() => recoveryDrafts || [], [recoveryDrafts]);
 
   // Check for crash recovery data
   let crashInfo: { crashedAt: number; error: string } | null = null;

@@ -1,7 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import '../../../styles/modals.css';
 import { tauriInvoke as invoke } from '@/utils/invoke';
+import { EditorView } from '@codemirror/view';
+import { EditorState } from '@codemirror/state';
+import { markdown } from '@codemirror/lang-markdown';
 
 interface DiffOperation {
   op_type: 'add' | 'remove' | 'modify';
@@ -43,6 +46,8 @@ export function DiffViewerModal({
   const [diff, setDiff] = useState<DiffResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [contextLines, setContextLines] = useState(3);
+  const cmPreviewRef = useRef<HTMLDivElement>(null);
+  const cmViewRef = useRef<EditorView | null>(null);
 
   useEffect(() => {
     if (!open || !noteId || !fromVersion || !toVersion) return;
@@ -59,6 +64,32 @@ export function DiffViewerModal({
       setLoading(false);
     })();
   }, [open, noteId, fromVersion, toVersion, contextLines]);
+
+  // CodeMirror syntax highlighted diff preview
+  useEffect(() => {
+    if (!diff || !cmPreviewRef.current) return;
+    if (cmViewRef.current) { cmViewRef.current.destroy(); cmViewRef.current = null; }
+
+    const diffText = diff.operations.map((op) => {
+      const prefix = op.op_type === 'add' ? '+ ' : op.op_type === 'remove' ? '- ' : '  ';
+      return prefix + (op.new_text ?? op.old_text ?? '');
+    }).join('\n');
+
+    const state = EditorState.create({
+      doc: diffText,
+      extensions: [
+        markdown(),
+        EditorView.editable.of(false),
+        EditorView.theme({
+          '&': { fontSize: '13px', backgroundColor: 'transparent' },
+          '.cm-line': { paddingLeft: '8px' },
+          '.cm-content': { fontFamily: '"JetBrains Mono", "Fira Code", monospace' },
+        }),
+      ],
+    });
+    cmViewRef.current = new EditorView({ state, parent: cmPreviewRef.current });
+    return () => { cmViewRef.current?.destroy(); };
+  }, [diff]);
 
   if (!open) return null;
 
@@ -146,6 +177,10 @@ export function DiffViewerModal({
                   <div className="no-changes">{t('diff.noChanges')}</div>
                 )}
               </div>
+            </div>
+            <div className="diff-cm-section">
+              <h4 style={{ margin: '12px 0 6px', fontSize: 13, color: 'var(--text-muted)' }}>{t('diff.syntaxHighlight')}</h4>
+              <div ref={cmPreviewRef} style={{ border: '1px solid var(--line)', borderRadius: 6, overflow: 'hidden', maxHeight: 400, overflowY: 'auto' }} />
             </div>
           </>
         ) : (

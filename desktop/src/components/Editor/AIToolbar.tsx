@@ -47,6 +47,16 @@ const LANG_OPTIONS = [
   { value: 'fr', label: 'Français' },
 ] as const;
 
+const TONE_STORAGE_KEY = 'noteforge:ai:tone';
+
+function loadTone(): string {
+  try { return window.localStorage.getItem(TONE_STORAGE_KEY) || 'clear'; } catch { return 'clear'; }
+}
+
+function saveTone(value: string): void {
+  try { window.localStorage.setItem(TONE_STORAGE_KEY, value); } catch { /* ignore */ }
+}
+
 export function AIToolbar({
   selectedText,
   noteContent,
@@ -57,7 +67,7 @@ export function AIToolbar({
 }: AIToolbarProps) {
   const { t } = useTranslation();
   const [streamState, setStreamState] = useState<StreamState | null>(null);
-  const [tone, setTone] = useState('clear');
+  const [tone, setTone] = useState(loadTone);
   const [targetLang, setTargetLang] = useState('zh-CN');
   const [showTonePicker, setShowTonePicker] = useState(false);
   const [showLangPicker, setShowLangPicker] = useState(false);
@@ -77,10 +87,28 @@ export function AIToolbar({
         onClose();
       }
     };
-    // Delay to prevent immediate close from the same click
     const timer = setTimeout(() => document.addEventListener('click', handleClick), 0);
     return () => { clearTimeout(timer); document.removeEventListener('click', handleClick); };
   }, [visible, onClose]);
+
+  // Keyboard shortcut: Ctrl+I toggles rewrite dropdown when visible
+  useEffect(() => {
+    if (!visible) return;
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'i') {
+        e.preventDefault();
+        // If streaming, cancel; otherwise trigger continue
+        if (streamState) {
+          cancelStream();
+        } else if (selectedText) {
+          startStream('continue');
+        }
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, selectedText, streamState]);
 
   const startStream = useCallback((action: AiAction) => {
     if (!selectedText) return;
@@ -120,6 +148,7 @@ export function AIToolbar({
         void aiService.completeText(selectedText, callbacks, controller.signal);
         break;
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedText, noteContent, tone, targetLang]);
 
   const handleInsert = (content: string, action: AiAction) => {
@@ -151,7 +180,7 @@ export function AIToolbar({
   if (!visible) return null;
 
   const toolbarStyle: React.CSSProperties = position
-    ? { position: 'absolute', top: position.top - 48, left: position.left, zIndex: 1000 }
+    ? { position: 'fixed', top: position.top, left: position.left, zIndex: 99999 }
     : {};
 
   return (
@@ -206,7 +235,7 @@ export function AIToolbar({
                   <button
                     key={opt.value}
                     className={`ai-toolbar__dropdown-item ${tone === opt.value ? 'ai-toolbar__dropdown-item--active' : ''}`}
-                    onClick={() => { setTone(opt.value); setShowTonePicker(false); startStream('rewrite'); }}
+                    onClick={() => { setTone(opt.value); saveTone(opt.value); setShowTonePicker(false); startStream('rewrite'); }}
                   >
                     {t(opt.labelKey)}
                   </button>

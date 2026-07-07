@@ -139,6 +139,15 @@ export function NoteList() {
                 <Icon type="shoucang" /> {t('sidebar.batchTag')}
               </button>
             )}
+            <button className="batch-btn" onClick={store.batchPinNotes} title={t('sidebar.batchPin')}>
+              <Icon type="gudin" /> {t('sidebar.batchPin')}
+            </button>
+            <button className="batch-btn" onClick={store.batchFavoriteNotes} title={t('sidebar.batchFavorite')}>
+              <Icon type="shoucang" /> {t('sidebar.batchFavorite')}
+            </button>
+            <button className="batch-btn" onClick={() => void store.batchExportNotes()} title={t('sidebar.batchExport')}>
+              📦 {t('sidebar.batchExport')}
+            </button>
             <button className="batch-btn batch-btn--danger" onClick={() => { if (window.confirm(t('sidebar.batchDeleteConfirm', { count: numSelected }))) store.batchDeleteNotes(); }} title={t('sidebar.batchDelete')}>
               <Icon type="delete" /> {t('sidebar.batchDelete')}
             </button>

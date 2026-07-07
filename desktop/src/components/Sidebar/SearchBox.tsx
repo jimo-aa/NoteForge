@@ -302,7 +302,8 @@ export function SearchBox() {
     }, 200);
 
     return () => window.clearTimeout(timer);
-  }, [open, textQuery, directives.directives, applyDirectives]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, textQuery, searchMode, directives.directives, applyDirectives]);
 
   useEffect(() => {
     const handler = () => openSearch();

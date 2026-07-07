@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import styles from './VersionHistoryDialog.module.css';
 import { tauriInvoke as invoke } from '@/utils/invoke';
 import type { NoteSnapshot, DiffResult } from '@/types/advanced-features';
+import * as versionApi from '@/services/versionApiService';
 
 interface VersionHistoryDialogProps {
   open: boolean;
@@ -25,9 +26,11 @@ function relativeTime(ts: number, t: (key: string, opts?: Record<string, unknown
 
 export function VersionHistoryDialog({ open, noteId, onClose, onRestore }: VersionHistoryDialogProps) {
   const { t } = useTranslation();
+  const [source, setSource] = useState<'local' | 'cloud'>('local');
   const [tab, setTab] = useState<'timeline' | 'compare' | 'create'>('timeline');
 
   const [snapshots, setSnapshots] = useState<NoteSnapshot[]>([]);
+  const [cloudVersions, setCloudVersions] = useState<versionApi.CloudVersionEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [previewContent, setPreviewContent] = useState('');
@@ -51,19 +54,28 @@ export function VersionHistoryDialog({ open, noteId, onClose, onRestore }: Versi
     setLoading(false);
   }, [noteId]);
 
+  const loadCloudVersions = useCallback(async () => {
+    if (!noteId) return;
+    setLoading(true);
+    const data = await versionApi.listVersions(noteId);
+    if (data) setCloudVersions(data);
+    setLoading(false);
+  }, [noteId]);
+
   useEffect(() => {
     if (open && noteId) {
-      loadSnapshots();
+      if (source === 'local') loadSnapshots();
+      else loadCloudVersions();
       setDiffResult(null);
     }
-  }, [open, noteId, loadSnapshots]);
+  }, [open, noteId, source, loadSnapshots, loadCloudVersions]);
 
   useEffect(() => {
     if (snapshots.length >= 2 && !fromId && !toId) {
       setFromId(snapshots[snapshots.length - 1]!.id);
       setToId(snapshots[0]!.id);
     }
-  }, [snapshots]);
+  }, [snapshots]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleExpand = async (snap: NoteSnapshot) => {
     if (expandedId === snap.id) {
@@ -154,6 +166,21 @@ export function VersionHistoryDialog({ open, noteId, onClose, onRestore }: Versi
           <button className="modal-close" onClick={onClose}>x</button>
         </div>
 
+        <div className={styles.sourceToggle}>
+          <button
+            className={`${styles.sourceBtn} ${source === 'local' ? styles.activeSource : ''}`}
+            onClick={() => setSource('local')}
+          >
+            {t('version.sourceLocal')}
+          </button>
+          <button
+            className={`${styles.sourceBtn} ${source === 'cloud' ? styles.activeSource : ''}`}
+            onClick={() => setSource('cloud')}
+          >
+            {t('version.sourceCloud')}
+          </button>
+        </div>
+
         <div className={styles.tabs}>
           <button className={`${styles.tab} ${tab === 'timeline' ? styles.activeTab : ''}`} onClick={() => setTab('timeline')}>
             {t('version.timelineTab')}
@@ -171,6 +198,33 @@ export function VersionHistoryDialog({ open, noteId, onClose, onRestore }: Versi
             <div className={styles.timelineTab}>
               {loading ? (
                 <div className={styles.loading}>{t('version.loadingSnapshots')}</div>
+              ) : source === 'cloud' ? (
+                cloudVersions.length === 0 ? (
+                  <div className={styles.empty}>{t('version.noCloudVersions')}</div>
+                ) : (
+                  <div className={styles.timeline}>
+                    {cloudVersions.map((cv) => (
+                      <div key={cv.versionNumber} className={styles.timelineItem}>
+                        <div className={styles.timelineDot} />
+                        <div className={styles.timelineCard}>
+                          <div className={styles.cardHeader}>
+                            <div className={styles.cardTitleRow}>
+                              <span className={styles.versionBadge}>v{cv.versionNumber}</span>
+                              <span className={styles.cardTitle}>{cv.title}</span>
+                            </div>
+                            <div className={styles.cardMeta}>
+                              <span>{relativeTime(cv.createdAt, t)}</span>
+                              <span className={styles.cloudBadge}>{t('version.cloudBadge')}</span>
+                            </div>
+                          </div>
+                          {cv.description && (
+                            <div className={styles.cardDesc}>{cv.description}</div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )
               ) : snapshots.length === 0 ? (
                 <div className={styles.empty}>{t('version.noSnapshots')}</div>
               ) : (

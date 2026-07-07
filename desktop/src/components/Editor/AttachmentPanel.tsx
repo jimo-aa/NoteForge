@@ -4,7 +4,14 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Attachment } from '@/types';
 
 const STORAGE_PREFIX = 'noteforge:auth';
-const API_BASE = 'http://localhost:8080/api/v1/attachments';
+const GATEWAY_BASE = (() => {
+  try {
+    const custom = window.localStorage.getItem('noteforge:api:gateway-url');
+    if (custom) return custom.replace(/\/+$/, '');
+  } catch { /* ignore */ }
+  return 'http://localhost:8000';
+})();
+const API_BASE = `${GATEWAY_BASE}/api/v1/attachments`;
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 
 function getToken(): string | null {
@@ -51,6 +58,8 @@ export function AttachmentPanel({ noteId }: AttachmentPanelProps) {
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
   const xhrRef = useRef<XMLHttpRequest | null>(null);
+  // Track recently-synced attachment IDs (uploaded this session)
+  const [syncedIds, setSyncedIds] = useState<Set<string>>(new Set());
 
   const getAuthHeaders = useCallback((): Record<string, string> => {
     const token = getToken();
@@ -130,6 +139,8 @@ export function AttachmentPanel({ noteId }: AttachmentPanelProps) {
         });
 
         await fetchAttachments();
+        // Mark this file as synced
+        setSyncedIds((prev) => new Set(prev).add(file.name + '-' + file.size));
       } catch (err) {
         if (err instanceof Error && err.message !== 'Upload cancelled') {
           setError(`上传失败: ${file.name}`);
@@ -292,6 +303,13 @@ export function AttachmentPanel({ noteId }: AttachmentPanelProps) {
                   <span className="attachment-name" title={att.fileName} onDoubleClick={() => startRename(att.id, att.fileName)}>{att.fileName}</span>
                 )}
                 <span className="attachment-meta">{formatFileSize(att.fileSize)}</span>
+                {/* Sync status */}
+                <span
+                  className={`attachment-sync-badge ${syncedIds.has(att.fileName + '-' + att.fileSize) ? 'synced' : 'pending'}`}
+                  title={syncedIds.has(att.fileName + '-' + att.fileSize) ? '已同步' : '待同步'}
+                >
+                  {syncedIds.has(att.fileName + '-' + att.fileSize) ? '☁' : '○'}
+                </span>
               </div>
               <div className="attachment-actions">
                 <button className="attachment-action-btn" onClick={() => startRename(att.id, att.fileName)} title="重命名" type="button">✏</button>

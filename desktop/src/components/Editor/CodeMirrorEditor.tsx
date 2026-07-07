@@ -365,11 +365,12 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorHandle, CodeMirrorEditorPro
 
       viewRef.current = view;
 
+      const cmContainer = containerRef.current;
       return () => {
-        if (containerRef.current) {
-          containerRef.current.removeEventListener('paste', handlePaste);
-          containerRef.current.removeEventListener('drop', handleDrop);
-          containerRef.current.removeEventListener('click', handleWikiLinkClick);
+        if (cmContainer) {
+          cmContainer.removeEventListener('paste', handlePaste);
+          cmContainer.removeEventListener('drop', handleDrop);
+          cmContainer.removeEventListener('click', handleWikiLinkClick);
         }
         view.destroy();
         viewRef.current = null;

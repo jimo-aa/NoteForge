@@ -499,4 +499,104 @@ mod tests {
         assert_eq!(page.results.len(), 3);
         assert_eq!(page.total_hits, 10);
     }
+
+    #[test]
+    fn test_empty_query_returns_empty() {
+        let dir = tempdir().unwrap();
+        let engine = SearchEngine::open(dir.path().join("index")).unwrap();
+        let results = engine.search("", 10).unwrap();
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn test_search_re_add_after_delete() {
+        let dir = tempdir().unwrap();
+        let mut engine = SearchEngine::open(dir.path().join("index")).unwrap();
+        engine.add_note("1", "Temp", "Temporary note", &[], now_ms()).unwrap();
+        engine.commit().unwrap();
+        engine.remove_note("1").unwrap();
+        engine.commit().unwrap();
+        // Re-add with same id but new content
+        engine.add_note("1", "Permanent", "Permanent content", &[], now_ms()).unwrap();
+        engine.commit().unwrap();
+        let results = engine.search("Permanent", 10).unwrap();
+        assert!(!results.is_empty());
+        assert_eq!(results[0].title, "Permanent");
+        let old = engine.search("Temporary", 10).unwrap();
+        assert!(old.is_empty());
+    }
+
+    #[test]
+    fn test_unicode_search() {
+        let dir = tempdir().unwrap();
+        let mut engine = SearchEngine::open(dir.path().join("index")).unwrap();
+        engine.add_note("1", "日本語タイトル", "日本語の内容です。", &[], now_ms()).unwrap();
+        engine.add_note("2", "한국어 제목", "한국어 내용입니다.", &[], now_ms()).unwrap();
+        engine.commit().unwrap();
+
+        let results = engine.search("日本語", 10).unwrap();
+        assert!(!results.is_empty());
+        assert_eq!(results[0].note_id, "1");
+    }
+
+    #[test]
+    fn test_search_not_found() {
+        let dir = tempdir().unwrap();
+        let mut engine = SearchEngine::open(dir.path().join("index")).unwrap();
+        engine.add_note("1", "Rust", "Systems programming", &[], now_ms()).unwrap();
+        engine.commit().unwrap();
+
+        let results = engine.search("Python", 10).unwrap();
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn test_fuzzy_search_finds_typo() {
+        let dir = tempdir().unwrap();
+        let mut engine = SearchEngine::open(dir.path().join("index")).unwrap();
+        engine.add_note("1", "机器学习", "深入机器学习算法", &[], now_ms()).unwrap();
+        engine.commit().unwrap();
+
+        // "学" should fuzzy match "学习"
+        let results = engine.search_fuzzy("学", 10).unwrap();
+        assert!(!results.is_empty());
+    }
+
+    #[test]
+    fn test_empty_fuzzy_query() {
+        let dir = tempdir().unwrap();
+        let engine = SearchEngine::open(dir.path().join("index")).unwrap();
+        let results = engine.search_fuzzy("", 10).unwrap();
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn test_update_note_reindex() {
+        let dir = tempdir().unwrap();
+        let mut engine = SearchEngine::open(dir.path().join("index")).unwrap();
+        engine.add_note("1", "Original", "Original content", &[], now_ms()).unwrap();
+        engine.commit().unwrap();
+
+        // Update same note with new content
+        engine.add_note("1", "Updated", "Updated content", &[], now_ms()).unwrap();
+        engine.commit().unwrap();
+
+        let results = engine.search("Updated", 10).unwrap();
+        assert!(!results.is_empty());
+        assert_eq!(results[0].title, "Updated");
+    }
+
+    #[test]
+    fn test_remove_note_excludes_from_search() {
+        let dir = tempdir().unwrap();
+        let mut engine = SearchEngine::open(dir.path().join("index")).unwrap();
+        engine.add_note("1", "Rust", "Rust programming", &[], now_ms()).unwrap();
+        engine.commit().unwrap();
+
+        engine.remove_note("1").unwrap();
+        engine.commit().unwrap();
+
+        let results = engine.search("Rust", 10).unwrap();
+        assert!(results.is_empty());
+    }
 }

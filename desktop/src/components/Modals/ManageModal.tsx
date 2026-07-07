@@ -55,6 +55,7 @@ export function ManageModal({ open, onClose }: { open: boolean; onClose: () => v
   const [conflictCount, setConflictCount] = useState(0);
   const [lastSyncAt, setLastSyncAt] = useState<number | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [syncNotebookFilter, setSyncNotebookFilter] = useState('all');
   
 
   useEffect(() => {
@@ -445,6 +446,25 @@ export function ManageModal({ open, onClose }: { open: boolean; onClose: () => v
                   </button>
                 </div>
               )}
+
+              <div className="sync-notebook-filter">
+                <label>{t('sync.selectiveSyncLabel')}</label>
+                <select
+                  value={syncNotebookFilter}
+                  onChange={(e) => setSyncNotebookFilter(e.target.value)}
+                  className="sync-notebook-select"
+                >
+                  <option value="all">{t('sync.syncAllNotebooks')}</option>
+                  {notebooks.filter((nb) => nb.id !== 'all').map((nb) => (
+                    <option key={nb.id} value={nb.id}>{nb.icon} {nb.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="sync-connection-status">
+                <span className={`sync-connect-dot ${syncStatus === 'online' || syncStatus === 'idle' ? 'connected' : 'disconnected'}`} />
+                <span>{t('sync.connectionStatus', { status: syncStatus })}</span>
+              </div>
             </div>
           )}
           {tab === 'shortcuts' && (

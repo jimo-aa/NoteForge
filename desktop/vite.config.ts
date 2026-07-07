@@ -27,7 +27,6 @@ export default defineConfig(async () => ({
           'react-vendor': ['react', 'react-dom', 'react-i18next', 'i18next'],
           'codemirror-core': ['@codemirror/view', '@codemirror/state', '@codemirror/language', '@codemirror/commands', '@codemirror/search'],
           'codemirror-ext': ['@codemirror/lang-markdown', '@codemirror/language-data', '@codemirror/autocomplete', '@codemirror/lang-javascript', '@codemirror/lang-css', '@codemirror/lang-json', '@codemirror/lang-html', '@codemirror/lang-xml'],
-          'highlight-js': ['highlight.js'],
           zustand: ['zustand'],
           'tauri-api': ['@tauri-apps/api/core'],
         },

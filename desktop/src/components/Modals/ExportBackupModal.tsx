@@ -4,6 +4,23 @@ import '../../../styles/modals.css';
 import { tauriInvoke as invoke } from '@/utils/invoke';
 
 type ExportFormat = 'markdown' | 'html' | 'json';
+type ExportMode = 'local' | 'cloud';
+
+const GATEWAY_BASE = (() => {
+  try {
+    const custom = window.localStorage.getItem('noteforge:api:gateway-url');
+    if (custom) return custom.replace(/\/+$/, '');
+  } catch { /* ignore */ }
+  return 'http://localhost:8000';
+})();
+
+function getAuthToken(): string | null {
+  try {
+    const raw = window.localStorage.getItem('noteforge:auth:access-token');
+    if (raw) return JSON.parse(raw) as string;
+  } catch { /* ignore */ }
+  return null;
+}
 
 function downloadFile(data: Uint8Array, filename: string, mimeType: string) {
   const blob = new Blob([data.buffer as ArrayBuffer], { type: mimeType });
@@ -15,6 +32,25 @@ function downloadFile(data: Uint8Array, filename: string, mimeType: string) {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+async function cloudExport(noteId: string, format: ExportFormat): Promise<Uint8Array | null> {
+  const token = getAuthToken();
+  if (!token) return null;
+
+  try {
+    const res = await fetch(
+      `${GATEWAY_BASE}/api/v1/notes/${noteId}/export?format=${format}`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+      },
+    );
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    return new Uint8Array(await blob.arrayBuffer());
+  } catch {
+    return null;
+  }
 }
 
 export function ExportBackupModal({ 
@@ -34,6 +70,7 @@ export function ExportBackupModal({
 }) {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<'export' | 'backup'>('export');
+  const [exportMode, setExportMode] = useState<ExportMode>('local');
   const [exportFormat, setExportFormat] = useState<ExportFormat>('markdown');
   const [exportTarget, setExportTarget] = useState<'note' | 'notebook'>('note');
   const [exporting, setExporting] = useState(false);
@@ -51,12 +88,22 @@ export function ExportBackupModal({
       let filename = '';
       let mimeType = '';
 
-      if (exportTarget === 'note') {
+      const ext = exportFormat === 'markdown' ? 'md' : exportFormat;
+
+      if (exportMode === 'cloud') {
+        // Cloud export via API Gateway
+        data = await cloudExport(noteId, exportFormat);
+        filename = `${noteTitle}.${ext}`;
+        mimeType = {
+          markdown: 'text/markdown',
+          html: 'text/html',
+          json: 'application/json',
+        }[exportFormat];
+      } else if (exportTarget === 'note') {
         data = await invoke<Uint8Array>('export_note', {
           note_id: noteId,
           format: exportFormat,
         });
-        const ext = exportFormat === 'markdown' ? 'md' : exportFormat;
         filename = `${noteTitle}.${ext}`;
         mimeType = {
           markdown: 'text/markdown',
@@ -68,8 +115,8 @@ export function ExportBackupModal({
           notebook_id: notebookId,
           format: exportFormat,
         });
-        const ext = exportFormat === 'markdown' ? 'md' : 'json';
-        filename = `${notebookName}-export.${ext}`;
+        const nbExt = exportFormat === 'markdown' ? 'md' : 'json';
+        filename = `${notebookName}-export.${nbExt}`;
         mimeType = exportFormat === 'markdown' ? 'text/markdown' : 'application/json';
       }
 
@@ -141,28 +188,52 @@ export function ExportBackupModal({
           {activeTab === 'export' && (
             <div className="export-panel">
               <div className="form-group">
-                <label>{t('export.exportTarget')}</label>
+                <label>{t('export.exportMode')}</label>
                 <div className="radio-group">
                   <label className="radio-option">
                     <input 
                       type="radio"
-                      checked={exportTarget === 'note'}
-                      onChange={() => setExportTarget('note')}
+                      checked={exportMode === 'local'}
+                      onChange={() => setExportMode('local')}
                     />
-                    <span>{t('export.targetNote')}</span>
+                    <span>{t('export.modeLocal')}</span>
                   </label>
-                  {notebookId && (
+                  <label className="radio-option">
+                    <input 
+                      type="radio"
+                      checked={exportMode === 'cloud'}
+                      onChange={() => setExportMode('cloud')}
+                    />
+                    <span>{t('export.modeCloud')}</span>
+                  </label>
+                </div>
+              </div>
+
+              {exportMode === 'local' && (
+                <div className="form-group">
+                  <label>{t('export.exportTarget')}</label>
+                  <div className="radio-group">
                     <label className="radio-option">
                       <input 
                         type="radio"
-                        checked={exportTarget === 'notebook'}
-                        onChange={() => setExportTarget('notebook')}
+                        checked={exportTarget === 'note'}
+                        onChange={() => setExportTarget('note')}
                       />
-                      <span>{t('export.targetNotebook')}</span>
+                      <span>{t('export.targetNote')}</span>
                     </label>
-                  )}
+                    {notebookId && (
+                      <label className="radio-option">
+                        <input 
+                          type="radio"
+                          checked={exportTarget === 'notebook'}
+                          onChange={() => setExportTarget('notebook')}
+                        />
+                        <span>{t('export.targetNotebook')}</span>
+                      </label>
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div className="form-group">
                 <label>{t('export.exportFormat')}</label>
