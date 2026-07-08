@@ -197,13 +197,20 @@ export function ManageModal({ open, onClose }: { open: boolean; onClose: () => v
 
   useEffect(() => {
     if (!open || tab !== 'stats') return;
+    let cancelled = false;
+    const fetchMetrics = () => {
+      import('@tauri-apps/api/core').then(({ invoke }) => {
+        if (cancelled) return;
+        invoke<MetricsData>('get_metrics')
+          .then(setMetrics)
+          .catch(() => setMetrics(null))
+          .finally(() => { if (!cancelled) setMetricsLoading(false); });
+      });
+    };
     setMetricsLoading(true);
-    import('@tauri-apps/api/core').then(({ invoke }) => {
-      invoke<MetricsData>('get_metrics')
-        .then(setMetrics)
-        .catch(() => setMetrics(null))
-        .finally(() => setMetricsLoading(false));
-    });
+    fetchMetrics();
+    const interval = setInterval(fetchMetrics, 5000);
+    return () => { cancelled = true; clearInterval(interval); };
   }, [open, tab]);
 
   // ── Shortcut editing state ──

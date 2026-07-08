@@ -89,6 +89,13 @@ pub fn run() {
             commands::add_extra_root,
             commands::remove_extra_root,
             commands::scan_dir_for_notes,
+            // .md File Operations
+            commands::write_note_file,
+            commands::read_note_file,
+            commands::delete_note_file,
+            commands::list_md_files,
+            commands::ensure_dir,
+            commands::get_note_file_path,
         ])
         .run(tauri::generate_context!())
         .expect("启动 NoteForge 失败");

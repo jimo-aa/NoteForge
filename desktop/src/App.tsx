@@ -196,7 +196,33 @@ export default function App() {
       <div className="app-shell">
         <Sidebar onNewNote={() => setNewNoteOpen(true)} onNewNotebook={handleOpenNotebookModal} onManage={() => setManageOpen(true)} onDraftRecovery={() => setDraftRecoveryOpen(true)} onAbout={() => setAboutOpen(true)} />
         <main className="main-panel"><div className="main-surface"><div className="content-layout"><section className="note-list-column"><NoteList /></section><section className="preview-column"><Editor /></section></div></div></main>
-        <NewNoteModal open={newNoteOpen} notebooks={store.notebooks} onClose={() => setNewNoteOpen(false)} onCreate={async ({ title, content, notebookId, tags }) => { const result = await store.createNote(title, content, notebookId, tags); if (result) { store.showToast('success', t('note.created')); setNewNoteOpen(false); } else { store.showToast('error', t('note.createFailed')); } }} />
+        <NewNoteModal open={newNoteOpen} notebooks={store.notebooks} onClose={() => setNewNoteOpen(false)} onCreate={async ({ title, content, notebookId, tags, storageRoot }) => {
+          // Check if primary storage root is set; if not, prompt user to select one
+          const primaryRoot = await tauriInvoke<string | null>('get_primary_root');
+          if (!primaryRoot && !storageRoot) {
+            try {
+              const { open } = await import('@tauri-apps/plugin-dialog');
+              const selected = await open({ directory: true, multiple: false, title: t('manage.storageSelectDir') });
+              if (selected) {
+                const dirPath = typeof selected === 'string' ? selected : selected[0];
+                await tauriInvoke('set_primary_root', { path: dirPath });
+                store.showToast('success', t('manage.storageRootChanged'));
+              } else {
+                store.showToast('info', t('note.createFailed'));
+                return;
+              }
+            } catch {
+              // Directory picker not available (e.g., browser mode) — continue with default storage
+            }
+          }
+          // If user selected a specific storage root, set it as primary before creating
+          if (storageRoot && storageRoot !== primaryRoot) {
+            await tauriInvoke('set_primary_root', { path: storageRoot }).catch(() => {});
+          }
+          const result = await store.createNote(title, content, notebookId, tags);
+          if (result) { store.showToast('success', t('note.created')); setNewNoteOpen(false); }
+          else { store.showToast('error', t('note.createFailed')); }
+        }} />
         <NotebookModal state={notebookModal} onClose={() => setNotebookModal({ open: false, mode: null, title: '', value: '' })} onConfirm={handleConfirmNotebook} />
         <EntityModal state={store.entityModal} onClose={store.closeEntityModal} onConfirm={async (value) => {
           if (!value) {

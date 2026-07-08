@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Notebook } from '@/types';
+import { tauriInvoke } from '@/utils/invoke';
 
 interface NewNotePayload {
   title: string;
   notebookId: string;
   tags: string[];
   content: string;
+  storageRoot?: string;
 }
 
 interface NewNoteModalProps {
@@ -244,6 +246,20 @@ export function NewNoteModal({ open, notebooks = [], onClose, onCreate }: NewNot
   const [tagText, setTagText] = useState('');
   const [content, setContent] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [storageRoots, setStorageRoots] = useState<string[]>([]);
+  const [selectedRoot, setSelectedRoot] = useState('');
+
+  // Fetch storage roots on open
+  useEffect(() => {
+    if (!open) return;
+    void (async () => {
+      const roots = await tauriInvoke<string[]>('list_storage_roots');
+      if (roots && roots.length > 0) {
+        setStorageRoots(roots);
+        setSelectedRoot(roots[0] ?? '');
+      }
+    })();
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -290,6 +306,7 @@ export function NewNoteModal({ open, notebooks = [], onClose, onCreate }: NewNot
         notebookId: finalNotebookId,
         tags,
         content: content.trim(),
+        storageRoot: selectedRoot || undefined,
       });
     } catch (error) {
       console.error('创建笔记失败:', error);
@@ -370,6 +387,24 @@ export function NewNoteModal({ open, notebooks = [], onClose, onCreate }: NewNot
             </select>
           </label>
         </div>
+
+        {storageRoots.length > 0 && (
+          <label className="new-note-field new-note-field--full">
+            <span>{t('manage.storageTitle')}</span>
+            <select
+              value={selectedRoot}
+              onChange={(event) => setSelectedRoot(event.target.value)}
+              disabled={isLoading}
+            >
+              {storageRoots.map((root) => {
+                const name = root.split(/[/\\]/).filter(Boolean).pop() || root;
+                return (
+                  <option key={root} value={root}>{name}</option>
+                );
+              })}
+            </select>
+          </label>
+        )}
 
         <label className="new-note-field new-note-field--full">
           <span>{t('noteModal.tagsLabel')}</span>

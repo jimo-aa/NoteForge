@@ -583,6 +583,18 @@ export const useNoteStore = create<NoteStore>()((set, get) => ({
   saveDraft: (id, content) => {
     safeWrite(draftKey(id), content);
     void tauriInvoke('update_note', { id, title: null, content, tags: null, isPinned: null, isFavorite: null }).catch(() => {});
+    // Also persist as .md file if primary storage root is configured
+    const note = get().notes.find(n => n.meta.id === id);
+    if (note) {
+      const notebookId = note.meta.notebookId || 'default';
+      void tauriInvoke<string>('get_note_file_path', { notebookId, noteTitle: note.meta.title }).then(path => {
+        if (path) {
+          // Build .md content with YAML frontmatter for metadata
+          const frontmatter = `---\ntitle: "${note.meta.title}"\nid: "${id}"\ncreated: ${note.meta.createdAt}\nupdated: ${Date.now()}\ntags: [${(note.meta.tags || []).map(t => `"${t}"`).join(', ')}]\n---\n\n`;
+          void tauriInvoke('write_note_file', { path, content: frontmatter + content }).catch(() => {});
+        }
+      }).catch(() => {});
+    }
   },
   loadDraft: (id) => safeRead<string>(draftKey(id), ''),
   clearDraft: (id) => {

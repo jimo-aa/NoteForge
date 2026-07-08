@@ -206,7 +206,10 @@
     "syncComplete": "同步完成",
     "syncFailed": "同步失败",
     "resolvedLocal": "已选择保留本地版本",
-    "resolvedRemote": "已接受远程版本"
+    "resolvedRemote": "已选择接受远程版本",
+    "connectionStatus": "连接状态: {{status}}",
+    "selectiveSyncLabel": "笔记本筛选:",
+    "syncAllNotebooks": "全部笔记本"
   },
   "encryption": {
     "title": "端到端加密",

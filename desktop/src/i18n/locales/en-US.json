@@ -206,7 +206,10 @@
     "syncComplete": "Sync complete",
     "syncFailed": "Sync failed",
     "resolvedLocal": "Kept local changes",
-    "resolvedRemote": "Accepted remote changes"
+    "resolvedRemote": "Accepted remote changes",
+    "connectionStatus": "Connection: {{status}}",
+    "selectiveSyncLabel": "Filter by notebook:",
+    "syncAllNotebooks": "All notebooks"
   },
   "encryption": {
     "title": "End-to-End Encryption",

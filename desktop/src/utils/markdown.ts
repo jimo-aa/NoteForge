@@ -215,9 +215,26 @@ function renderInline(text: string, highlightQuery = ''): string {
 // ── Blockquote depth: count leading `>` ──
 
 function parseBlockquoteDepth(line: string): { depth: number; content: string } | null {
-  const m = line.trim().match(/^(>+) /);
-  if (m) return { depth: m[1]!.length, content: line.trim().slice(m[0]!.length) };
-  return null;
+  const trimmed = line.trim();
+  if (!trimmed.startsWith('>')) return null;
+
+  // Count > markers with optional spaces between them.
+  // Handles ">> text" (depth 2), "> > text" (depth 2), "> > > text" (depth 3), etc.
+  // The inner while loop already consumes the space after the last > marker,
+  // so `pos` ends up at the first content character.
+  let depth = 0;
+  let pos = 0;
+  while (pos < trimmed.length && trimmed[pos] === '>') {
+    depth++;
+    pos++;
+    // Skip optional spaces between > markers (and the trailing space after the last one)
+    while (pos < trimmed.length && trimmed[pos] === ' ') pos++;
+  }
+  if (depth === 0) return null;
+  // Content starts at `pos` — everything after the last > marker (and any space after it).
+  // For "> text": pos=2, content="text"
+  // For ">" (empty marker): pos=1 >= length → content=""
+  return { depth, content: pos < trimmed.length ? trimmed.slice(pos) : '' };
 }
 
 // ── Block-level rendering ──
@@ -282,6 +299,18 @@ export function renderMarkdown(md: string, highlightQuery = ''): string {
       return;
     }
 
+    // Details / Summary (>+++ must be checked BEFORE general blockquote parser)
+    const detailsMatch = trimmed.match(/^>\+\+\+\s*(.*)/);
+    if (detailsMatch) {
+      flushBlockquoteTo(0);
+      out.push(`<details><summary>${renderInline(detailsMatch[1]! || '展开', highlightQuery)}</summary>`);
+      return;
+    }
+    if (trimmed === '>---') {
+      out.push('</details>');
+      return;
+    }
+
     // Callout / Admonition: > [!type] (handled at depth 1 or more)
     const calloutMatch = trimmed.match(/^>\s*\[!(\w+)\]\s*(.*)/i);
     if (calloutMatch) {
@@ -301,13 +330,17 @@ export function renderMarkdown(md: string, highlightQuery = ''): string {
       return;
     }
 
-    // Nested blockquotes: >> text, > text
+    // Nested blockquotes: >> text, > > text, > text
     const bq = parseBlockquoteDepth(line);
     if (bq && !/^>\s*\[!\w+\]/i.test(trimmed)) {
       const target = bq.depth;
       flushBlockquoteTo(target);
-      out.push(`<p>${renderInline(bq.content, highlightQuery)}</p>`);
-      bqDepth = target; // left open for continuation
+      if (bq.content) {
+        out.push(`<p>${renderInline(bq.content, highlightQuery)}</p>`);
+      }
+      // Empty blockquote marker (just ">") — no content to render,
+      // but the <blockquote> stays open for continuation.
+      bqDepth = target;
       return;
     }
 
@@ -315,17 +348,6 @@ export function renderMarkdown(md: string, highlightQuery = ''): string {
     const defTerm = trimmed.match(/^:(.+)/);
     if (defTerm) {
       out.push(`<dl><dt>${renderInline(defTerm[1]!, highlightQuery)}</dt>`);
-      return;
-    }
-
-    // Details / Summary
-    const detailsMatch = trimmed.match(/^>\+\+\+\s*(.*)/);
-    if (detailsMatch) {
-      out.push(`<details><summary>${renderInline(detailsMatch[1]! || '展开', highlightQuery)}</summary>`);
-      return;
-    }
-    if (trimmed === '>---') {
-      out.push('</details>');
       return;
     }
 

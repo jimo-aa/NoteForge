@@ -538,3 +538,77 @@ pub fn scan_dir_for_notes(state: State<'_, AppState>, dir_path: String) -> Resul
     let core = state.core.lock().map_err(|e| e.to_string())?;
     core.storage.scan_directory_for_notes(&dir_path).map_err(|e| e.to_string())
 }
+
+// ============================================================
+// .md 文件读写操作
+// ============================================================
+
+/// 将笔记内容写入 .md 文件
+#[tauri::command]
+pub fn write_note_file(path: String, content: String) -> Result<(), String> {
+    let p = std::path::Path::new(&path);
+    if let Some(parent) = p.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| format!("创建目录失败: {}", e))?;
+    }
+    std::fs::write(&path, &content).map_err(|e| format!("写入文件失败: {}", e))
+}
+
+/// 从 .md 文件读取笔记内容
+#[tauri::command]
+pub fn read_note_file(path: String) -> Result<String, String> {
+    std::fs::read_to_string(&path).map_err(|e| format!("读取文件失败: {}", e))
+}
+
+/// 删除 .md 文件
+#[tauri::command]
+pub fn delete_note_file(path: String) -> Result<(), String> {
+    if std::path::Path::new(&path).exists() {
+        std::fs::remove_file(&path).map_err(|e| format!("删除文件失败: {}", e))
+    } else {
+        Ok(())
+    }
+}
+
+/// 列出目录中所有 .md 文件（不递归）
+#[tauri::command]
+pub fn list_md_files(dir: String) -> Result<Vec<String>, String> {
+    let dir_path = std::path::Path::new(&dir);
+    if !dir_path.is_dir() {
+        return Err("目录不存在".to_string());
+    }
+    let mut files = Vec::new();
+    let entries = std::fs::read_dir(dir_path).map_err(|e| format!("读取目录失败: {}", e))?;
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("读取目录项失败: {}", e))?;
+        let path = entry.path();
+        if path.is_file() && path.extension().and_then(|e| e.to_str()) == Some("md") {
+            files.push(path.to_string_lossy().to_string());
+        }
+    }
+    files.sort();
+    Ok(files)
+}
+
+/// 确保目录存在（不存在则创建）
+#[tauri::command]
+pub fn ensure_dir(path: String) -> Result<(), String> {
+    std::fs::create_dir_all(&path).map_err(|e| format!("创建目录失败: {}", e))
+}
+
+/// 获取笔记文件的目标路径（基于主存储目录、笔记本 ID 和笔记标题）
+#[tauri::command]
+pub fn get_note_file_path(state: State<'_, AppState>, notebook_id: String, note_title: String) -> Result<String, String> {
+    let core = state.core.lock().map_err(|e| e.to_string())?;
+    let root = core.storage.get_primary_root()
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "请先设置主存储目录".to_string())?;
+    
+    // Sanitize the title for use as filename
+    let safe_title: String = note_title.chars()
+        .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' || c == ' ' { c } else { '_' })
+        .collect();
+    let file_name = format!("{}.md", safe_title.trim());
+    
+    let note_dir = std::path::Path::new(&root).join(&notebook_id);
+    Ok(note_dir.join(&file_name).to_string_lossy().to_string())
+}
