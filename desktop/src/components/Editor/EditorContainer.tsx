@@ -26,6 +26,8 @@ import { AttachmentPanel } from './AttachmentPanel';
 import type { EditorHandle, BacklinkEntry } from './types/editor';
 import { getPluginRegistry } from './plugins/registry';
 import type { ToolbarItemDef } from './plugins/types';
+import { renderMathBlocks } from '@/utils/mathRenderer';
+import mermaid from 'mermaid';
 
 export function EditorContainer() {
   const { t } = useTranslation();
@@ -162,17 +164,50 @@ export function EditorContainer() {
   }, [renderedHtml]);
 
   // ── Mermaid diagram + KaTeX math rendering ──
+  const mermaidReadyRef = useRef(false);
   useEffect(() => {
     if (!renderedHtml || !previewRef.current) return;
-    let cancelled = false;
-    const container = previewRef.current;
-    import('@/utils/mermaidRenderer').then(({ renderMermaidBlocks }) => {
-      if (!cancelled) void renderMermaidBlocks(container);
-    });
-    import('@/utils/mathRenderer').then(({ renderMathBlocks }) => {
-      if (!cancelled) void renderMathBlocks(container);
-    });
-    return () => { cancelled = true; };
+    const el = previewRef.current;
+
+    // Init mermaid once
+    if (!mermaidReadyRef.current) {
+      try {
+        mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'loose' });
+        mermaidReadyRef.current = true;
+      } catch (e) {
+        console.error('[Mermaid] init failed:', e);
+      }
+    }
+
+    // Render mermaid and math blocks
+    const timer = setTimeout(async () => {
+      const mermaidBlocks = el.querySelectorAll<HTMLElement>('.mermaid-block');
+      for (const block of mermaidBlocks) {
+        const pre = block.querySelector('pre.mermaid-src');
+        if (!pre) continue;
+        const rawCode = pre.textContent || '';
+        if (!rawCode) continue;
+        const code = rawCode.replace(/&gt;/g, '>').replace(/&lt;/g, '<').replace(/&amp;/g, '&');
+        const id = 'mermaid-' + Date.now();
+        try {
+          const result = await mermaid.render(id, code);
+          const svg = result.svg ?? result;
+          if (svg && typeof svg === 'string') {
+            block.innerHTML = svg;
+            block.classList.remove('mermaid-block');
+            block.classList.add('mermaid-rendered');
+          }
+        } catch (e) {
+          console.error('[Mermaid] render error:', e);
+        }
+      }
+
+      // Render math blocks
+      const mathBlocks = el.querySelectorAll('.math-block[data-latex]');
+      if (mathBlocks.length > 0) renderMathBlocks(el);
+    }, 100);
+
+    return () => clearTimeout(timer);
   }, [renderedHtml]);
 
   // ── Load backlinks ──
@@ -675,7 +710,15 @@ export function EditorContainer() {
           <>
             <div className="editor-resizer" onMouseDown={startResize} role="separator" aria-orientation="vertical"><span /></div>
             <article
-              ref={previewRef}
+              ref={(el) => {
+                (previewRef as React.MutableRefObject<HTMLElement | null>).current = el;
+                if (el) {
+                  setTimeout(() => {
+                    const math = el.querySelectorAll('.math-block[data-latex]');
+                    if (math.length > 0) renderMathBlocks(el).catch(() => {});
+                  }, 0);
+                }
+              }}
               className="markdown-preview-pane"
               style={{ flexBasis: `${100 - editorWidth}%` }}
               dangerouslySetInnerHTML={{ __html: renderedHtml }}

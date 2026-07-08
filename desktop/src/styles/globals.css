@@ -717,13 +717,18 @@ button { cursor: pointer; }
 .markdown-preview-pane .code-block:hover .code-copy-btn { opacity: 1; }
 .markdown-preview-pane .code-copy-btn:hover { background: rgba(255,255,255,0.12); color: #fff; }
 /* ── Footnote ── */
-.markdown-preview-pane .footnote-ref { font-size: 0.8em; }
-.markdown-preview-pane .footnote-ref a { color: #6a63ff; text-decoration: none; }
+.markdown-preview-pane .footnote-ref {
+  font-size: 0.8em; color: #6a63ff; text-decoration: none;
+  vertical-align: super; line-height: 0;
+  cursor: pointer;
+}
+.markdown-preview-pane .footnote-ref:hover { text-decoration: underline; }
 .markdown-preview-pane .footnotes-sep { margin: 32px 0 16px; border-color: var(--line, #e3e7f0); }
 .markdown-preview-pane .footnotes { font-size: 13px; color: var(--text-muted, #7a849e); }
 .markdown-preview-pane .footnotes p { margin: 4px 0; }
 .markdown-preview-pane .footnotes sup { font-size: 0.8em; color: var(--accent, #6a63ff); }
 .markdown-preview-pane .footnote-backref { font-size: 12px; color: var(--accent, #6a63ff); text-decoration: none; margin-left: 4px; }
+.markdown-preview-pane .footnote-def-num { font-weight: 600; color: var(--accent, #6a63ff); }
 /* ── Math & Mermaid placeholders ── */
 .math-block, .mermaid-block {
   margin: 12px 0; padding: 20px; text-align: center;

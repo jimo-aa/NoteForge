@@ -5,6 +5,19 @@
 //   Frontmatter/分割线/HTML 嵌入/Emoji 简码
 
 import DOMPurify from 'dompurify';
+import mermaid from 'mermaid';
+
+let _mermaidInitialized = false;
+function initMermaid() {
+  if (!_mermaidInitialized) {
+    try {
+      mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'loose' });
+      _mermaidInitialized = true;
+    } catch (e) {
+      console.warn('[Mermaid] Init failed:', e);
+    }
+  }
+}
 
 // ── DOMPurify 配置 ──
 DOMPurify.addHook('uponSanitizeElement', (_node, data) => {
@@ -96,14 +109,15 @@ function preprocess(text: string): string {
     return protect(fmHtml);
   });
 
-  // 2. Mermaid code blocks
+  // 2. Mermaid code blocks — store code in a hidden <pre> (DOMPurify-safe)
   s = s.replace(/```mermaid\n([\s\S]*?)```/g, (_m, code) => {
-    const encoded = esc(code.trim());
-    return protect(`<div class="mermaid-block" data-code="${encoded}"><div class="mermaid-placeholder">
+    const raw = esc(code.trim());
+    const html = `<div class="mermaid-block"><pre class="mermaid-src" style="display:none">${raw}</pre><div class="mermaid-placeholder">
       <span class="mermaid-icon">📊</span>
       <span class="mermaid-label">Mermaid 图表</span>
-      <span class="mermaid-hint">需加载 mermaid.js 库以渲染图表</span>
-    </div></div>`);
+      <span class="mermaid-hint">正在渲染...</span>
+    </div></div>`;
+    return protect(html);
   });
 
   // 3. Math blocks $$...$$
@@ -167,13 +181,13 @@ function renderInline(text: string, highlightQuery = ''): string {
   // 10. Wiki Link [[title]]
   r = r.replace(/\[\[([^\]]+)\]\]/g, '<button class="wiki-link" role="link" tabIndex="0">$1</button>');
 
-  // 11. Link [text](url)
-  r = r.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
-
-  // 12. Footnote reference [^id]
+  // 11. Footnote reference [^id] — use a marker to avoid regex interaction with other steps
   r = r.replace(/\[\^([^\]]+)\]/g, (_m, id) => {
-    return `<sup class="footnote-ref" data-footnote-id="${esc(id)}"><a href="#fn:${esc(id)}" id="fnref:${esc(id)}">[${esc(id)}]</a></sup>`;
+    return `%%FN_${id}%%`;
   });
+
+  // 12. Link [text](url)
+  r = r.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
 
   // 13. Emoji shortcodes
   r = expandEmoji(r);
@@ -189,6 +203,11 @@ function renderInline(text: string, highlightQuery = ''): string {
       r = r.replace(regex, '<mark class="search-highlight">$1</mark>');
     }
   }
+
+  // 16. Footnote markers → actual HTML (delayed to avoid regex interference)
+  r = r.replace(/%%FN_([^%]+)%%/g, (_m, id) => {
+    return `<a href="#fn:${esc(id)}" id="fnref:${esc(id)}" class="footnote-ref">[${esc(id)}]</a>`;
+  });
 
   return r;
 }
@@ -437,7 +456,7 @@ export function renderMarkdown(md: string, highlightQuery = ''): string {
     out.push('<hr class="footnotes-sep">');
     out.push('<section class="footnotes">');
     for (const fn of footnoteDefs) {
-      out.push(`<p id="fn:${esc(fn.id)}"><sup>${fn.id}</sup> ${fn.content} <a href="#fnref:${esc(fn.id)}" class="footnote-backref">↩</a></p>`);
+      out.push(`<p id="fn:${esc(fn.id)}"><span class="footnote-def-num">${fn.id}.</span> ${fn.content} <a href="#fnref:${esc(fn.id)}" class="footnote-backref">↩</a></p>`);
     }
     out.push('</section>');
   }
