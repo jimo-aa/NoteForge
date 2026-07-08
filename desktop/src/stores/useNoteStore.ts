@@ -9,10 +9,36 @@ import { countWords } from '@/utils/markdown';
 import { tauriInvoke } from '@/utils/invoke';
 import { getSyncService } from '@/services/syncService';
 import * as localStore from '@/services/localStoreService';
+import { DEMO_MD } from '@/utils/syntaxDemo';
 // ── Constants ──
 
 const ALL_NOTEBOOK: Notebook = { id: 'all', name: '全部笔记', icon: '📋', color: '', parentId: null, sortOrder: 0, noteCount: 0, createdAt: 0, updatedAt: 0 };
 const STORAGE_PREFIX = 'noteforge';
+
+/** Virtual note ID for the built-in syntax demo */
+export const SYNTAX_DEMO_ID = '__SYNTAX_DEMO__';
+/** Shared Markdown content for the syntax demo (pre-loaded from syntaxDemo.ts) */
+let _syntaxDemoContent = '';
+export function setSyntaxDemoContent(md: string): void { _syntaxDemoContent = md; }
+function getSyntaxDemoNote(): Note | null {
+  if (!_syntaxDemoContent) return null;
+  return {
+    meta: {
+      id: SYNTAX_DEMO_ID,
+      title: 'Markdown 语法展示',
+      notebookId: 'default',
+      tags: ['demo', 'reference'],
+      isPinned: false,
+      isFavorite: false,
+      wordCount: _syntaxDemoContent.length,
+      version: 1,
+      createdAt: 0,
+      updatedAt: 0,
+    },
+    content: _syntaxDemoContent,
+    contentPlain: '',
+  };
+}
 const draftKey = (id: string) => `${STORAGE_PREFIX}:draft:${id}`;
 const cursorKey = (id: string) => `${STORAGE_PREFIX}:cursor:${id}`;
 const autosaveKey = (id: string) => `${STORAGE_PREFIX}:autosave:${id}`;
@@ -798,6 +824,9 @@ function autoInit() {
 }
 
 // Trigger initialization immediately (safe because it's deferred to microtask)
+// Initialize syntax demo content
+setSyntaxDemoContent(DEMO_MD);
+
 autoInit();
 
 // ── Derived state subscription (reactively compute filteredNotes, currentNote, etc.) ──
@@ -807,7 +836,9 @@ useNoteStore.subscribe(() => {
   try {
     const s = useNoteStore.getState();
     const filtered = computeFilteredNotes(s.notes, s.activeNotebook, s.currentFilter, s.activeTags, s.sortBy);
-    const current = s.notes.find((n) => n.meta.id === s.currentNoteId) || null;
+    const current = s.currentNoteId === SYNTAX_DEMO_ID
+      ? getSyntaxDemoNote()
+      : s.notes.find((n) => n.meta.id === s.currentNoteId) || null;
     const tags = Array.from(new Set(s.notes.flatMap((n) => n.meta.tags)));
     const totalCount = s.notes.length;
     const favoriteCount = s.notes.filter((n) => n.meta.isFavorite).length;

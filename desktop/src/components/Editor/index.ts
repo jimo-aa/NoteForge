@@ -40,6 +40,16 @@ export type {
   Unsubscribe,
 } from './types/events';
 
+// ── Plugin System ──
+export { PluginManager } from './plugins';
+export type {
+  EditorPlugin,
+  PluginContext,
+  PluginHooks,
+  ToolbarItemDef,
+  SlashCommandDef,
+} from './plugins';
+
 // ── Extensions ──
 export { getCoreExtensions, getBuiltinExtensions, getAllExtensions } from './wysiwyg/extensions';
 export { getSlashCommands } from './wysiwyg/extensions/SlashMenu';

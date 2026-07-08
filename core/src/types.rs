@@ -227,6 +227,15 @@ pub struct ChangeSummary {
     pub word_count_delta: i32,
 }
 
+/// 扫描到的外部笔记信息
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScannedNote {
+    pub file_path: String,
+    pub title: String,
+    pub modified_at: u64,
+}
+
 /// 获取当前时间戳（毫秒）
 pub fn now_ms() -> u64 {
     std::time::SystemTime::now()

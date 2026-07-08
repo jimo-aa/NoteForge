@@ -1,10 +1,10 @@
 # NoteForge Markdown 所见即所得编辑器 — 功能规格文档
 
-> **文档版本:** v2.0
-> **最后更新:** 2026-07-07
-> **当前状态:** 未开始
-> **编辑器架构:** TipTap (ProseMirror) WYSIWYG + 源码模式 — 双引擎可切换
-> **核心能力:** Markdown ↔ HTML 双向转换，原生 HTML 渲染，可扩展插件体系
+> **文档版本:** v2.1
+> **最后更新:** 2026-07-08
+> **当前状态:** Phase 1 基础架构完成 ✅ | Phase 2 扩展文件就绪但未接入 ⚠️ | 编辑器实际运行于 源码+预览 双栏模式
+> **编辑器架构:** CodeMirror 6 源码编辑 + HTML 预览 (双栏) — TipTap WYSIWYG 就绪但未接入主流程
+> **核心能力:** Markdown ↔ HTML 双向转换，源码+预览 双栏模式，可扩展插件体系
 
 ---
 
@@ -134,18 +134,19 @@ desktop/src/components/Editor/
 │   ├── WysiwygEditor.tsx            ← TipTap 编辑器封装 .............. ✅ Phase 1
 │   ├── RichTextToolbar.tsx          ← 浮动格式工具栏 ................. ✅ (保留旧文件)
 │   ├── extensions/                  ← TipTap 扩展
-│   │   ├── index.ts                 ← 扩展统一注册 (getCoreExtensions / getBuiltinExtensions / getAllExtensions) ... ✅ Phase 1+2
-│   │   ├── SlashMenu.ts            ← 斜杠命令 (基于 @tiptap/suggestion, 浮层UI) .. ✅ Phase 2
-│   │   ├── SearchHighlight.ts       ← 搜索高亮 ...................... ✅ Phase 2
-│   │   ├── ImageResize.ts          ← 图片拖拽调整 (width/height 属性模型) .. ✅ Phase 2
-│   │   ├── CodeBlockLang.ts        ← 代码块语言选择扩展 ................ ✅ Phase 2
-│   │   ├── TaskCheckbox.ts          ← 任务列表点击扩展 ................ ✅ Phase 2
-│   │   ├── LinkHover.ts            ← 链接悬停预览 tooltip ............. ✅ Phase 2
-│   │   ├── TableHelper.ts          ← 表格键盘导航 + 快捷键 ........... ✅ Phase 2
-│   │   ├── WikiLinkNode.ts         ← Wiki Link节点 .................. ⬜ Phase 3
-│   │   ├── CalloutNode.ts          ← 警示块节点 ..................... ⬜ Phase 3
-│   │   ├── MathNode.ts             ← 数学公式节点 ................... ⬜ Phase 3
-│   │   └── MermaidNode.ts          ← Mermaid 图表节点 ............... ⬜ Phase 3
+│   │   │   ├── index.ts                 ← 扩展统一注册 (getCoreExtensions / getBuiltinExtensions / getAllExtensions) ... ✅ Phase 1+2
+│   │   │                                ⚠️ getBuiltinExtensions() 返回空数组 — 扩展未注册
+│   │   ├── SlashMenu.ts            ← 斜杠命令定义 (@tiptap/suggestion) ......... ✅ Phase 2 (定义就绪, 需接入编辑器)
+│   │   ├── SearchHighlight.ts       ← 搜索高亮 ............................. ✅ Phase 2 (定义就绪, 需接入编辑器)
+│   │   ├── ImageResize.ts          ← 图片拖拽调整 (width/height 属性模型) .... ✅ Phase 2 (定义就绪, 需接入编辑器)
+│   │   ├── CodeBlockLang.ts        ← 代码块语言选择扩展 .................... ✅ Phase 2 (定义就绪, 需接入编辑器)
+│   │   ├── TaskCheckbox.ts          ← 任务列表点击扩展 .................... ✅ Phase 2 (定义就绪, 需接入编辑器)
+│   │   ├── LinkHover.ts            ← 链接悬停预览 tooltip ................. ✅ Phase 2 (定义就绪, 需接入编辑器)
+│   │   ├── TableHelper.ts          ← 表格键盘导航 + 快捷键 ............... ✅ Phase 2 (定义就绪, 需接入编辑器)
+│   │   ├── WikiLinkNode.ts         ← Wiki Link节点 ..................... ⬜ Phase 3
+│   │   ├── CalloutNode.ts          ← 警示块节点 ........................ ⬜ Phase 3
+│   │   ├── MathNode.ts             ← 数学公式节点 ....................... ⬜ Phase 3
+│   │   └── MermaidNode.ts          ← Mermaid 图表节点 ................... ⬜ Phase 3
 │   └── nodes/                       ← 自定义 NodeView ............... ⬜ Phase 3
 │
 ├── source/                          ← 源码模式模块
@@ -155,21 +156,21 @@ desktop/src/components/Editor/
 │
 ├── panels/                          ← 面板模块 ....................... ⬜ Phase 4
 │
-├── ai/                              ← AI 模块
-│   ├── AIToolbar.tsx               ← AI 浮动工具栏 .................. ✅ (保留旧文件)
-│   ├── AIService.ts                ← AI API 客户端 .................. ✅ (保留旧文件)
-│   └── types.ts                    ← AI 类型定义 .................... ⬜ Phase 4
+├── ai/                              ← AI 模块 (❌ 目录为空 — 尚未重构)
+│   ├── AIToolbar.tsx               ← AI 浮动工具栏 .................. ✅ (保留旧文件在根目录)
+│   ├── AIService.ts                ← AI API 客户端 .................. ❌ (不存在)
+│   └── types.ts                    ← AI 类型定义 .................... ❌
 │
-├── modals/                          ← 弹窗模块 ....................... ⬜ Phase 2
+├── modals/                          ← 弹窗模块 (❌ 目录为空 — 尚未实现) ..... ⬜ Phase 2
 │
 ├── converters/                      ← 转换器模块
 │   ├── index.ts                     ← 统一导出 ...................... ✅ Phase 1
-│   ├── markdownToHtml.ts           ← MD → HTML (重写, GFM标准化) .... ✅ Phase 1
-│   ├── htmlToMarkdown.ts           ← HTML → MD (含TipTap兼容) ....... ✅ Phase 1
+│   ├── markdownToHtml.ts           ← MD → HTML (薄封装, 委托旧服务) .. ✅ Phase 1 (再导出)
+│   ├── htmlToMarkdown.ts           ← HTML → MD (薄封装, 委托旧服务) .. ✅ Phase 1 (再导出)
 │   ├── sanitizer.ts                ← HTML 安全清洗 (DOMPurify) ...... ✅ Phase 1
-│   └── __tests__/                  ← 转换器测试 72 用例
-│       ├── markdownToHtml.test.ts   ........................... ✅ Phase 1 (37 tests)
-│       └── htmlToMarkdown.test.ts   ........................... ✅ Phase 1 (35 tests)
+│   └── __tests__/                  ← 转换器测试 (目录为空 ❌ — 尚未迁移)
+│       ├── markdownToHtml.test.ts   ........................... ❌ 测试在 services/__tests__/ 中
+│       └── htmlToMarkdown.test.ts   ........................... ❌ 同上
 │
 ├── controller/                      ← 控制器模块
 │   ├── EditorController.ts         ← 核心控制器 ..................... ✅ Phase 1
@@ -178,9 +179,9 @@ desktop/src/components/Editor/
 │   ├── EventBus.ts                 ← 事件总线 ....................... ✅ Phase 1
 │   └── KeyboardShortcuts.ts       ← 快捷键注册 ..................... ✅ Phase 1
 │
-├── plugins/                         ← 插件扩展
-│   ├── PluginManager.ts           ← 插件注册/生命周期 .............. ✅ Phase 2
-│   └── PluginAPI.ts               ← 插件 API 定义 .................. ✅ Phase 2
+├── plugins/                         ← 插件扩展 (❌ 目录为空 — 尚未实现)
+│   ├── PluginManager.ts           ← 插件注册/生命周期 .............. ❌ Phase 2 (未创建)
+│   └── PluginAPI.ts               ← 插件 API 定义 .................. ❌ Phase 2 (未创建)
 │
 ├── hooks/                           ← React Hooks .................... ⬜ Phase 2
 │
@@ -189,12 +190,16 @@ desktop/src/components/Editor/
 │   ├── extensions.ts               ← 扩展类型 ....................... ✅ Phase 1
 │   └── events.ts                   ← 事件系统类型 ................... ✅ Phase 1
 │
-├── styles/                          ← 样式 ........................... ⬜ Phase 1-5
+├── styles/                          ← 样式 (❌ 目录为空 — 尚未迁移) ....... ⬜ Phase 1-5
 │
-└── (保留旧文件: AIToolbar.tsx, AttachmentPanel.tsx, RichTextToolbar.tsx, searchHighlight.ts, slashCommands.ts)
+└── (保留旧文件: AIToolbar.tsx, AttachmentPanel.tsx, RichTextToolbar.tsx, searchHighlight.ts, slashCommands.ts, RichTextEditor.tsx (577行含内联扩展注册))
 ```
 
 ### 1.3 数据流设计
+
+> **当前实际状态:** EditorContainer 运行于 源码+预览 双栏模式 (CodeMirror 6 → HTML 预览)。
+> WYSIWYG 编辑器 (TipTap) 已封装为独立组件 (`WysiwygEditor.tsx`)，但尚未接入主流程。
+> 以下架构为目标设计，WYSIWYG 接入后生效。
 
 ```
 ┌──────────────┐    用户输入    ┌──────────────────────────────────────────────┐
@@ -263,7 +268,7 @@ desktop/src/components/Editor/
 
 ## 二、核心渲染引擎
 
-### 2.1 Markdown → HTML 转换 `[Phase 1 完成 ✅]`
+### 2.1 Markdown → HTML 转换 `[Phase 1 完成 ⚠️ (薄封装委托旧服务)]`
 
 | 语法 | 转换目标 | 状态 |
 |------|---------|:----:|
@@ -289,7 +294,7 @@ desktop/src/components/Editor/
 | Wiki Link `[[title]]` | `<button class="wiki-link">` | ✅ |
 | 标签 `#tag` | `<span class="tag">` | ✅ |
 
-### 2.2 HTML → Markdown 转换 `[Phase 1 完成 ✅]`
+### 2.2 HTML → Markdown 转换 `[Phase 1 完成 ⚠️ (薄封装委托旧服务)]`
 
 反向转换覆盖上述所有语法，含 TipTap 特定输出格式的兼容（`<div class="tableWrapper">`、带属性的 `<pre>`、嵌套列表结构）。
 
@@ -787,20 +792,24 @@ erlang  clojure  julia  solidity  terraform  hcl  diff
 
 | 优化项 | 状态 | 说明 | 预估 |
 |--------|:----:|------|:----:|
-| **Markdown 转换精度提升** | ✅ | 重写为 `converters/markdownToHtml.ts` + `htmlToMarkdown.ts`，GFM 标准化，37 测试用例覆盖 | 完成 |
+| **Markdown 转换精度提升** | ⚠️ | `converters/` 为薄封装 (`export { markdownToHtml } from '@/services/...`)，未真正重写 | 需跟进 |
 | **Rust Core 增量解析** | ⬜ | 只解析变化部分，而非全文重解析 | 3d |
 | **大规模文档性能** | ⬜ | 10 万字以上文档的编辑器性能优化 | 3d |
-| **TipTap 扩展模块化** | ✅ | 抽离为 `wysiwyg/extensions/index.ts`，统一注册 `getCoreExtensions()`/`getAllExtensions()` | 完成 |
+| **TipTap 扩展模块化** | ⚠️ | `wysiwyg/extensions/index.ts` 存在，但 `getBuiltinExtensions()` 返回空数组 — 8个扩展文件未注册 | 需接入 |
 | **共享类型/组件包** | ⬜ | 提取可在 Web/Desktop 间复用的编辑器包 | 3d |
-| **编辑器测试覆盖** | ✅ | 转换器测试 72 用例 (37 + 35)，全通过 | 完成 |
-| **控制器层 (EditorController)** | ✅ | 新建 `controller/` 目录：EditorController、ModeManager、ContentSync、EventBus、KeyboardShortcuts | 完成 |
+| **编辑器测试覆盖** | ⚠️ | 转换器测试 199 行在 `services/__tests__/` 中 (旧服务)，`converters/__tests__/` 为空 | 需迁移 |
+| **控制器层 (EditorController)** | ✅ | `controller/` 目录：EditorController、ContentSync、EventBus、KeyboardShortcuts | 完成 |
 | **向后兼容层** | ✅ | 旧 `Editor.tsx` 重新导出 EditorContainer，`index.ts` 统一导出，零侵入迁移 | 完成 |
+| **PluginManager / PluginAPI** | ❌ | `plugins/` 目录为空，插件系统尚未实现 | 未开始 |
 
 ---
 
 ## 十五、插件扩展系统设计
 
 ### 15.1 设计目标
+
+> **当前状态:** `plugins/` 目录为空 ❌，PluginManager.ts、PluginAPI.ts 均未创建。
+> 以下为目标设计，尚未实现。
 
 ```typescript
 // plugins/PluginAPI.ts — 插件接口定义 (目标)
@@ -862,20 +871,20 @@ interface PluginContext {
 
 | 插件 | ID | 类型 | 说明 | 优先级 | 状态 |
 |------|:--:|:----:|------|:------:|:----:|
-| 斜杠菜单 | `slash-menu` | Core | `/` 命令菜单弹出 (4类15命令) | P0 | ✅ Phase 2 |
-| 工具栏 | `rich-text-toolbar` | Core | 格式化/表格/链接工具栏 | P0 | ✅ Phase 1 |
-| Wiki Link | `wiki-link` | Markdown | `[[title]]` 语法支持 | P0 | ✅ Phase 1 |
-| 代码块高亮 | `code-block` | Core | lowlight 语法高亮 | P0 | ✅ Phase 1 |
-| 代码语言选择 | `code-block-lang` | UI | 代码块语言标签 + 选择器 | P1 | ✅ Phase 2 |
-| 代码复制 | `code-copy` | UI | 代码块复制按钮 | P1 | ✅ Phase 1 |
-| 表格辅助 | `table-helper` | UI | Tab/Enter 键盘导航 | P1 | ✅ Phase 2 |
-| 图片调整 | `image-resize` | UI | width/height 属性模型 | P1 | ✅ Phase 2 |
-| 链接悬停 | `link-hover` | UI | 链接 URL tooltip | P1 | ✅ Phase 2 |
-| 插件管理 | `plugin-manager` | Core | PluginManager + PluginAPI | P0 | ✅ Phase 2 |
-| 数学公式 | `math` | Markdown | KaTeX 公式渲染 | P1 | ❌ Phase 3 |
-| Mermaid 图表 | `mermaid` | Markdown | 图表渲染 | P1 | ❌ Phase 3 |
-| Callout | `callout` | Markdown | 警示块 | P1 | ❌ Phase 3 |
-| Frontmatter | `frontmatter` | Markdown | YAML 元数据 | P2 | ⬜ |
+| 斜杠菜单 | `slash-menu` | Core | `/` 命令菜单弹出 (4类15命令) | P0 | ⚠️ 定义就绪, 未接入 |
+| 工具栏 | `rich-text-toolbar` | Core | 格式化/表格/链接工具栏 | P0 | ✅ 旧文件, 未重构 |
+| Wiki Link | `wiki-link` | Markdown | `[[title]]` 语法支持 | P0 | ✅ SourceEditor 已有 |
+| 代码块高亮 | `code-block` | Core | lowlight 语法高亮 | P0 | ✅ SourceEditor 支持 |
+| 代码语言选择 | `code-block-lang` | UI | 代码块语言标签 + 选择器 | P1 | ⚠️ 文件就绪, 未注册 |
+| 代码复制 | `code-copy` | UI | 代码块复制按钮 | P1 | ✅ 预览面板已有 |
+| 表格辅助 | `table-helper` | UI | Tab/Enter 键盘导航 | P1 | ⚠️ 文件就绪, 未注册 |
+| 图片调整 | `image-resize` | UI | width/height 属性模型 | P1 | ⚠️ 文件就绪, 未注册 |
+| 链接悬停 | `link-hover` | UI | 链接 URL tooltip | P1 | ⚠️ 文件就绪, 未注册 |
+| 插件管理 | `plugin-manager` | Core | PluginManager + PluginAPI | P0 | ❌ plugins/ 目录为空 |
+| 数学公式 | `math` | Markdown | KaTeX 公式渲染 | P1 | ❌ |
+| Mermaid 图表 | `mermaid` | Markdown | 图表渲染 | P1 | ❌ |
+| Callout | `callout` | Markdown | 警示块 | P1 | ❌ |
+| Frontmatter | `frontmatter` | Markdown | YAML 元数据 | P2 | ❌ |
 | 脚注 | `footnote` | Markdown | 脚注语法 | P2 | ❌ |
 | 高亮 | `highlight` | Markdown | `^^text^^` | P3 | ❌ |
 | Emoji | `emoji-picker` | UI | Emoji 选择器 | P3 | ❌ |
@@ -906,21 +915,27 @@ interface PluginContext {
 
 ### 15.4 插件加载策略
 
+> **当前状态:** 插件系统未实现 ❌。WysiwygEditor 使用 `getAllExtensions()` 但实际只加载了 Core 扩展 (getBuiltinExtensions 返回[])。以下为目标设计。
+
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│                   PluginLoader                                 │
+│                   PluginLoader (目标设计)                       │
 │                                                               │
 │  Phase 1 — 内核加载 (同步)                                    │
 │  ├── StarterKit (基础: 加粗/斜体/列表/引用/代码)               │
 │  ├── Placeholder, TextStyle                                   │
 │  ├── Table, TaskList, TextAlign                               │
 │  └── ImageExtension, Link                                     │
+│                    ──────────── 已实现 ✅                      │
 │                                                               │
-│  Phase 2 — 内置加载 (异步, 并行)                               │
-│  ├── WikiLink Plugin                                          │
-│  ├── SlashMenu Plugin                                         │
-│  ├── SearchHighlight Plugin                                   │
-│  └── CodeBlockLang Plugin                                     │
+│  Phase 2 — 内置加载 (异步, 并行)                              │
+│  ├── SlashMenu Plugin          ⚠️ 文件就绪, 未注册              │
+│  ├── SearchHighlight Plugin    ⚠️ 文件就绪, 未注册              │
+│  ├── CodeBlockLang Plugin      ⚠️ 文件就绪, 未注册              │
+│  ├── ImageResize Plugin        ⚠️ 文件就绪, 未注册              │
+│  ├── TableHelper Plugin        ⚠️ 文件就绪, 未注册              │
+│  ├── TaskCheckbox Plugin       ⚠️ 文件就绪, 未注册              │
+│  └── LinkHover Plugin          ⚠️ 文件就绪, 未注册              │
 │                                                               │
 │  Phase 3 — 按需加载 (Lazy, 用户触发时加载)                      │
 │  ├── Math Plugin (用户输入 $$ 时加载 KaTeX)                    │
@@ -1173,39 +1188,39 @@ describe('Editor Performance', () => {
 ### 18.1 重构阶段划分
 
 ```
-Phase 1 (已完成 ✅): 基础架构重建 (2026-07-07)
+Phase 1 (基础架构重建): ⚠️ 目录/类型/控制器就绪，但 Converter 为薄封装，测试未迁移
 ├── 1.1 ✅ 建立新目录结构 (模块化拆分)
-├── 1.2 ✅ 重写 Converter 引擎 (标准化, 覆盖 GFM)
-├── 1.3 ✅ 重写 ContentSync (双引擎同步协调器)
+├── 1.2 ⚠️ Converter 引擎为薄封装委托旧服务 (未真正重写)
+├── 1.3 ✅ 建立 ContentSync (双引擎同步协调器)
 ├── 1.4 ✅ 建立 EditorController (核心控制器)
 ├── 1.5 ✅ 建立 EventBus (事件系统)
-├── 1.6 ✅ Converter 测试覆盖 (72 用例)
-└── 验收 ✅: 基础编辑功能 (加粗/斜体/列表/标题) 可用, 转换测试全通过 (116 tests, 0 failed)
+├── 1.6 ❌ Converter 测试在旧服务目录，converters/__tests__/ 为空
+├── 1.7 ⚠️ WysiwygEditor 已封装但未接入主流程 (EditorContainer 使用 SourceEditor)
+└── 验收 ⚠️: 基础编辑功能可用 (源码模式)，WYSIWYG 未接入主流程
 
-Phase 2 (已完成 ✅): WYSIWYG 引擎加固 (2026-07-07)
-├── 2.1 ✅ 抽离 TipTap 扩展为独立文件 (Phase 1 已完成)
-├── 2.2 ✅ 建立 PluginManager + PluginAPI 插件注册机制
-├── 2.3 ✅ 重写斜杠命令菜单 (基于 @tiptap/suggestion, 浮层UI, 4类15命令, 分类分组)
-├── 2.4 ✅ 完善表格系统 (TableHelper: Tab/Enter 键盘导航, 浮层工具栏就绪)
-├── 2.5 ✅ 完善代码块 (CodeBlockLang 扩展 + 40+语言列表 + 复制按钮)
-├── 2.6 ✅ 图片系统 (ImageResize width/height 模型, 对齐左/中/右)
-├──     ✅ 新增: LinkHover 悬停预览 tooltip
-├──     ✅ 新增: TaskCheckbox 任务列表属性扩展
-└── 验收 ✅: 所有扩展模块化注册, 斜杠命令可扩展, WysiwygEditor 清理内联DOM代码
+Phase 2 (扩展就绪但未接入): ⚠️ 文件存在，编辑器未注册
+├── 2.1 ✅ 抽离 TipTap 扩展为独立文件 (8 个扩展文件)
+├── 2.2 ❌ PluginManager + PluginAPI 未创建 (plugins/ 目录为空)
+├── 2.3 ⚠️ 斜杠命令定义就绪 (SlashMenu.ts) 但未接入编辑器
+├── 2.4 ⚠️ TableHelper 扩展就绪但未注册 (getBuiltinExtensions 返回 [])
+├── 2.5 ⚠️ CodeBlockLang 扩展就绪但未注册
+├── 2.6 ⚠️ ImageResize 扩展就绪但未注册
+├──     ⚠️ LinkHover / TaskCheckbox 扩展就绪但未注册
+└── 验收 ❌: 扩展未接入编辑器，WYSIWYG 模式未启用
 
 Phase 3 (2 周): 源码模式 + 扩展语法
-├── 3.1 重写 SourceEditor (CodeMirror 扩展模块化)
-├── 3.2 Wiki Link 装饰 + 自动完成 + 导航
-├── 3.3 搜索高亮 (双引擎统一实现)
-├── 3.4 Markdown 扩展语法 (Callout/Math/Mermaid)
-├── 3.5 Frontmatter 编辑 UI
-├── 3.6 拖拽交互 (图片/块级重排)
-└── 验收: 扩展语法可用, Wiki Link 完整, 搜索高亮双引擎一致
+├── 3.1 SourceEditor 已就绪 (CodeMirror 6, 393行, 搜索高亮/wiki link/image preview) ✅
+├── 3.2 接入 Phase 2 扩展文件到 WysiwygEditor (8个扩展需注册)
+├── 3.3 建立 PluginManager + PluginAPI (plugins/ 目录为空)
+├── 3.4 Wiki Link 装饰 + 自动完成 + 导航 (Rust Core 已解析)
+├── 3.5 Markdown 扩展语法 (Callout/Math/Mermaid)
+├── 3.6 Frontmatter 编辑 UI
+└── 验收: 扩展语法可用, WYSIWYG 模式启用, 双引擎可切换
 
 Phase 4 (1 周): AI + 视图模式
-├── 4.1 AI 工具栏重构 (与 EditorController 集成)
+├── 4.1 AI 工具栏重构 (移入 ai/ 目录, 与 EditorController 集成)
 ├── 4.2 AI 流式渲染优化
-├── 4.3 阅读模式 / 双栏模式
+├── 4.3 阅读模式 / 双栏增强
 ├── 4.4 文档大纲面板
 ├── 4.5 编辑器组件测试 (15+ 用例)
 └── 验收: AI 工具栏正常, 阅读/双栏模式可用, 组件测试通过
@@ -1224,12 +1239,12 @@ Phase 5 (1 周): 打磨 + 发布
 ```
      Week 1    Week 2    Week 3    Week 4    Week 5    Week 6    Week 7    Week 8
      ───────  ───────  ───────  ───────  ───────  ───────  ───────  ───────
-P1   ████████████████  ✅ 已完成
-P2              ════════════════  ← 当前阶段
+P1   ████████████████  ⚠️ 基础架构完成, WYSIWYG 未接入, 测试未迁移
+P2              ════════════════  ← 当前阶段 (扩展文件就绪, 需接入)
 P3                         ════════════════
 P4                                    ════════════
 P5                                               ════════════
-     转换器测试 ████████████████████  ✅ 72 tests
+     转换器测试 ════ 199 lines (旧服务) ════ ❌ converters/__tests__/ 为空
      组件测试  ────────────────────────────────────────────────────────────
      E2E 测试   ────────────────────────────────────────────────────────────
 ```
@@ -1298,12 +1313,16 @@ export { markdownToHtml, htmlToMarkdown } from './converters';
 
 | # | 问题 | 位置 | 严重度 | 说明 |
 |:-:|------|------|:------:|------|
-| ED-1 | **markdownConverter 非标准化解析** | ~~`markdownConverter.ts`~~ → `converters/markdownToHtml.ts` | ✅ 已修复 | 重写为 GFM 标准转换器，72 测试覆盖 |
-| ED-2 | **TipTap heading 仅 1-3 级** | ~~`RichTextEditor.tsx`~~ → `wysiwyg/extensions/index.ts` | ✅ 已修复 | `enableHeading4to6` 选项，支持 H1-H6 |
+| ED-1 | **markdownConverter 非标准化解析** | `services/markdownConverter.ts` | ⚠️ 有改进空间 | `converters/markdownToHtml.ts` 为薄封装 `export from`，未真正重写 |
+| ED-2 | **TipTap heading 仅 1-3 级** | `wysiwyg/extensions/index.ts` | ✅ 已修复 | `heading: { levels: [1,2,3,4,5,6] }` |
 | ED-3 | **HTML 粘贴无清洗** | `RichTextEditor.tsx` | 🟡 中 | 直接使用 ProseMirror 默认 paste handler，可能引入脏 HTML |
 | ED-4 | **大文档输入卡顿** | 编辑器整体 | 🟡 中 | 未做虚拟化/节流，5 万字以上输入延迟明显 |
-| ED-5 | **Base64 图片存储膨胀** | `RichTextEditor.tsx` | 🟡 中 | 拖入的图片存为 data URL，笔记体积会无限增长 |
-| ED-6 | **无编辑器自动化测试** | — | ✅ 已修复 | 转换器测试 72 用例全部通过（`converters/__tests__/`） |
+| ED-5 | **Base64 图片存储膨胀** | `EditorContainer.tsx` | 🟡 中 | 拖入的图片存为 data URL，笔记体积会无限增长 |
+| ED-6 | **测试未迁移** | `converters/__tests__/` | 🟡 中 | 测试在 `services/__tests__/` (旧服务) 中，新目录为空 |
+| ED-7 | **WYSIWYG 未接入主流程** | `EditorContainer.tsx` | 🔴 高 | EditorContainer 仅使用 SourceEditor，WysiwygEditor 孤立 |
+| ED-8 | **Phase 2 扩展未注册** | `wysiwyg/extensions/index.ts` | 🔴 高 | 8 个扩展文件就绪，`getBuiltinExtensions()` 返回空数组 |
+| ED-9 | **Plugin 系统未实现** | `plugins/` | 🔴 高 | `plugins/` 目录为空，PluginManager/PluginAPI 未创建 |
+| ED-10 | **旧 RichTextEditor 仍有 577 行内联代码** | `RichTextEditor.tsx` | 🟡 中 | 应迁移到新架构后清理 |
 
 ---
 
@@ -1345,25 +1364,25 @@ export { markdownToHtml, htmlToMarkdown } from './converters';
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-### 当前编辑器完成度: **Phase 1+2 ✅ (基础架构 + WYSIWYG 加固, 约占总体 40%)**
+### 当前编辑器完成度: **Phase 1 ⚠️ + Phase 2 文件就绪但未接入 (约占总体 25%)**
 
 | 模块 | 完成度 | 重构阶段 | 说明 |
 |------|:------:|:--------:|------|
-| 核心编辑引擎 (双模式) | 80% ✅ | Phase 1-2 | WYSIWYG + 源码, 内容同步, 模式切换, 事件总线, 斜杠命令 SlashMenu |
-| 文本格式化 | 80% ✅ | Phase 1-2 | 行内/块级格式 Converter 全完成 ✅, 快捷键 KeyboardShortcuts ✅, 斜杠命令浮层 ✅ |
-| 转换器 | 100% ✅ | Phase 1 | `markdownToHtml` + `htmlToMarkdown` GFM 全覆盖, 72 测试用例全部通过 |
-| 控制器层 | 100% ✅ | Phase 1 | EditorController/ModeManager/ContentSync/EventBus/KeyboardShortcuts |
+| 核心编辑引擎 (源码模式) | 70% ⚠️ | Phase 1-2 | CodeMirror 6 ✅, WYSIWYG 封装但未接入主流程 ❌ |
+| 文本格式化 | 50% ⚠️ | Phase 1-2 | 行内/块级格式 Converter 委托旧服务 ✅, 快捷键 KeyboardShortcuts ✅ |
+| 转换器 | 60% ⚠️ | Phase 1 | `converters/` 为薄封装 `export from` 旧服务 ❌, 未真正重写 |
+| 控制器层 | 80% ✅ | Phase 1 | EditorController/ContentSync/EventBus/KeyboardShortcuts ✅, ModeManager 为桩 |
 | 类型系统 | 100% ✅ | Phase 1 | editor.ts/extensions.ts/events.ts 完整类型定义 |
 | 向后兼容 | 100% ✅ | Phase 1 | 旧 Editor.tsx 自动委托, 零侵入迁移; index.ts 统一导出 |
-| 插件系统 | 80% ✅ | Phase 2 ✅ | PluginManager ✅, PluginAPI ✅, 可扩展插件架构就绪 |
-| 斜杠命令 | 80% ✅ | Phase 2 ✅ | 基于 @tiptap/suggestion, 4类15命令, 分类分组, 浮层UI |
-| 代码块 | 80% ✅ | Phase 2 ✅ | 语法高亮 ✅, 语言选择器 40+ ✅, 复制按钮 ✅, CodeBlockLang 扩展 ✅ |
-| 表格 | 60% ✅ | Phase 2 ✅ | GFM 双向转换 ✅, TableHelper 键盘导航 ✅; CSV/排序/合并 ❌ |
-| 图片与媒体 | 50% ✅ | Phase 2 ✅ | 拖放/粘贴 ✅, ImageResize ✅, 对齐 ✅, 链接悬停 LinkHover ✅ |
-| 扩展语法 | 25% ⬜ | Phase 3 ⬜ | Wiki Link 装饰 ✅, 标签转换 ✅; Callout/Math/Mermaid ❌ |
-| AI 集成 | 30% ⬜ | Phase 4 ⬜ | AI 工具栏就位 ✅; 自动标签/语义搜索 ❌ |
-| 阅读/视图 | 10% ⬜ | Phase 4 ⬜ | 预览面板 ✅; 双栏/阅读/专注模式 ❌ |
-| 测试覆盖 | 30% ⬜ | 贯穿全程 | 转换器 72 测试 ✅; 组件/E2E/性能测试 ❌ |
+| 插件系统 | 0% ❌ | Phase 2 | PluginManager / PluginAPI 未创建, plugins/ 目录为空 |
+| 斜杠命令 | 40% ⚠️ | Phase 2 | 定义就绪 (SlashMenu.ts 4类15命令) ❌ 未接入编辑器 |
+| 代码块 | 60% ⚠️ | Phase 2 | 语法高亮 ✅ (CodeMirror), 语言选择器/复制按钮在旧 RichTextEditor.tsx 中 |
+| 表格 | 50% ⚠️ | Phase 2 | GFM 双向转换 ✅, TableHelper 扩展未注册 ❌ |
+| 图片与媒体 | 40% ⚠️ | Phase 2 | SourceEditor 支持拖放/粘贴 ✅, ImageResize/LinkHover 未注册 ❌ |
+| 扩展语法 | 10% ⬜ | Phase 3 | Wiki Link 源码装饰 + 自动完成 ✅ (SourceEditor); Callout/Math/Mermaid ❌ |
+| AI 集成 | 20% ⬜ | Phase 4 | AIToolbar 旧文件就绪 ✅; 自动标签/语义搜索 ❌, ai/ 目录为空 |
+| 阅读/视图 | 10% ⬜ | Phase 4 | 预览面板 ✅ (HTML render); 读/专注/双栏增强 ❌ |
+| 测试覆盖 | 15% ⬜ | 贯穿全程 | 转换器 199 lines 在旧服务 ✅; converters/__tests__/ 为空 ❌ |
 | 性能优化 | 0% ⬜ | Phase 5 | 大文档/内存/渲染优化 ❌ |
 
 ### 核心差异化方向 (重构目标)

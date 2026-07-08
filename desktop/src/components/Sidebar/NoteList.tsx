@@ -83,7 +83,9 @@ export function NoteList() {
     overscan: 5,
   });
 
-  if (store.filteredNotes.length === 0) {
+  const hasNotes = store.filteredNotes.length > 0;
+
+  if (!hasNotes) {
     return (
       <div className="note-list-empty">
         <div className="empty-state empty-state--notes">
@@ -98,6 +100,7 @@ export function NoteList() {
 
   return (
     <div ref={parentRef} className="editor-view" style={{ overflow: 'auto', position: 'relative', gap: 12 }}>
+
       {/* Batch action toolbar */}
       {numSelected > 0 && (
         <div className="batch-toolbar">

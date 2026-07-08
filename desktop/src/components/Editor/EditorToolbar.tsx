@@ -22,11 +22,20 @@ const MARKDOWN_ACTIONS: ToolbarAction[] = [
   { label: '—', before: '\n---\n', after: '' },
 ];
 
+interface PluginToolbarItem {
+  id: string;
+  label: string;
+  icon?: string;
+  action: () => void;
+}
+
 interface EditorToolbarProps {
   onInsertMarkdown: (before: string, after: string) => void;
   onFormatTable: () => void;
   onTogglePreview: () => void;
   isPreviewVisible: boolean;
+  /** Toolbar items contributed by active plugins */
+  pluginItems?: PluginToolbarItem[];
 }
 
 export function EditorToolbar({
@@ -34,6 +43,7 @@ export function EditorToolbar({
   onFormatTable,
   onTogglePreview,
   isPreviewVisible,
+  pluginItems,
 }: EditorToolbarProps) {
   const { t } = useTranslation();
 
@@ -64,6 +74,19 @@ export function EditorToolbar({
             onClick={() => onInsertMarkdown(action.before, action.after)}
           >
             {action.label}
+          </button>
+        ))}
+        {pluginItems && pluginItems.length > 0 && (
+          <span className="document-divider" />
+        )}
+        {pluginItems?.map((item) => (
+          <button
+            key={item.id}
+            className="markdown-button"
+            title={item.label}
+            onClick={item.action}
+          >
+            {item.icon ?? item.label.slice(0, 2)}
           </button>
         ))}
         <button className="markdown-button" title={t('note.formatTable')} onClick={onFormatTable}>

@@ -1,5 +1,6 @@
 // NoteForge — WYSIWYG Editor (TipTap)
 // Clean TipTap wrapper that uses the extension registry.
+// Supports PluginManager integration for extensible plugin loading.
 // Extracted from the legacy RichTextEditor.tsx.
 
 import {
@@ -7,12 +8,14 @@ import {
   forwardRef,
   useRef,
   useEffect,
+  useState,
 } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import type { Editor } from '@tiptap/react';
 import { getAllExtensions } from './extensions';
 import { markdownToHtml, htmlToMarkdown } from '../converters';
 import type { EditorHandle } from '../types/editor';
+import type { PluginManager } from '../plugins';
 
 interface WysiwygEditorProps {
   initialContent: string;
@@ -20,11 +23,15 @@ interface WysiwygEditorProps {
   onSelectionChange?: (from: number, to: number, selectedText?: string) => void;
   placeholderText?: string;
   searchQuery?: string;
+  /** Optional PluginManager for extensible plugin loading */
+  pluginManager?: PluginManager;
+  /** Optional extensions override (takes precedence over pluginManager) */
+  extensions?: any;
 }
 
 export const WysiwygEditor = forwardRef<EditorHandle, WysiwygEditorProps>(
   function WysiwygEditor(
-    { initialContent, onChange, onSelectionChange, placeholderText = '...', searchQuery },
+    { initialContent, onChange, onSelectionChange, placeholderText = '...', searchQuery, pluginManager, extensions: extensionsProp },
     ref,
   ) {
     const editorRef = useRef<Editor | null>(null);
@@ -33,8 +40,28 @@ export const WysiwygEditor = forwardRef<EditorHandle, WysiwygEditorProps>(
     onChangeRef.current = onChange;
     onSelectionChangeRef.current = onSelectionChange;
 
+    const [pluginExts, setPluginExts] = useState<any[]>(() =>
+      pluginManager?.getAllExtensions() ?? []
+    );
+
+    // Listen for extension changes from PluginManager
+    useEffect(() => {
+      if (!pluginManager) return;
+      const handler = (exts: any[]) => {
+        setPluginExts(exts);
+      };
+      pluginManager.onExtensionsChanged = handler;
+      return () => { pluginManager.onExtensionsChanged = null; };
+    }, [pluginManager]);
+
+    // Flatten all extensions into a single array for TipTap
     const editor = useEditor({
-      extensions: getAllExtensions(placeholderText, searchQuery),
+      extensions: (() => {
+        if (extensionsProp) return extensionsProp;
+        const base = getAllExtensions(placeholderText, searchQuery);
+        const plugin = pluginExts.flat();
+        return [...base, ...plugin];
+      })(),
       content: markdownToHtml(initialContent),
       onUpdate: ({ editor: ed }) => {
         const html = ed.getHTML();

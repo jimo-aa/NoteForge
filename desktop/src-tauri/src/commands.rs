@@ -494,3 +494,47 @@ pub fn write_crash_log(app: tauri::AppHandle, crash_data: String) -> Result<Stri
     while v.len() > 10 { if let Some(o) = v.first() { let _ = std::fs::remove_file(o.path()); v.remove(0); } }
     Ok(fp.to_string_lossy().to_string())
 }
+
+// ============================================================
+// 存储位置管理
+// ============================================================
+
+#[tauri::command]
+pub fn get_primary_root(state: State<'_, AppState>) -> Result<Option<String>, String> {
+    let core = state.core.lock().map_err(|e| e.to_string())?;
+    core.storage.get_primary_root().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn set_primary_root(state: State<'_, AppState>, path: String) -> Result<(), String> {
+    let core = state.core.lock().map_err(|e| e.to_string())?;
+    core.storage.set_primary_root(&path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn list_storage_roots(state: State<'_, AppState>) -> Result<Vec<String>, String> {
+    let core = state.core.lock().map_err(|e| e.to_string())?;
+    core.storage.get_storage_roots().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn add_extra_root(state: State<'_, AppState>, path: String) -> Result<(), String> {
+    let core = state.core.lock().map_err(|e| e.to_string())?;
+    // Validate directory exists
+    if !std::path::Path::new(&path).is_dir() {
+        return Err("目录不存在或不是一个有效的目录".to_string());
+    }
+    core.storage.add_extra_root(&path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn remove_extra_root(state: State<'_, AppState>, path: String) -> Result<(), String> {
+    let core = state.core.lock().map_err(|e| e.to_string())?;
+    core.storage.remove_extra_root(&path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn scan_dir_for_notes(state: State<'_, AppState>, dir_path: String) -> Result<Vec<noteforge_core::types::ScannedNote>, String> {
+    let core = state.core.lock().map_err(|e| e.to_string())?;
+    core.storage.scan_directory_for_notes(&dir_path).map_err(|e| e.to_string())
+}

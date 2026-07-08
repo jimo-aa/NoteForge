@@ -6,6 +6,8 @@ import type { MetricsData } from '@/types';
 import { NotebookModal, type NotebookModalState } from './NotebookModal';
 import { ConfirmDialog } from '@/components/Common/ConfirmDialog';
 import { EncryptionModal } from './EncryptionModal';
+import { getPluginRegistry } from '@/components/Editor/plugins/registry';
+import type { EditorPlugin } from '@/components/Editor/plugins/types';
 import {
   getShortcuts,
   updateShortcut,
@@ -30,7 +32,7 @@ const ACCENT_PRESETS = [
   '#a855f7', // violet
 ];
 
-type Tab = 'notebooks' | 'tags' | 'security' | 'appearance' | 'shortcuts' | 'stats' | 'sync';
+type Tab = 'notebooks' | 'tags' | 'security' | 'appearance' | 'shortcuts' | 'stats' | 'sync' | 'storage' | 'plugins';
 
 export function ManageModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { t } = useTranslation();
@@ -44,6 +46,93 @@ export function ManageModal({ open, onClose }: { open: boolean; onClose: () => v
   const [encryptionOpen, setEncryptionOpen] = useState(false);
   const [metrics, setMetrics] = useState<MetricsData | null>(null);
   const [metricsLoading, setMetricsLoading] = useState(false);
+
+  // ── Storage state ──
+  const [storageRoots, setStorageRoots] = useState<string[]>([]);
+  const [extraDirs, setExtraDirs] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!open || tab !== 'storage') return;
+    void (async () => {
+      try {
+        const { invoke } = await import('@tauri-apps/api/core');
+        const roots = await invoke<string[]>('list_storage_roots');
+        setStorageRoots(roots ?? []);
+      } catch { /* tauri cmd not yet available */ }
+    })();
+  }, [open, tab]);
+
+  const handleSelectPrimaryDir = async () => {
+    try {
+      const { open } = await import('@tauri-apps/plugin-dialog');
+      const selected = await open({ directory: true, multiple: false, title: t('manage.storageSelectDir') });
+      if (selected) {
+        const path = typeof selected === 'string' ? selected : selected[0];
+        const { invoke } = await import('@tauri-apps/api/core');
+        await invoke('set_primary_root', { path });
+        setStorageRoots([path, ...storageRoots.slice(1)]);
+        showToast('success', t('manage.storageRootChanged'));
+      }
+    } catch { /* */ }
+  };
+
+  const handleAddExtraDir = async () => {
+    try {
+      const { open } = await import('@tauri-apps/plugin-dialog');
+      const selected = await open({ directory: true, multiple: false, title: t('manage.storageSelectDir') });
+      if (selected) {
+        const path = typeof selected === 'string' ? selected : selected[0];
+        const { invoke } = await import('@tauri-apps/api/core');
+        await invoke('add_extra_root', { path });
+        setExtraDirs([...extraDirs, path]);
+        showToast('success', t('manage.storageDirAdded'));
+      }
+    } catch { /* */ }
+  };
+
+  const handleRemoveExtraDir = async (path: string) => {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('remove_extra_root', { path });
+      setExtraDirs(extraDirs.filter(d => d !== path));
+      showToast('success', t('manage.storageDirRemoved'));
+    } catch { /* */ }
+  };
+
+  // ── Plugin state ──
+  const pluginManager = getPluginRegistry();
+  const [plugins, setPlugins] = useState<Array<{ plugin: EditorPlugin; active: boolean }>>([]);
+
+  useEffect(() => {
+    if (!open || tab !== 'plugins') return;
+    const list = pluginManager.list().map((id) => ({
+      plugin: pluginManager.get(id)!,
+      active: pluginManager.active.includes(id),
+    }));
+    setPlugins(list);
+  }, [open, tab, pluginManager]);
+
+  const handleTogglePlugin = async (id: string, currentlyActive: boolean) => {
+    if (currentlyActive) {
+      await pluginManager.deactivate(id);
+    } else {
+      await pluginManager.activate(id);
+    }
+    const list = pluginManager.list().map((pid) => ({
+      plugin: pluginManager.get(pid)!,
+      active: pluginManager.active.includes(pid),
+    }));
+    setPlugins(list);
+  };
+
+  const phaseLabel = (phase?: string): string => {
+    switch (phase) {
+      case 'core': return t('manage.pluginsCore');
+      case 'builtin': return t('manage.pluginsBuiltin');
+      case 'lazy': return t('manage.pluginsLazy');
+      default: return phase ?? t('manage.pluginsThirdParty');
+    }
+  };
 
   // ── Sync state ──
   const getSyncServiceFn = () => {
@@ -244,6 +333,8 @@ export function ManageModal({ open, onClose }: { open: boolean; onClose: () => v
           <button className={tab === 'shortcuts' ? 'tab active' : 'tab'} onClick={() => setTab('shortcuts')}>{t('manage.tabShortcuts')}</button>
           <button className={tab === 'stats' ? 'tab active' : 'tab'} onClick={() => setTab('stats')}>{t('manage.tabStats')}</button>
           <button className={tab === 'sync' ? 'tab active' : 'tab'} onClick={() => setTab('sync')}>{t('manage.tabSync')}</button>
+          <button className={tab === 'storage' ? 'tab active' : 'tab'} onClick={() => setTab('storage')}>{t('manage.tabStorage')}</button>
+          <button className={tab === 'plugins' ? 'tab active' : 'tab'} onClick={() => setTab('plugins')}>{t('manage.tabPlugins')}</button>
         </div>
         <div className="manage-modal-body">
           {tab === 'notebooks' && (
@@ -465,6 +556,70 @@ export function ManageModal({ open, onClose }: { open: boolean; onClose: () => v
                 <span className={`sync-connect-dot ${syncStatus === 'online' || syncStatus === 'idle' ? 'connected' : 'disconnected'}`} />
                 <span>{t('sync.connectionStatus', { status: syncStatus })}</span>
               </div>
+            </div>
+          )}
+          {tab === 'storage' && (
+            <div className="manage-list">
+              <h4>{t('manage.storageTitle')}</h4>
+              <div className="storage-section">
+                <div className="storage-group">
+                  <label className="storage-label">{t('manage.storagePrimary')}</label>
+                  <p className="storage-desc">{t('manage.storagePrimaryDesc')}</p>
+                  <div className="storage-path-row">
+                    <span className="storage-path">{storageRoots[0] || t('common.none')}</span>
+                    <button className="manage-btn" onClick={handleSelectPrimaryDir} title={t('manage.storageSelectDir')}>
+                      📁
+                    </button>
+                  </div>
+                </div>
+
+                <div className="storage-group" style={{ marginTop: 20 }}>
+                  <label className="storage-label">{t('manage.storageExtra')}</label>
+                  <p className="storage-desc">{t('manage.storageExtraDesc')}</p>
+                  {extraDirs.length === 0 && <div className="manage-empty">{t('manage.storageNoExtra')}</div>}
+                  {extraDirs.map((dir) => (
+                    <div key={dir} className="storage-path-row">
+                      <span className="storage-path">{dir}</span>
+                      <button className="manage-btn manage-btn-danger" onClick={() => void handleRemoveExtraDir(dir)} title={t('manage.storageRemoveDir')}>
+                        🗑️
+                      </button>
+                    </div>
+                  ))}
+                  <button className="primary-btn" style={{ marginTop: 10 }} onClick={() => void handleAddExtraDir()}>
+                    {t('manage.storageAddDir')}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+          {tab === 'plugins' && (
+            <div className="manage-list">
+              <h4>{t('manage.pluginsTitle')}</h4>
+              <p className="storage-desc" style={{ padding: '0 20px', marginBottom: 8 }}>{t('manage.pluginsDesc')}</p>
+              {plugins.length === 0 && <div className="manage-empty">{t('manage.pluginsNoPlugins')}</div>}
+              {plugins.map(({ plugin, active }) => (
+                <div key={plugin.id} className="manage-item plugin-item">
+                  <div className="plugin-info">
+                    <span className="plugin-name">{plugin.name}</span>
+                    <span className="plugin-meta">
+                      <span className={`plugin-badge plugin-badge--${plugin.meta?.phase ?? 'third-party'}`}>{phaseLabel(plugin.meta?.phase)}</span>
+                      {' · '}v{plugin.version}
+                      {plugin.description && <> · <span className="plugin-desc">{plugin.description}</span></>}
+                    </span>
+                  </div>
+                  <div className="manage-item-actions">
+                    <span className={`plugin-status ${active ? 'active' : 'inactive'}`}>
+                      {active ? t('manage.pluginsStatusActive') : t('manage.pluginsStatusInactive')}
+                    </span>
+                    <button
+                      className={`manage-btn ${active ? 'manage-btn-warn' : 'manage-btn-ok'}`}
+                      onClick={() => void handleTogglePlugin(plugin.id, active)}
+                    >
+                      {active ? t('manage.pluginsDisable') : t('manage.pluginsEnable')}
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
           {tab === 'shortcuts' && (

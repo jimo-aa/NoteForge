@@ -24,6 +24,8 @@ import { StatusBar } from './StatusBar';
 import { AIToolbar } from './AIToolbar';
 import { AttachmentPanel } from './AttachmentPanel';
 import type { EditorHandle, BacklinkEntry } from './types/editor';
+import { getPluginRegistry } from './plugins/registry';
+import type { ToolbarItemDef } from './plugins/types';
 
 export function EditorContainer() {
   const { t } = useTranslation();
@@ -83,12 +85,47 @@ export function EditorContainer() {
   // ── Wiki candidates ──
   const wikiCandidates = useMemo(() => notes.map((item) => item.meta.title).filter(Boolean), [notes]);
 
-  // ── Render Markdown for preview ──
-  const renderedHtml = useMemo(
-    () => (note ? renderMarkdown(note.content ?? '', searchQuery) : ''),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [note?.content, searchQuery],
-  );
+  // ── Plugin registry ──
+  const pluginRegistry = useMemo(() => getPluginRegistry(), []);
+
+  // ── Plugin toolbar items (merged into toolbar) ──
+  const pluginToolbarItems = useRef<Array<{ id: string; label: string; icon?: string; action: () => void }>>([]);
+  useEffect(() => {
+    const items = pluginRegistry.getAllToolbarItems();
+    pluginToolbarItems.current = items.map((item: ToolbarItemDef) => ({
+      id: item.id,
+      label: item.label,
+      icon: item.icon,
+      action: item.action,
+    }));
+  }, [pluginRegistry]);
+
+  // ── Local preview content (drives preview independently of store) ──
+  const [localPreviewContent, setLocalPreviewContent] = useState(note?.content ?? '');
+  useEffect(() => {
+    if (note) setLocalPreviewContent(note.content);
+  }, [note?.meta.id]);
+
+  // ── Render Markdown for preview (with plugin hooks) ──
+  const renderedHtml = useMemo(() => {
+    let content = localPreviewContent;
+
+    // Run onBeforeOutput hooks (content transformation)
+    const beforeOutputResults = pluginRegistry.runHookSync('onBeforeOutput', content);
+    for (const result of beforeOutputResults) {
+      if (typeof result === 'string') content = result;
+    }
+
+    let html = renderMarkdown(content, searchQuery);
+
+    // Run onMarkdownToHtml hooks (HTML transformation)
+    const mdToHtmlResults = pluginRegistry.runHookSync('onMarkdownToHtml', html);
+    for (const result of mdToHtmlResults) {
+      if (typeof result === 'string') html = result;
+    }
+
+    return html;
+  }, [localPreviewContent, searchQuery, pluginRegistry]);
 
   // ── Syntax highlight for preview ──
   const previewRef = useRef<HTMLElement>(null);
@@ -124,6 +161,20 @@ export function EditorContainer() {
     return () => { cancelled = true; };
   }, [renderedHtml]);
 
+  // ── Mermaid diagram + KaTeX math rendering ──
+  useEffect(() => {
+    if (!renderedHtml || !previewRef.current) return;
+    let cancelled = false;
+    const container = previewRef.current;
+    import('@/utils/mermaidRenderer').then(({ renderMermaidBlocks }) => {
+      if (!cancelled) void renderMermaidBlocks(container);
+    });
+    import('@/utils/mathRenderer').then(({ renderMathBlocks }) => {
+      if (!cancelled) void renderMathBlocks(container);
+    });
+    return () => { cancelled = true; };
+  }, [renderedHtml]);
+
   // ── Load backlinks ──
   useEffect(() => {
     if (!note) { setBacklinks([]); return; }
@@ -138,6 +189,7 @@ export function EditorContainer() {
 
   // ── Edit actions ──
   const updateContent = useCallback((content: string) => {
+    setLocalPreviewContent(content);
     if (!note) return;
     updateNote(note.meta.id, { content });
     if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
@@ -285,7 +337,7 @@ export function EditorContainer() {
       const lines = content.split('\n');
       const previewPane = target.closest('.markdown-preview-pane');
       if (!previewPane) return;
-      const allItems = previewPane.querySelectorAll('.task-list li');
+      const allItems = previewPane.querySelectorAll('.task-list-item');
       allItems.forEach((li, idx) => {
         if (li.contains(taskCheckbox)) {
           let taskCount = -1;
@@ -549,6 +601,7 @@ export function EditorContainer() {
         onFormatTable={handleFormatTable}
         onTogglePreview={() => setIsPreviewVisible(!isPreviewVisible)}
         isPreviewVisible={isPreviewVisible}
+        pluginItems={pluginToolbarItems.current}
       />
 
       {/* Main editor area: Source + Preview dual-pane */}

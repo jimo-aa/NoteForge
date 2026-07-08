@@ -4,6 +4,7 @@
 //! 支持事务操作和批量写入。
 
 use rusqlite::{Connection, params};
+use std::fs;
 use std::path::Path;
 use tracing::info;
 
@@ -86,6 +87,176 @@ impl LocalStorage {
         Ok(())
     }
 
+    // ============================================================
+    // 通用配置 (app_config)
+    // ============================================================
+
+    /// 获取配置值
+    pub fn get_config(&self, key: &str) -> Result<Option<String>, CoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT value FROM app_config WHERE key = ?1"
+        )?;
+        let result = stmt.query_row(params![key], |row| row.get::<_, String>(0)).ok();
+        Ok(result)
+    }
+
+    /// 设置配置值
+    pub fn set_config(&self, key: &str, value: &str) -> Result<(), CoreError> {
+        self.conn.execute(
+            "INSERT OR REPLACE INTO app_config (key, value) VALUES (?1, ?2)",
+            params![key, value],
+        )?;
+        Ok(())
+    }
+
+    /// 删除配置项
+    pub fn delete_config(&self, key: &str) -> Result<(), CoreError> {
+        self.conn.execute(
+            "DELETE FROM app_config WHERE key = ?1",
+            params![key],
+        )?;
+        Ok(())
+    }
+
+    /// 按前缀列出配置键值对
+    pub fn list_config_prefix(&self, prefix: &str) -> Result<Vec<(String, String)>, CoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT key, value FROM app_config WHERE key LIKE ?1"
+        )?;
+        let pattern = format!("{}%", prefix);
+        let entries = stmt.query_map(params![pattern], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })?.collect::<Result<Vec<_>, _>>()?;
+        Ok(entries)
+    }
+
+    // ============================================================
+    // 存储目录管理 (storage roots)
+    // ============================================================
+
+    /// 获取所有已配置的存储目录根路径
+    pub fn get_storage_roots(&self) -> Result<Vec<String>, CoreError> {
+        let primary = self.get_primary_root()?;
+        let extras = self.list_config_prefix("storage:extra_root:")?;
+        let mut roots = Vec::new();
+        if let Some(p) = primary {
+            roots.push(p);
+        }
+        for (_, path) in extras {
+            roots.push(path);
+        }
+        Ok(roots)
+    }
+
+    /// 设置主存储目录根路径
+    pub fn set_primary_root(&self, path: &str) -> Result<(), CoreError> {
+        self.set_config("storage:primary_root", path)
+    }
+
+    /// 获取主存储目录根路径
+    pub fn get_primary_root(&self) -> Result<Option<String>, CoreError> {
+        self.get_config("storage:primary_root")
+    }
+
+    /// 添加一个额外的存储目录
+    pub fn add_extra_root(&self, path: &str) -> Result<(), CoreError> {
+        let existing = self.list_config_prefix("storage:extra_root:")?;
+        let next_index = existing.len();
+        let key = format!("storage:extra_root:{}", next_index);
+        self.set_config(&key, path)
+    }
+
+    /// 移除一个额外的存储目录
+    pub fn remove_extra_root(&self, path: &str) -> Result<(), CoreError> {
+        let existing = self.list_config_prefix("storage:extra_root:")?;
+        let mut found = false;
+        for (key, val) in &existing {
+            if val == path {
+                self.conn.execute(
+                    "DELETE FROM app_config WHERE key = ?1",
+                    params![key],
+                )?;
+                found = true;
+            }
+        }
+        if !found {
+            return Err(CoreError::NotFound(format!("存储根路径未找到: {}", path)));
+        }
+        // 重新编号，保持连续性
+        let remaining = self.list_config_prefix("storage:extra_root:")?;
+        for (i, (key, _)) in remaining.iter().enumerate() {
+            let new_key = format!("storage:extra_root:{}", i);
+            if *key != new_key {
+                let val: String = self.conn.query_row(
+                    "SELECT value FROM app_config WHERE key = ?1",
+                    params![key],
+                    |row| row.get(0),
+                )?;
+                self.conn.execute(
+                    "DELETE FROM app_config WHERE key = ?1",
+                    params![key],
+                )?;
+                self.conn.execute(
+                    "INSERT OR REPLACE INTO app_config (key, value) VALUES (?1, ?2)",
+                    params![new_key, val],
+                )?;
+            }
+        }
+        Ok(())
+    }
+
+    /// 扫描外部目录中的 .md 文件，返回基本笔记信息
+    pub fn scan_directory_for_notes(&self, dir_path: &str) -> Result<Vec<types::ScannedNote>, CoreError> {
+        let dir = fs::read_dir(dir_path)?;
+        let mut notes = Vec::new();
+
+        for entry in dir {
+            let entry = entry?;
+            let path = entry.path();
+
+            if path.extension().and_then(|e| e.to_str()) != Some("md") {
+                continue;
+            }
+
+            let file_path = path.to_string_lossy().to_string();
+            let metadata = fs::metadata(&path)?;
+            let modified_at = metadata
+                .modified()
+                .ok()
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|d| d.as_millis() as u64)
+                .unwrap_or(0);
+
+            // 读取文件提取第一个 # 标题行作为标题
+            let content = fs::read_to_string(&path).unwrap_or_default();
+            let title = content
+                .lines()
+                .find(|line| line.trim().starts_with("# ") || line.trim().starts_with("#　"))
+                .map(|line| {
+                    let trimmed = line.trim();
+                    let after_hash = &trimmed[trimmed.find(|c: char| c != '#').unwrap_or(1)..];
+                    after_hash.trim().to_string()
+                })
+                .unwrap_or_else(|| {
+                    path.file_stem()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("未命名")
+                        .to_string()
+                });
+
+            notes.push(types::ScannedNote {
+                file_path,
+                title,
+                modified_at,
+            });
+        }
+
+        // 按修改时间降序排列（最新在前）
+        notes.sort_by(|a, b| b.modified_at.cmp(&a.modified_at));
+
+        Ok(notes)
+    }
+
     /// 初始化数据库表
     fn initialize_tables(&self) -> Result<(), CoreError> {
         self.conn.execute_batch(
@@ -146,6 +317,11 @@ impl LocalStorage {
                  operation  TEXT NOT NULL,
                  payload    TEXT NOT NULL,
                  created_at INTEGER NOT NULL
+             );
+
+             CREATE TABLE IF NOT EXISTS app_config (
+                 key   TEXT PRIMARY KEY,
+                 value TEXT NOT NULL
              );
 
              CREATE TABLE IF NOT EXISTS note_snapshots (

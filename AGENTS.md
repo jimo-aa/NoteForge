@@ -2,109 +2,180 @@
 
 ## Project overview
 
-Multi-platform smart notes system (MVP phase). Primary deliverable is a **Tauri 2.x desktop app** with React 18 frontend and Rust core engine. Java/Spring Boot backend, Flutter mobile, and Next.js web are planned but not yet implemented.
+Multi-platform smart notes system (MVP phase). **Primary deliverable is the Tauri 2.x desktop app** (React 18 + Rust core). All four platforms have working code:
+
+| Platform | Stack | Status |
+|----------|-------|--------|
+| **desktop/** | Tauri 2 + React 18 + Vite 5 + CodeMirror 6 | Primary deliverable, working |
+| **core/** | Rust lib crate `noteforge-core` (8 modules) | Used by desktop via path dep |
+| **backend/** | Java 21 + Spring Boot 3.3 (Gradle, 5 submodules) | Working |
+| **web/** | Next.js 15 App Router + React 19 + TipTap | Working |
+| **mobile/** | Flutter 3.x + Dart ^3.9.2 | Working |
 
 ## Monorepo structure
 
-| Directory | What | Status |
-|-----------|------|--------|
-| `desktop/` | Tauri 2 + React 18 + Vite 5 | **Primary deliverable**, working |
-| `core/` | Rust lib crate `noteforge-core` (7 modules) | Working, used by desktop via path dep |
-| `backend/` | Java 21 + Spring Boot 3.3 (Gradle, multi-module) | Working: ~70 Java files across 3 submodules (common, note-service, user-service) |
-| `mobile/` | Flutter 3.x (Dart) | **MVP working** — notes CRUD, auth, sync with backend API |
-| `web/` | Next.js 15 App Router (React 19) | **MVP working** — notes CRUD, TipTap editor, auth, search |
-| `infra/` | Docker Compose (PostgreSQL+pgvector, Redis, MinIO, ES, Prometheus, Grafana, Nginx) | Ready for use |
-| `docs/` | Architecture & design docs (15 `.md` files) | Covers API, DB, sync, AI, deployment, UX, roadmap |
-| `scripts/` | Build/dev helper scripts (`.ps1`, `.bat`) | `up`, `down`, `test`, `security-audit` |
-| `.github/workflows/` | CI + release workflows | CI runs quality checks + optional Tauri build/Docker build |
+| Directory | What |
+|-----------|------|
+| `desktop/` | Tauri 2 app — React 18 frontend, Rust Tauri backend (~37 commands, 496 lines in commands.rs) |
+| `core/` | Rust core lib: `noteforge-core` (8 modules: lib, md_engine, storage/sqlite, search/tantivy, types, encryption, metrics, error) |
+| `backend/` | 5 Gradle submodules: `common`, `user-service`, `note-service`, `ai-service`, `gateway` |
+| `mobile/` | Flutter app — notes CRUD, auth, sync with backend API (Material Design) |
+| `web/` | Next.js 15 App Router — notes CRUD, TipTap editor, auth, search |
+| `infra/` | Docker Compose (PostgreSQL+pgvector, Redis, MinIO, ES, Prometheus, Grafana, Nginx) |
+| `docs/` | Architecture & design docs (API, DB, sync, AI, deployment, UX, roadmap) |
+| `scripts/` | Dev helpers: `up.ps1`, `down.ps1`, `test.ps1`, `security-audit.ps1`, `test_api.py` |
+| `.github/workflows/` | `ci.yml` (quality → tauri-build/docker) + `release.yml` (signed MSI+DMG on tag v*) |
 
 ## Key entry points
 
 - **Rust core lib:** `core/src/lib.rs` — exports `NoteForge::open()` as the main API
-- **Desktop Rust:** `desktop/src-tauri/src/lib.rs` — Tauri builder, command registration (~60 commands)
-- **Desktop Rust commands:** `desktop/src-tauri/src/commands.rs` — all Tauri command implementations (~1082 lines)
+- **Desktop Rust:** `desktop/src-tauri/src/lib.rs` — Tauri builder, registers 37 commands
 - **Desktop React:** `desktop/src/main.tsx` → `desktop/src/App.tsx`
-- **State management:** Two React Context providers — `AuthProvider` (authStore.tsx) wraps `NoteProvider` (noteStore.tsx)
-- **Path alias:** `@/` → `desktop/src/` (configured in vite.config.ts and tsconfig.json)
+- **State management:** **Zustand stores** are primary (useNoteStore, useAuthStore). Legacy Context providers (NoteProvider, AuthProvider) are deprecated no-op wrappers kept for backward compat. New code should import from `@/stores/useNoteStore` or `@/stores/useAuthStore` directly with selectors to avoid re-renders.
+- **Path alias:** `@/` → `desktop/src/` (vite.config.ts + tsconfig.json)
+- **Backend config:** `backend/settings.gradle` includes 5: `common`, `user-service`, `note-service`, `ai-service`, `gateway`
+
+## Where to look
+
+| Task | Location |
+|------|----------|
+| Note CRUD (desktop) | `desktop/src/stores/useNoteStore.ts` (Zustand) + `desktop/src-tauri/src/commands.rs` (Rust) |
+| Note CRUD (backend) | `backend/note-service/controller/NoteController.java` |
+| Auth | `desktop/src/stores/useAuthStore.ts` + `backend/user-service/controller/AuthController.java` |
+| Editor (desktop) | `desktop/src/components/Editor/` — CodeMirror 6 |
+| Editor (web) | `web/src/components/` — TipTap |
+| Search | `desktop/src/components/Sidebar/SearchBox.tsx` + `core/src/search.rs` (Tantivy) |
+| Versioning | `desktop/src-tauri/src/commands.rs` (snapshot-based) + `desktop/src/components/Modals/VersionHistoryDialog.tsx` |
+| Sync | `desktop/src/services/syncService.ts` (REST to gateway:8000) + `backend/note-service/config/SyncWebSocketHandler.java` |
+| API Gateway | `backend/gateway/` — routes to note-service/user-service on port 8000 |
+| AI features | `backend/ai-service/` — embedding, tagging, writing assistant endpoints |
 
 ## Dev commands
 
-Run all from repo root:
+Run all from repo root.
 
-| Command | What |
-|---------|------|
-| `cd desktop && npm run dev` | Vite-only dev server at `localhost:1420` |
-| `cd desktop && npm run tauri dev` | Launch Tauri desktop in dev mode |
-| `cd desktop && npm run build` | TypeScript check + Vite build (`tsc && vite build`) |
-| `cd desktop && npm run tauri build` | Production build (MSI/DMG) |
-| `cd desktop && npm run fmt` | Prettier format `src/` |
-| `cd desktop && npm run lint` | ESLint check (typescript-eslint + react-hooks rules) |
-| `cd desktop && npm run lint:fix` | ESLint auto-fix |
-| `cd desktop && npm test` | Vitest unit tests (`src/**/*.{test,spec}.{ts,tsx}`) |
-| `cd desktop && npm run test:e2e` | Playwright e2e tests (requires docker-compose stack up) |
-| `cd desktop && npm run test:watch` | Vitest watch mode |
-| `cd core && cargo test` | Rust unit + integration tests (core/tests/) |
-| `cd core && cargo clippy -- -D warnings` | Rust lint (CI gate) |
-| `cd core && cargo audit` | Rust dependency vulnerability scan |
-| `cd backend && ./gradlew build` | Build all backend services + JaCoCo (60% min), OWASP dep check |
-| `cd backend && ./gradlew :note-service:bootRun` | Run note-service |
-| `cd backend && ./gradlew :user-service:bootRun` | Run user-service |
-| `cd web && npm run dev` | Next.js Web dev server at `localhost:3000` |
-| `cd web && npm run build` | TypeScript check + Next.js build |
-| `cd mobile && flutter run` | Launch Flutter mobile app (requires device/emulator) |
-| `cd mobile && flutter build apk` | Build Android APK |
-| `scripts/up.ps1` | Docker up → Rust build → Tauri dev → Java backend |
-| `scripts/down.ps1` | Docker compose down |
-| `scripts/test.ps1` | Rust core tests (wrapper for `cargo test`) |
-| `scripts/security-audit.ps1` | Multi-layer audit: npm audit + cargo audit + Gradle dependencyCheck |
+### Desktop (Tauri + React)
+
+```bash
+cd desktop
+npm run dev          # Vite-only at localhost:1420
+npm run tauri dev    # Full Tauri desktop
+npm run build        # tsc && vite build
+npm run tauri build  # Production MSI/DMG/NSIS
+npm run fmt          # Prettier format src/
+npm run lint         # ESLint (typescript-eslint + react-hooks + react-refresh)
+npm run lint:fix     # ESLint auto-fix
+npm test             # Vitest unit tests (jsdom, src/**/*.{test,spec}.{ts,tsx})
+npm run test:e2e     # Playwright e2e (requires docker-compose stack up)
+```
+
+### Core (Rust)
+
+```bash
+cd core
+cargo test              # Unit + integration tests
+cargo clippy -- -D warnings   # CI gate
+cargo audit             # Dependency vulnerability scan
+```
+
+### Backend (Java/Gradle)
+
+```bash
+cd backend
+./gradlew build                             # Build all + JaCoCo (50% min) + OWASP dep check
+./gradlew :note-service:bootRun             # Note service on :8081
+./gradlew :user-service:bootRun             # User service on :8082
+./gradlew :ai-service:bootRun               # AI service
+./gradlew :gateway:bootRun                  # API gateway on :8000
+```
+
+### Web (Next.js)
+
+```bash
+cd web
+npm run dev     # localhost:3000
+npm run build   # TypeScript check + Next.js build
+npm run lint    # next lint
+```
+
+### Mobile (Flutter)
+
+```bash
+cd mobile
+flutter run           # Requires device/emulator
+flutter build apk     # Android APK
+```
+
+### Infrastructure
+
+```bash
+# Start full stack: Postgres+pgvector, Redis, MinIO, Elasticsearch, Prometheus, Grafana, Nginx
+docker compose -f infra/docker-compose.yml up -d
+```
 
 ## CI pipeline (from .github/workflows/)
 
-**`ci.yml`** runs on push/PR to `main`:
-1. `quality` job: `npm ci` → `npm run build` (tsc + vite) → `npm test` (vitest) → `cargo clippy -D warnings` → `cargo test` → `cargo audit` → `./gradlew build` (JaCoCo 60%, OWASP)
-2. `tauri-build` job (conditional on tag v\* or PR label 'build'): system deps → `npm run tauri build -- --bundles msi`
-3. `docker` job (main branch): Buildx image build for note-service + user-service
+**ci.yml** runs on push/PR to `main`:
 
-**`release.yml`** on tag push `v*`: creates GitHub Release → builds MSI (Windows, signed) + DMG (macOS, signed) → publishes draft release.
+1. `quality` job: `npm ci` → `npm run build` (tsc+vite) → `npm test` (vitest) → `cargo clippy -D warnings` → `cargo test` → `cargo audit` → `./gradlew build`
+2. `tauri-build` (conditional: tag v* or PR label 'build'): Linux system deps → `npm run tauri build -- --bundles msi`
+3. `docker` (main branch): Buildx images for note-service + user-service
 
-## Important quirks
+**release.yml** on tag push `v*`: creates draft GitHub Release → builds signed MSI (Windows) + signed DMG (macOS) → publishes draft.
 
-- **Linter exists:** `eslint.config.js` with typescript-eslint + react-hooks + react-refresh (not just tsc). `npm run lint` to run it.
-- **Frontend tests exist:** Vitest (`vitest.config.ts`) with jsdom. Test file example: `src/services/__tests__/syncService.test.ts`. E2E via Playwright (`e2e/`). Both are part of CI.
-- **Desktop is ESM:** `desktop/package.json` has `"type": "module"`.
-- **Tauri 2** uses `@tauri-apps/api` v2.x and `@tauri-apps/cli` v2.x (not v1).
-- **Tauri dev URL** must be `localhost:1420` (configured in vite.config.ts and tauri.conf.json).
-- **Bundle active** (not disabled): `tauri.conf.json` has `"bundle": {"active": true}` targeting MSI + DMG. Version is `0.9.0`.
-- **Rust core** is linked via `path = "../../core"` in desktop's `Cargo.toml` — always build core first if it changes.
+## Conventions & quirks
+
+### Frontend (desktop)
+
+- **ESM:** `desktop/package.json` has `"type": "module"`
+- **ESLint:** `eslint.config.js` with typescript-eslint + react-hooks + react-refresh. `react-refresh/only-export-components` is **warn** (not error). `react-hooks/set-state-in-effect` is **off** (many effects call setState on mount — valid pattern here).
+- **TypeScript:** strict mode with `noUncheckedIndexedAccess: true`. `noUnusedLocals` and `noUnusedParameters` are **false**.
+- **CSS:** `globals.css` + CSS modules for feature components. Dark/light theme via `data-theme` on `<html>` (controlled by `useTheme` hook). Accent color persisted in localStorage key `noteforge:accent`.
+- **i18n:** zh-CN (fallback) + en-US. Auto-detected from localStorage key `noteforge:lang` or browser navigator.
+- **Tauri commands** called from React via `@tauri-apps/api/core` `invoke()`, wrapped in `src/utils/invoke.ts` (`tauriInvoke` helper that returns null on error instead of throwing).
+- **Tauri commands are snake_case** (e.g. `create_note`, `search_notes_fuzzy`). Rust types use `#[serde(rename_all = "camelCase")]`.
 - **Vite config** ignores `src-tauri/**` in `watch.ignored` (prevents infinite rebuild loops).
-- **Tauri commands** are called from React via dynamic import `@tauri-apps/api/core` (see `src/utils/invoke.ts`). The `tauriInvoke` utility wraps all Rust-backend calls with error handling.
-- **Desktop Rust code** uses `lazy_static!` for caching (5-min TTL caches for versions, diffs, search) and `timed_command!` macro for performance logging (threshold: 100ms).
-- **Desktop Rust entry** is `desktop/src-tauri/src/main.rs` (just calls `lib::run()`).
-- **Backend** uses Gradle wrapper; services in `note-service/` and `user-service/` have Spring Boot application code.
-- **Backend security:** Shared JWT secret between services (no rotation), no integration test containers (uses `TestSecurityConfig` mock), no API gateway.
-- **E2E tests** (`e2e/sync.spec.ts`) require the full docker-compose stack running (postgres + redis + both services). Prerequisite noted in test file.
-- **infra/docker-compose.yml** creates tables via `init.sql` (pgvector + uuid-ossp extensions, 10 tables). Also includes Prometheus/Grafana for monitoring.
-- **Desktop app auth** talks to `localhost:8082/api/v1/auth` (user-service). Token auto-refresh scheduled 15min before expiry.
-- **i18n:** zh-CN (fallback) + en-US. Auto-detected from browser/localStorage, key `noteforge:lang`.
+- **CodeMirror 6** is the editor engine (not TipTap — TipTap is used on the web platform).
+- **GraphView** is lazy-loaded via `React.lazy` + `Suspense`.
+- **Error handling:** Global error handlers in App.tsx persist crashes via `write_crash_log` Tauri command. `ErrorBoundary` component wraps the app root.
+- **Sync** talks to **API Gateway on port 8000** (`http://localhost:8000/api/v1/sync`), not directly to note-service. Gateway URL configurable via localStorage key `noteforge:api:gateway-url`.
 
-## Architecture notes
+### Rust (core + desktop)
 
-- Desktop app uses **libgit2** (`git2` crate) for per-note version control, not git CLI.
-- Git history stored at Tauri's `app_data_dir` as bare repos per-note (branch pattern: `refs/heads/notes/{noteId}/{branch}`).
-- Encryption uses AES-256-GCM with Argon2 password-derived keys (stored in-memory only).
-- Search uses Tantivy with jieba-rs Chinese tokenization.
-- Everything runs **offline-first** — no backend required for desktop app MVP.
-- Desktop Rust has 60+ Tauri commands covering: note/notebook/tag CRUD, versioning (diff/diff-stat, milestones, branches), export/backup/restore, search (fuzzy, advanced, multi-version), sync queue, crash recovery, usage metrics, wiki link backlinks.
-- Core Rust modules: `lib` (NoteForge struct + open()), `md_engine`, `storage` (SQLite), `search` (Tantivy), `types`, `encryption`, `metrics`.
+- **`timed_command!` macro** in `commands.rs` logs commands exceeding 100ms threshold.
+- **`lazy_static!`** used only for metrics singleton (`METRICS`), not for caching.
+- **Core modules:** `lib` (NoteForge struct + open()), `md_engine` (pulldown-cmark), `storage` (rusqlite bundled), `search` (tantivy 0.22 + jieba-rs 0.7), `types`, `encryption` (aes-gcm 0.10 + argon2 0.5), `metrics`, `error`.
+- Path dependency: `desktop/src-tauri/Cargo.toml` links core via `path = "../../core"`.
 
-## Conventions
+### Backend
 
-- Rust types use `#[serde(rename_all = "camelCase")]` for JS interop.
-- Tauri commands use snake_case names (e.g. `create_note`, `search_notes_fuzzy`).
-- React components use PascalCase, files match component names.
-- CSS: vanilla CSS (globals.css) + CSS modules for feature components. Dark/light theme via `data-theme` attribute on `<html>` (controlled by `useTheme` hook).
-- Frontend tests: Vitest with jsdom, files match `src/**/*.{test,spec}.{ts,tsx}`.
-- React hooks: custom hooks in `src/hooks/` (useKeyboardShortcuts, useTheme, useOnlineStatus, useAdvancedFeatures).
+- 5 submodules: `common` (shared lib), `user-service` (auth:8082), `note-service` (notes:8081), `ai-service` (AI endpoints), `gateway` (API gateway:8000).
+- JaCoCo minimum: **50%** (not 60% — confirmed in build.gradle). Excludes dto/, entity/, exception/, document/, ExportService*.
+- Standard 3-layer: controller → service → repository. Lombok for entity boilerplate.
+- JWT is shared between services (no rotation). No testcontainers in CI (uses `TestSecurityConfig` mock).
+- Profiles: dev, test, prod (`application-{profile}.yml`).
+
+### Web
+
+- React **19** with Next.js **15** App Router.
+- TipTap editor (v2.11).
+- API base configured via env `NEXT_PUBLIC_API_BASE` (default `http://localhost:8000`).
+- Minimal build step: `npm run build` (no separate typecheck step — Next.js includes it).
+
+### Mobile
+
+- Flutter 3.x with Dart SDK ^3.9.2.
+- Material Design. Provider for state management. HTTP + shared_preferences + intl.
+- Cross-platform: Android, iOS, Linux, macOS, Windows, Web (flutter run targets).
+
+## Testing quirks
+
+- **Vitest** with jsdom. Setup file: `desktop/src/test/setup.ts`. Test files: `src/**/*.{test,spec}.{ts,tsx}`.
+- **Playwright E2E** in `desktop/e2e/` — requires full docker-compose stack (postgres + redis + both backend services). Prerequisite noted in `sync.spec.ts`.
+- **Rust tests** in `core/tests/` (integration) and inline in each module.
+- **Existing frontend tests:** `NoteList.test.tsx`, `syncService.test.ts`, `markdownConverter.test.ts`, `aiService.test.ts`.
+- JaCoCo verification threshold is **50%** (not 60% as stated elsewhere).
+- `cargo audit` is installed fresh each CI run (`cargo install cargo-audit`).
 
 ## Subdirectory AGENTS.md
 

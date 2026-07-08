@@ -11,6 +11,7 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let app_data = app.path().app_data_dir().map_err(|e| e.to_string())?;
             let core = commands::init_core(app.handle()).map_err(|e| e.to_string())?;
@@ -81,6 +82,13 @@ pub fn run() {
             // Usage Metrics
             commands::record_metric,
             commands::get_metrics,
+            // Storage Management
+            commands::get_primary_root,
+            commands::set_primary_root,
+            commands::list_storage_roots,
+            commands::add_extra_root,
+            commands::remove_extra_root,
+            commands::scan_dir_for_notes,
         ])
         .run(tauri::generate_context!())
         .expect("启动 NoteForge 失败");

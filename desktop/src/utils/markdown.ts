@@ -14,13 +14,13 @@ DOMPurify.addHook('uponSanitizeElement', (_node, data) => {
 });
 const SANITIZE_CONFIG = {
   ALLOWED_ATTR: [
-    'class', 'data-lang', 'data-code', 'data-checked', 'data-line',
-    'data-type', 'data-title',
+    'class', 'id', 'data-lang', 'data-code', 'data-checked', 'data-line',
+    'data-type', 'data-title', 'data-latex', 'data-footnote-id', 'data-code',
     'target', 'rel', 'loading', 'href', 'src', 'alt',
     'width', 'height', 'align', 'style',
-    'type', 'checked', 'disabled',
+    'type', 'checked', 'disabled', 'role', 'aria-checked', 'tabindex',
   ],
-  ADD_TAGS: ['mark', 'details', 'summary', 'video', 'iframe'],
+  ADD_TAGS: ['mark', 'details', 'summary', 'video', 'iframe', 'input', 'sup'],
 };
 
 // ── Protected block placeholders ──
@@ -49,7 +49,6 @@ const EMOJI_MAP: Record<string, string> = {
   chart: '📊', graph: '📈', tools: '🔧', gear: '⚙️',
 };
 
-/** 展开 :emoji: 简码 */
 function expandEmoji(text: string): string {
   return text.replace(/:([a-zA-Z0-9_+-]+):/g, (_m, name) => EMOJI_MAP[name.toLowerCase()] ?? _m);
 }
@@ -70,19 +69,40 @@ function preprocess(text: string): string {
 
   let s = text;
 
-  // 1. Frontmatter ---...---
-  s = s.replace(/^---\n([\s\S]*?)\n---\n?/, (_m, content) => {
-    // Render frontmatter as hidden metadata, not displayed
-    return protect(`<div class="frontmatter" style="display:none">${esc(content)}</div>`);
+  // 1. Frontmatter ---...--- (early extraction before anything else)
+  s = s.replace(/^---\n([\s\S]*?)\n---\n?/, (_m: string, content: string) => {
+    const lines = content.split('\n').filter((l: string) => l.trim());
+    let fmHtml = '<div class="frontmatter">';
+    fmHtml += '<div class="frontmatter-header">📋 属性</div>';
+    fmHtml += '<table class="frontmatter-table">';
+    for (const line of lines) {
+      const sep = line.indexOf(':');
+      if (sep > 0) {
+        const key = esc(line.slice(0, sep).trim());
+        let rawVal = line.slice(sep + 1).trim();
+        const val = esc(rawVal);
+        // Detect YAML array: [item1, item2, ...]
+        const arrayMatch = rawVal.match(/^\[(.+)\]$/);
+        if (arrayMatch) {
+          const items = arrayMatch[1]!.split(',').map(i => esc(i.trim())).filter(Boolean);
+          const rendered = items.map(i => `<span class="fm-array-item">${i}</span>`).join('');
+          fmHtml += `<tr><td class="fm-key">${key}</td><td class="fm-val">${rendered}</td></tr>`;
+        } else {
+          fmHtml += `<tr><td class="fm-key">${key}</td><td class="fm-val">${val}</td></tr>`;
+        }
+      }
+    }
+    fmHtml += '</table></div>';
+    return protect(fmHtml);
   });
 
-  // 2. Mermaid code blocks (must preceed generic code blocks)
+  // 2. Mermaid code blocks
   s = s.replace(/```mermaid\n([\s\S]*?)```/g, (_m, code) => {
     const encoded = esc(code.trim());
     return protect(`<div class="mermaid-block" data-code="${encoded}"><div class="mermaid-placeholder">
       <span class="mermaid-icon">📊</span>
       <span class="mermaid-label">Mermaid 图表</span>
-      <span class="mermaid-hint">渲染需要加载 mermaid.js</span>
+      <span class="mermaid-hint">需加载 mermaid.js 库以渲染图表</span>
     </div></div>`);
   });
 
@@ -117,11 +137,10 @@ function preprocess(text: string): string {
 function renderInline(text: string, highlightQuery = ''): string {
   let r = esc(text);
 
-  // Must process in order to avoid nested conflicts:
   // 1. Protected blocks (already escaped, restore placeholders)
   r = r.replace(/%%PROTECTED_(\d+)%%/g, (_m, idx) => _protectedBlocks[parseInt(idx)] ?? _m);
 
-  // 2. Image (before link, so ![alt](url) doesn't match as [alt](url))
+  // 2. Image (before link)
   r = r.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" class="inline-image" loading="lazy" />');
 
   // 3. Bold+Italic ***text***
@@ -133,7 +152,7 @@ function renderInline(text: string, highlightQuery = ''): string {
   // 5. Italic *text*
   r = r.replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, '<em>$1</em>');
 
-  // 6. Underline __text__ (but not inside words like foo__bar)
+  // 6. Underline __text__
   r = r.replace(/(?<!\w)__(.+?)__(?!\w)/g, '<u>$1</u>');
 
   // 7. Strikethrough ~~text~~
@@ -153,13 +172,13 @@ function renderInline(text: string, highlightQuery = ''): string {
 
   // 12. Footnote reference [^id]
   r = r.replace(/\[\^([^\]]+)\]/g, (_m, id) => {
-    return `<sup class="footnote-ref" data-footnote-id="${esc(id)}"><a href="#fn:${esc(id)}">[${esc(id)}]</a></sup>`;
+    return `<sup class="footnote-ref" data-footnote-id="${esc(id)}"><a href="#fn:${esc(id)}" id="fnref:${esc(id)}">[${esc(id)}]</a></sup>`;
   });
 
   // 13. Emoji shortcodes
   r = expandEmoji(r);
 
-  // 14. Tags #tag (must be at word boundary, not inside another token)
+  // 14. Tags #tag
   r = r.replace(/(?<!\w)(#[\w\u4e00-\u9fff\-/]+)/gu, '<span class="tag">$1</span>');
 
   // 15. Search highlight
@@ -174,22 +193,28 @@ function renderInline(text: string, highlightQuery = ''): string {
   return r;
 }
 
+// ── Blockquote depth: count leading `>` ──
+
+function parseBlockquoteDepth(line: string): { depth: number; content: string } | null {
+  const m = line.trim().match(/^(>+) /);
+  if (m) return { depth: m[1]!.length, content: line.trim().slice(m[0]!.length) };
+  return null;
+}
+
 // ── Block-level rendering ──
 
 export function renderMarkdown(md: string, highlightQuery = ''): string {
   if (!md) return '';
 
-  // Pre-process: extract protected blocks
   const body = preprocess(md);
-
   const lines = body.split('\n');
   const out: string[] = [];
   let i = 0;
+  const listStack: Array<{ type: 'ul' | 'ol' }> = [];
+  let bqDepth = 0; // current blockquote nesting depth
+  let inCallout = false; // track whether we're inside a callout block
+  const footnoteDefs: Array<{ id: string; content: string }> = []; // footnote definition collector
 
-  // State tracking
-  const listStack: Array<{ type: 'ul' | 'ol'; tight: boolean }> = [];
-
-  /** Flush list stack back to a given depth */
   function flushListTo(depth: number) {
     while (listStack.length > depth) {
       const lst = listStack.pop()!;
@@ -197,18 +222,21 @@ export function renderMarkdown(md: string, highlightQuery = ''): string {
     }
   }
 
-  /** Get indent level (number of leading spaces / 2) */
   function indentLevel(line: string): number {
     const m = line.match(/^( *)/);
     return m ? Math.floor(m[1]!.length / 2) : 0;
   }
 
-  /** Check if line is a protected block placeholder */
   function isProtected(line: string): boolean {
     return /^%%PROTECTED_\d+%%$/.test(line.trim());
   }
 
-  /** Process a line as non-list, non-table block content */
+  /** Close blockquotes to a target depth */
+  function flushBlockquoteTo(target: number) {
+    while (bqDepth > target) { out.push('</blockquote>'); bqDepth--; }
+    while (bqDepth < target) { out.push('<blockquote>'); bqDepth++; }
+  }
+
   function processBlock(line: string) {
     const trimmed = line.trim();
     if (!trimmed) {
@@ -216,7 +244,6 @@ export function renderMarkdown(md: string, highlightQuery = ''): string {
       return;
     }
 
-    // Protected block (code, math, mermaid, frontmatter)
     if (isProtected(line)) {
       out.push(restore(line));
       return;
@@ -228,7 +255,7 @@ export function renderMarkdown(md: string, highlightQuery = ''): string {
       return;
     }
 
-    // Headings # to ######
+    // Headings
     const hMatch = trimmed.match(/^(#{1,6})\s+(.+)/);
     if (hMatch) {
       const level = hMatch[1]!.length;
@@ -236,23 +263,32 @@ export function renderMarkdown(md: string, highlightQuery = ''): string {
       return;
     }
 
-    // Callout / Admonition: > [!type] title
+    // Callout / Admonition: > [!type] (handled at depth 1 or more)
     const calloutMatch = trimmed.match(/^>\s*\[!(\w+)\]\s*(.*)/i);
     if (calloutMatch) {
       const type = calloutMatch[1]!.toLowerCase();
       const title = calloutMatch[2]!;
       const calloutTypes = ['note', 'warning', 'tip', 'danger', 'info', 'success', 'question'];
       const validType = calloutTypes.includes(type) ? type : 'note';
+      if (inCallout) {
+        out.push('</div></div>');
+        inCallout = false;
+      }
+      flushBlockquoteTo(0);
       out.push(`<div class="callout callout-${validType}">`);
-      out.push(`<div class="callout-header"><span class="callout-icon">${getCalloutIcon(validType)}</span><span class="callout-title">${title || validType.charAt(0).toUpperCase() + validType.slice(1)}</span></div>`);
+      out.push(`<div class="callout-header"><span class="callout-title">${esc(title || validType.charAt(0).toUpperCase() + validType.slice(1))}</span></div>`);
       out.push('<div class="callout-body">');
-      // Remaining callout content will be processed as nested block
-      return; // caller handles continuation lines
+      inCallout = true;
+      return;
     }
 
-    // Simple blockquote > text
-    if (trimmed.startsWith('> ') && !/^>\s*\[!\w+\]/i.test(trimmed)) {
-      out.push(`<blockquote class="quote-block">${renderInline(trimmed.slice(2), highlightQuery)}</blockquote>`);
+    // Nested blockquotes: >> text, > text
+    const bq = parseBlockquoteDepth(line);
+    if (bq && !/^>\s*\[!\w+\]/i.test(trimmed)) {
+      const target = bq.depth;
+      flushBlockquoteTo(target);
+      out.push(`<p>${renderInline(bq.content, highlightQuery)}</p>`);
+      bqDepth = target; // left open for continuation
       return;
     }
 
@@ -260,11 +296,10 @@ export function renderMarkdown(md: string, highlightQuery = ''): string {
     const defTerm = trimmed.match(/^:(.+)/);
     if (defTerm) {
       out.push(`<dl><dt>${renderInline(defTerm[1]!, highlightQuery)}</dt>`);
-      // Definition body will be next line
       return;
     }
 
-    // Details / Summary: >+++ title
+    // Details / Summary
     const detailsMatch = trimmed.match(/^>\+\+\+\s*(.*)/);
     if (detailsMatch) {
       out.push(`<details><summary>${renderInline(detailsMatch[1]! || '展开', highlightQuery)}</summary>`);
@@ -275,7 +310,6 @@ export function renderMarkdown(md: string, highlightQuery = ''): string {
       return;
     }
 
-    // If we reach here, it's a plain paragraph
     out.push(`<p>${renderInline(trimmed, highlightQuery)}</p>`);
   }
 
@@ -283,6 +317,21 @@ export function renderMarkdown(md: string, highlightQuery = ''): string {
     const line = lines[i]!;
     const trimmed = line.trim();
     const indent = indentLevel(line);
+
+    // ── Callout content handling (tracked via inCallout state) ──
+    if (inCallout) {
+      if (!trimmed.startsWith('> ')) {
+        // Exiting callout context
+        out.push('</div></div>');
+        inCallout = false;
+      } else {
+        // Still inside callout — render content line as <p>
+        out.push(`<p>${renderInline(trimmed.slice(2), highlightQuery)}</p>`);
+        i++;
+        // inCallout stays true — track via state, not out[last]
+        continue;
+      }
+    }
 
     // ── Tables ──
     if (trimmed.startsWith('|')) {
@@ -292,6 +341,7 @@ export function renderMarkdown(md: string, highlightQuery = ''): string {
         i++;
       }
       flushListTo(0);
+      flushBlockquoteTo(0);
       out.push(renderTable(tableLines, highlightQuery));
       continue;
     }
@@ -303,114 +353,97 @@ export function renderMarkdown(md: string, highlightQuery = ''): string {
     const defMatch = trimmed.startsWith('  ') && lines[i - 1] && /^:/.test(lines[i - 1]!.trim());
 
     if (ulMatch || olMatch || taskMatch) {
-      // Determine list type
       const isTask = !!taskMatch;
       const isOl = !!olMatch;
       const content = isTask ? taskMatch![2]! : (olMatch?.[2] ?? ulMatch![1]!);
       const type = isOl ? 'ol' : 'ul';
-
-      // Handle indent depth changes
       const depth = indent;
-      if (depth > listStack.length) {
-        // Indent - start nested list
-        const parentType = listStack.length > 0 ? listStack[listStack.length - 1]!.type : type;
-        const nestingType = isTask ? 'ul' : type;
-        if (nestingType !== parentType) {
-          out.push(`<${nestingType}>`);
-          listStack.push({ type: nestingType, tight: true });
-        }
-        out.push(`<${nestingType}>`);
-        listStack.push({ type: nestingType, tight: true });
-      } else if (depth < listStack.length) {
-        flushListTo(depth);
+
+      // Handle list stack (depth 0 → stack.length 1, depth 1 → stack.length 2, ...)
+      const targetStackLen = depth + 1;
+      if (targetStackLen > listStack.length) {
+        // Need deeper nesting — start new list
+        out.push(`<${type}>`);
+        listStack.push({ type });
+      } else if (targetStackLen < listStack.length) {
+        // Too deep — close inner lists
+        flushListTo(targetStackLen);
       } else if (listStack.length > 0 && listStack[listStack.length - 1]!.type !== type) {
-        // Type switch within same depth
-        flushListTo(depth);
+        // Same depth but different list type (ul→ol or ol→ul)
+        flushListTo(Math.max(0, depth));
         out.push(`<${type}>`);
-        listStack.push({ type, tight: true });
+        listStack.push({ type });
       } else if (listStack.length === 0) {
-        // Start new list
+        // Starting a fresh list
         out.push(`<${type}>`);
-        listStack.push({ type, tight: true });
+        listStack.push({ type });
       }
 
-      // Render list item
+      // Render item
       if (isTask) {
         const ch3 = trimmed[3];
         const done = ch3 === 'x' || ch3 === 'X';
         out.push(`<li class="task-list-item${done ? ' task-done' : ''}">`);
-        out.push(`<button class="task-checkbox" data-checked="${done ? 'true' : 'false'}" data-line="${esc(line)}" title="${done ? '标记未完成' : '标记完成'}">${done ? '✅' : '⬜'}</button>`);
-        out.push(` ${renderInline(content, highlightQuery)}</li>`);
+        out.push(`<span class="task-checkbox" data-checked="${done ? 'true' : 'false'}" role="checkbox" aria-checked="${done ? 'true' : 'false'}" tabindex="0"></span>`);
+        out.push(`<span>${renderInline(content, highlightQuery)}</span></li>`);
       } else {
         out.push(`<li>${renderInline(content, highlightQuery)}</li>`);
       }
       i++;
-      // Check if next line is a continuation (paragraph inside list)
-      if (i < lines.length && lines[i]!.trim() && !lines[i]!.trim().startsWith('|') && indentLevel(lines[i]!) >= depth) {
-        // Paragraph continuation inside list item
-        // Actually for tight lists, we don't add <p> tags
-      }
       continue;
     }
 
-    // ── Definition list body (starts with space, follows :term) ──
+    // ── Footnote definition: [^id]: content ──
+    const fnDefMatch = trimmed.match(/^\[\^([^\]]+)\]:\s+(.+)/);
+    if (fnDefMatch) {
+      footnoteDefs.push({ id: fnDefMatch[1]!, content: renderInline(fnDefMatch[2]!, highlightQuery) });
+      i++;
+      continue;
+    }
+
+    // ── Definition list body ──
     if (defMatch) {
       out.push(`<dd>${renderInline(trimmed, highlightQuery)}</dd></dl>`);
       i++;
       continue;
     }
 
-    // Non-list content: flush lists
+    // Non-list content: flush stacks
     flushListTo(0);
 
-    // ── Callout continuation lines ──
-    if (trimmed.startsWith('> ') && out.length > 0) {
-      // Check if we're inside a callout
-      const lastNonEmpty = out[out.length - 1] ?? '';
-      if (lastNonEmpty?.startsWith('<div class="callout-body">')) {
-        // Still inside callout - accumulate content
-        if (!trimmed) {
-          // Empty line = end callout block
-          out.push('</div></div>');
-        } else {
-          out.push(`<p>${renderInline(trimmed.slice(2), highlightQuery)}</p>`);
-        }
-        i++;
-        continue;
-      }
-      if (lastNonEmpty?.startsWith('</div></div>') || /^<div class="callout-body">/.test(lastNonEmpty ?? '')) {
-        // Inside callout, not yet closed
-      }
+    // Close blockquotes when content is NOT a quote continuation (>)
+    // This prevents non-quote content from being wrapped inside <blockquote>
+    if (!line.trimStart().startsWith('>')) {
+      flushBlockquoteTo(0);
     }
 
-    // Close any open callout if we hit non-quote content after callout body started
-    if (out.length > 0) {
-      const lastOut = out[out.length - 1] ?? '';
-      if (lastOut === '<div class="callout-body">' && !trimmed.startsWith('> ')) {
-        out.push('</div></div>');
-      }
-    }
-
-    // ── Regular block processing ──
+    // ── Regular block ──
     processBlock(line);
     i++;
   }
 
   // Flush remaining
   flushListTo(0);
+  flushBlockquoteTo(0);
 
   // Close any unclosed callout
-  if (out.length > 0 && out[out.length - 1] === '<div class="callout-body">') {
+  if (inCallout) {
     out.push('</div></div>');
+    inCallout = false;
   }
 
-  // Close any unclosed details
+  // ── Footnote definitions section ──
+  if (footnoteDefs.length > 0) {
+    out.push('<hr class="footnotes-sep">');
+    out.push('<section class="footnotes">');
+    for (const fn of footnoteDefs) {
+      out.push(`<p id="fn:${esc(fn.id)}"><sup>${fn.id}</sup> ${fn.content} <a href="#fnref:${esc(fn.id)}" class="footnote-backref">↩</a></p>`);
+    }
+    out.push('</section>');
+  }
+
   const outStr = out.join('\n');
-
-  // Restore any inline protected blocks that were escaped
   const restored = restore(outStr);
-
-  // Post-process: combine adjacent paragraphs inside callouts (already handled)
 
   return DOMPurify.sanitize(restored, SANITIZE_CONFIG);
 }
@@ -420,21 +453,28 @@ export function renderMarkdown(md: string, highlightQuery = ''): string {
 function renderTable(rows: string[], highlightQuery: string): string {
   if (rows.length < 2) return '';
 
-  // Parse cells
+  // Parse cells — always produce numCols width per row
   const parsed = rows.map((row) => {
     let r = row.trim();
-    if (r.startsWith('|')) r = r.slice(1);
-    if (r.endsWith('|')) r = r.slice(0, -1);
-    return r.split('|').map((c) => c.trim());
+    // Remove leading/trailing pipes (handles empty first/last cells)
+    // We keep empty cells by not trimming around pipes
+    const cells: string[] = [];
+    const parts = r.split('|');
+    let start = 0;
+    let end = parts.length;
+    if (r.startsWith('|')) start = 1;
+    if (r.endsWith('|')) end = parts.length - 1;
+    for (let p = start; p < end; p++) {
+      cells.push((parts[p] ?? '').trim());
+    }
+    return cells;
   });
 
-  // Find separator row
   const sepIdx = parsed.findIndex((row) =>
     row.length > 0 && row.every((c) => /^:?-{3,}:?$/.test(c)),
   );
-  if (sepIdx === -1) return ''; // Not a valid table
+  if (sepIdx === -1) return '';
 
-  // Extract alignments
   const numCols = Math.max(...parsed.map((r) => r.length));
   const aligns: string[] = [];
   if (sepIdx >= 0) {
@@ -448,41 +488,26 @@ function renderTable(rows: string[], highlightQuery: string): string {
     }
   }
 
-  let html = '<table>';
-  // Header
+  let html = '<div class="table-wrapper"><table>';
   if (sepIdx > 0) {
     html += '<thead><tr>';
-    const headerRow = parsed[0]!;
     for (let c = 0; c < numCols; c++) {
       const align = aligns[c] || 'left';
-      const style = align !== 'left' ? ` style="text-align:${align}"` : '';
-      html += `<th${style}>${renderInline(headerRow[c] ?? '', highlightQuery)}</th>`;
+      html += `<th class="ta-${align}">${renderInline(parsed[0]![c] ?? '', highlightQuery)}</th>`;
     }
     html += '</tr></thead>';
   }
-  // Body
   html += '<tbody>';
   for (let r = sepIdx + 1; r < parsed.length; r++) {
     html += '<tr>';
     for (let c = 0; c < numCols; c++) {
       const align = aligns[c] || 'left';
-      const style = align !== 'left' ? ` style="text-align:${align}"` : '';
-      html += `<td${style}>${renderInline(parsed[r]![c] ?? '', highlightQuery)}</td>`;
+      html += `<td class="ta-${align}">${renderInline(parsed[r]![c] ?? '', highlightQuery)}</td>`;
     }
     html += '</tr>';
   }
-  html += '</tbody></table>';
+  html += '</tbody></table></div>';
   return html;
-}
-
-// ── Callout icons ──
-
-function getCalloutIcon(type: string): string {
-  const icons: Record<string, string> = {
-    note: '📝', warning: '⚠️', tip: '💡', danger: '🚨',
-    info: 'ℹ️', success: '✅', question: '❓',
-  };
-  return icons[type] ?? '📝';
 }
 
 // ── Utility functions ──
