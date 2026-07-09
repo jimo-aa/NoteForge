@@ -131,30 +131,27 @@ impl SearchEngine {
 
     /// Rebuild the search index from scratch using the provided notes.
     ///
-    /// Creates a new index in a temporary directory, indexes all notes,
-    /// then atomically swaps with the existing index directory.
-    /// After successful rebuild, the schema version is updated.
+    /// To avoid Windows file-lock issues (Tantivy memory-maps the index directory),
+    /// this method re-indexes in-place by deleting existing documents and re-adding them,
+    /// rather than swapping directories. After successful rebuild, the schema version is
+    /// updated to prevent the `needs_rebuild` flag from triggering again.
     pub fn rebuild_index(&mut self, notes: &[IndexableNote]) -> Result<(), CoreError> {
-        let temp_dir = self.index_dir.with_extension("index_rebuild_tmp");
-        let _ = fs::remove_dir_all(&temp_dir);
+        let id_field = self.schema.get_field("id").unwrap();
+        let title_field = self.schema.get_field("title").unwrap();
+        let content_field = self.schema.get_field("content").unwrap();
+        let tags_field = self.schema.get_field("tags").unwrap();
+        let updated_at_field = self.schema.get_field("updated_at").unwrap();
 
-        // Create a new index in the temp directory
-        let schema = Self::build_schema();
-        std::fs::create_dir_all(&temp_dir)?;
-        let new_index = Index::create_in_dir(&temp_dir, schema.clone())?;
-        let mut new_writer = new_index.writer(50_000_000)?;
+        // Delete existing documents by their IDs, then re-index all notes
+        for note in notes {
+            self.writer.delete_term(Term::from_field_text(id_field, &note.id));
+        }
 
-        // Index all notes
         for note in notes {
             let tokenized_content = Self::tokenize_chinese(&note.content);
             let tokenized_title = Self::tokenize_chinese(&note.title);
-            let id_field = schema.get_field("id").unwrap();
-            let title_field = schema.get_field("title").unwrap();
-            let content_field = schema.get_field("content").unwrap();
-            let tags_field = schema.get_field("tags").unwrap();
-            let updated_at_field = schema.get_field("updated_at").unwrap();
 
-            new_writer.add_document(doc!(
+            self.writer.add_document(doc!(
                 id_field => note.id.as_str(),
                 title_field => tokenized_title,
                 content_field => tokenized_content,
@@ -163,39 +160,14 @@ impl SearchEngine {
             ))?;
         }
 
-        new_writer.commit()?;
-        drop(new_writer);
+        self.writer.commit()?;
 
-        // Write schema version marker in temp dir
-        Self::write_schema_version(&temp_dir, SCHEMA_VERSION)?;
-        info!("🔍 索引重建完成，共 {} 条笔记", notes.len());
-
-        // Atomic swap: rename old -> backup, rename new -> live
-        let backup_dir = self.index_dir.with_extension("index_backup");
-        let _ = fs::remove_dir_all(&backup_dir);
-
-        // On Windows, rename fails if dest exists, so remove old first
-        // Use a two-step rename approach
-        if self.index_dir.exists() {
-            fs::rename(&self.index_dir, &backup_dir)?;
-        }
-        fs::rename(&temp_dir, &self.index_dir)?;
-
-        // Clean up backup
-        let _ = fs::remove_dir_all(&backup_dir);
-
-        // Update self to use the new index
-        let new_index = Index::open_in_dir(&self.index_dir)?;
-        let new_writer = new_index.writer(50_000_000)?;
-        let schema_version = Self::read_schema_version(&self.index_dir);
-
-        self.index = new_index;
-        self.schema = schema;
-        self.writer = new_writer;
-        self.schema_version = schema_version;
+        // Update schema version marker
+        Self::write_schema_version(&self.index_dir, SCHEMA_VERSION)?;
+        self.schema_version = SCHEMA_VERSION;
         self.needs_rebuild = false;
 
-        info!("🔍 索引重建已生效 (schema v{})", schema_version);
+        info!("🔍 索引重建完成，共 {} 条笔记", notes.len());
         Ok(())
     }
 
