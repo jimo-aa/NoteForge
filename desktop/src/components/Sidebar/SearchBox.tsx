@@ -136,6 +136,9 @@ export function SearchBox() {
   };
 
   /** Apply parsed directives to the store as local filters. */
+  // Store the latest applyDirectives in a ref to break the infinite loop:
+  // store changes on every render → applyDirectives changes → effect re-fires → store changes → ...
+  const applyDirectivesRef = useRef<(dirs: SearchDirective[]) => void>(() => {});
   const applyDirectives = useCallback((dirs: SearchDirective[]) => {
     for (const d of dirs) {
       switch (d.kind) {
@@ -164,6 +167,7 @@ export function SearchBox() {
       }
     }
   }, [store]);
+  applyDirectivesRef.current = applyDirectives;
 
   const removeDirective = useCallback((kind: SearchDirective['kind']) => {
     switch (kind) {
@@ -176,16 +180,20 @@ export function SearchBox() {
 
   useEffect(() => {
     if (!open || !query) {
-      setResults([]);
-      setCurrentPage(0);
-      setTotalResults(0);
-      setFuzzyFallback(false);
+      // Only clear if there's actually something to clear — avoids infinite loop
+      // when re-renders are triggered by store updates.
+      if (results.length > 0 || currentPage !== 0 || totalResults !== 0 || fuzzyFallback) {
+        setResults([]);
+        setCurrentPage(0);
+        setTotalResults(0);
+        setFuzzyFallback(false);
+      }
       return;
     }
 
     // Apply directives to store as side-effect
     if (directives.directives.length > 0) {
-      applyDirectives(directives.directives);
+      applyDirectivesRef.current(directives.directives);
     }
 
     // If no text query after stripping directives, skip backend search
@@ -303,7 +311,7 @@ export function SearchBox() {
 
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, textQuery, searchMode, directives.directives, applyDirectives]);
+  }, [open, textQuery, searchMode, directives.directives]);
 
   useEffect(() => {
     const handler = () => openSearch();

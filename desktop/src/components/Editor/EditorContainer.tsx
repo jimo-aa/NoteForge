@@ -17,17 +17,20 @@ import { useTranslation } from 'react-i18next';
 import { useStore } from '@/stores/context';
 import { renderMarkdown, formatTable } from '@/utils/markdown';
 import { SourceEditor } from './source/SourceEditor';
+import { WysiwygEditor } from './wysiwyg/WysiwygEditor';
 import { EditorToolbar } from './EditorToolbar';
 import { EditorTabs } from './EditorTabs';
 import { DocumentHeader } from './DocumentHeader';
 import { StatusBar } from './StatusBar';
 import { AIToolbar } from './AIToolbar';
 import { AttachmentPanel } from './AttachmentPanel';
-import type { EditorHandle, BacklinkEntry } from './types/editor';
+import type { EditorMode, EditorHandle, BacklinkEntry } from './types/editor';
 import { getPluginRegistry } from './plugins/registry';
 import type { ToolbarItemDef } from './plugins/types';
 import { renderMathBlocks } from '@/utils/mathRenderer';
 import mermaid from 'mermaid';
+
+const MODE_STORAGE_KEY = 'noteforge:editor:mode';
 
 export function EditorContainer() {
   const { t } = useTranslation();
@@ -61,10 +64,30 @@ export function EditorContainer() {
   const note = isExternalFile
     ? { meta: { id: externalFile.path, title: externalFile.title, tags: [] as string[], isPinned: false, isFavorite: false, wordCount: 0, version: 1, createdAt: 0, updatedAt: 0, notebookId: null }, content: externalFile.content, contentPlain: '' }
     : currentNote;
+
+  // Stabilize note ID reference for effects that must not loop on every render.
+  const noteIdRef = useRef(note?.meta?.id);
+  noteIdRef.current = note?.meta?.id;
   const editorRef = useRef<EditorHandle>(null);
   const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSavedSnapshotRef = useRef('');
   const restoreCursorRef = useRef<{ start: number; end: number } | null>(null);
+
+  // ── Editor mode (WYSIWYG or Source), persisted in localStorage ──
+  const [editorMode, setEditorMode] = useState<EditorMode>(() => {
+    try {
+      const stored = localStorage.getItem(MODE_STORAGE_KEY);
+      if (stored === 'wysiwyg' || stored === 'source') return stored;
+    } catch { /* ignore */ }
+    return 'wysiwyg'; // default to WYSIWYG
+  });
+  const toggleEditorMode = useCallback(() => {
+    setEditorMode((prev) => {
+      const next: EditorMode = prev === 'wysiwyg' ? 'source' : 'wysiwyg';
+      try { localStorage.setItem(MODE_STORAGE_KEY, next); } catch { /* ignore */ }
+      return next;
+    });
+  }, []);
 
   // ── Local state ──
   const [tagModalOpen, setTagModalOpen] = useState(false);
@@ -114,8 +137,9 @@ export function EditorContainer() {
     if (note) setLocalPreviewContent(note.content);
   }, [note?.meta.id]);
 
-  // ── Render Markdown for preview (with plugin hooks) ──
+  // ── Render Markdown for preview (with plugin hooks) — only used in source mode ──
   const renderedHtml = useMemo(() => {
+    if (editorMode !== 'source') return '';
     let content = localPreviewContent;
 
     // Run onBeforeOutput hooks (content transformation)
@@ -133,12 +157,12 @@ export function EditorContainer() {
     }
 
     return html;
-  }, [localPreviewContent, searchQuery, pluginRegistry]);
+  }, [editorMode, localPreviewContent, searchQuery, pluginRegistry]);
 
-  // ── Syntax highlight for preview ──
+  // ── Syntax highlight for preview (source mode only) ──
   const previewRef = useRef<HTMLElement>(null);
   useEffect(() => {
-    if (!renderedHtml || !previewRef.current) return;
+    if (editorMode !== 'source' || !renderedHtml || !previewRef.current) return;
     let cancelled = false;
     void import('highlight.js/lib/core').then(async (hljsCore) => {
       const { default: markdown } = await import('highlight.js/lib/languages/markdown');
@@ -167,12 +191,12 @@ export function EditorContainer() {
       codes.forEach((el) => { hljsCore.default.highlightElement(el); });
     });
     return () => { cancelled = true; };
-  }, [renderedHtml]);
+  }, [editorMode, renderedHtml]);
 
-  // ── Mermaid diagram + KaTeX math rendering ──
+  // ── Mermaid diagram + KaTeX math rendering (source mode only) ──
   const mermaidReadyRef = useRef(false);
   useEffect(() => {
-    if (!renderedHtml || !previewRef.current) return;
+    if (editorMode !== 'source' || !renderedHtml || !previewRef.current) return;
     const el = previewRef.current;
 
     // Init mermaid once
@@ -214,7 +238,7 @@ export function EditorContainer() {
     }, 100);
 
     return () => clearTimeout(timer);
-  }, [renderedHtml]);
+  }, [editorMode, renderedHtml]);
 
   // ── Load backlinks ──
   useEffect(() => {
@@ -226,7 +250,9 @@ export function EditorContainer() {
         .catch(() => { setBacklinks([]); })
         .finally(() => setBacklinksLoading(false));
     });
-  }, [note, note?.meta.id]);
+    // Only depend on note ID — not the full note object (which changes on every render)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [note?.meta.id]);
 
   // ── Edit actions ──
   const updateContent = useCallback((content: string) => {
@@ -244,15 +270,17 @@ export function EditorContainer() {
     }, 300);
   }, [note, updateNote, saveDraft]);
 
-  // ── Cursor restoration ──
+  // ── Cursor restoration (source mode only) ──
   useLayoutEffect(() => {
-    if (!note) return;
+    if (editorMode !== 'source' || !note) return;
     const saved = loadCursor(note.meta.id);
     if (saved) {
       editorRef.current?.focus();
       editorRef.current?.setSelection(saved.start, saved.end);
     }
-  }, [loadCursor, note, note?.meta.id]);
+    // Only depend on note ID — not the full note object (changes on every render causing loops)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editorMode, loadCursor, note?.meta.id]);
 
   // ── Draft restoration ──
   useEffect(() => {
@@ -262,7 +290,8 @@ export function EditorContainer() {
       updateNote(note.meta.id, { content: draft });
       showToast('info', t('note.draftRestored'));
     }
-  }, [loadDraft, note, showToast, updateNote, t]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadDraft, note?.meta.id, showToast, updateNote, t]);
 
   // ── Draft persistence ──
   useEffect(() => {
@@ -270,9 +299,10 @@ export function EditorContainer() {
     if (lastSavedSnapshotRef.current === note.content) return;
     lastSavedSnapshotRef.current = note.content;
     saveDraft(note.meta.id, note.content);
-  }, [note, saveDraft]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [note?.meta.id, saveDraft]);
 
-  // ── Jump to line listener ──
+  // ── Jump to line listener (source mode) ──
   useEffect(() => {
     const onJump = (event: Event) => {
       const detail = (event as CustomEvent<{ noteId: string; line: number }>).detail;
@@ -285,7 +315,8 @@ export function EditorContainer() {
     };
     window.addEventListener('noteforge:jump-to-hit', onJump as EventListener);
     return () => window.removeEventListener('noteforge:jump-to-hit', onJump as EventListener);
-  }, [note, setIsPreviewVisible]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [note?.meta.id, setIsPreviewVisible]);
 
   // ── AI Toolbar handlers ──
   const handleEditorSelectionChange = useCallback((from: number, to: number, selectedText?: string) => {
@@ -351,8 +382,9 @@ export function EditorContainer() {
     showToast('success', t('note.aiContentInserted'));
   }, [showToast, t]);
 
-  // ── Preview click handler ──
+  // ── Preview click handler (source mode only) ──
   const handlePreviewClick = useCallback((e: React.MouseEvent<HTMLElement>) => {
+    if (editorMode !== 'source') return;
     const target = e.target as HTMLElement;
 
     const wikiBtn = target.closest('.wiki-link') as HTMLElement | null;
@@ -416,10 +448,11 @@ export function EditorContainer() {
       });
       return;
     }
-  }, [notes, selectNote, showToast, note, updateContent, t]);
+  }, [editorMode, notes, selectNote, showToast, note, updateContent, t]);
 
-  // ── Wiki Link hover preview ──
+  // ── Wiki Link hover preview (source mode only) ──
   const handlePreviewMouseOver = useCallback((e: React.MouseEvent<HTMLElement>) => {
+    if (editorMode !== 'source') return;
     const target = e.target as HTMLElement;
     const wikiBtn = target.closest('.wiki-link') as HTMLElement | null;
     if (!wikiBtn || !wikiBtn.textContent) {
@@ -437,19 +470,19 @@ export function EditorContainer() {
       setHoveredWikiLink({ title, x: e.clientX, y: e.clientY });
       setHoverPreviewContent(null);
     }
-  }, [notes]);
+  }, [editorMode, notes]);
 
-  // ── Cursor persistence ──
+  // ── Cursor persistence (source mode only) ──
   const persistCursor = useCallback(() => {
-    if (!note || !editorRef.current) return;
+    if (editorMode !== 'source' || !note || !editorRef.current) return;
     const sel = editorRef.current.getSelection();
     restoreCursorRef.current = { start: sel.from, end: sel.to };
     saveCursor(note.meta.id, { start: sel.from, end: sel.to });
-  }, [note, saveCursor]);
+  }, [editorMode, note, saveCursor]);
 
-  // ── Wiki suggestions ──
+  // ── Wiki suggestions (source mode only) ──
   const openWikiSuggestions = useCallback(() => {
-    if (!note || !editorRef.current) return;
+    if (editorMode !== 'source' || !note || !editorRef.current) return;
     const before = editorRef.current.getContentBeforeCursor();
     const match = before.match(/\[\[([^[\]]*)$/);
     if (!match) { setWikiOpen(false); return; }
@@ -459,12 +492,12 @@ export function EditorContainer() {
     setWikiSuggestions(suggestions);
     setWikiActiveIndex(0);
     setWikiOpen(true);
-  }, [note, wikiCandidates]);
+  }, [editorMode, note, wikiCandidates]);
 
   const closeWikiSuggestions = useCallback(() => setWikiOpen(false), []);
 
   const commitWikiLink = useCallback((title: string) => {
-    if (!note || !editorRef.current) return;
+    if (editorMode !== 'source' || !note || !editorRef.current) return;
     const before = editorRef.current.getContentBeforeCursor();
     const content = editorRef.current.getContent();
     const sel = editorRef.current.getSelection();
@@ -475,11 +508,11 @@ export function EditorContainer() {
     editorRef.current.setContent(next);
     editorRef.current.focus();
     closeWikiSuggestions();
-  }, [note, updateContent, closeWikiSuggestions]);
+  }, [editorMode, note, updateContent, closeWikiSuggestions]);
 
-  // ── Toolbar actions ──
+  // ── Toolbar actions (source mode only; WYSIWYG uses native TipTap commands) ──
   const insertMarkdown = useCallback((before: string, after: string) => {
-    if (!note || !editorRef.current) return;
+    if (editorMode !== 'source' || !note || !editorRef.current) return;
     const sel = editorRef.current.getSelection();
     const content = editorRef.current.getContent();
     const selected = content.slice(sel.from, sel.to) || 'text';
@@ -487,10 +520,10 @@ export function EditorContainer() {
     updateContent(next);
     editorRef.current.setContent(next);
     editorRef.current.focus();
-  }, [note, updateContent]);
+  }, [editorMode, note, updateContent]);
 
   const handleFormatTable = useCallback(() => {
-    if (!note || !editorRef.current) return;
+    if (editorMode !== 'source' || !note || !editorRef.current) return;
     const content = editorRef.current.getContent();
     const sel = editorRef.current.getSelection();
     const lines = content.split('\n');
@@ -530,7 +563,7 @@ export function EditorContainer() {
     } else {
       showToast('info', t('note.tableAligned'));
     }
-  }, [note, updateContent, showToast, t]);
+  }, [editorMode, note, updateContent, showToast, t]);
 
   // ── Export ──
   const exportedFile = useCallback(() => {
@@ -559,8 +592,9 @@ export function EditorContainer() {
   const handleImagePaste = useCallback((file: File) => insertImage(file), [insertImage]);
   const handleImageDrop = useCallback((file: File) => insertImage(file), [insertImage]);
 
-  // ── Resizer ──
+  // ── Resizer (source mode only) ──
   const startResize = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
+    if (editorMode !== 'source') return;
     event.preventDefault();
     setIsResizing(true);
     const container = event.currentTarget.parentElement;
@@ -577,7 +611,7 @@ export function EditorContainer() {
     };
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
-  }, []);
+  }, [editorMode]);
 
   // ── Keyboard handler ──
   const handleEditorKeyDown = useCallback((event: React.KeyboardEvent) => {
@@ -610,7 +644,7 @@ export function EditorContainer() {
   const meta = note.meta;
   const currentTags = meta.tags ?? [];
 
-  // ── Render: Dual-pane mode (source + preview) ──
+  // ── Render ──
   return (
     <section className={isResizing ? 'editor-workspace is-resizing' : 'editor-workspace'}>
       {/* Tabs */}
@@ -652,6 +686,8 @@ export function EditorContainer() {
 
       {/* Toolbar */}
       <EditorToolbar
+        editorMode={editorMode}
+        onToggleMode={toggleEditorMode}
         onInsertMarkdown={insertMarkdown}
         onFormatTable={handleFormatTable}
         onTogglePreview={() => setIsPreviewVisible(!isPreviewVisible)}
@@ -659,106 +695,139 @@ export function EditorContainer() {
         pluginItems={pluginToolbarItems.current}
       />
 
-      {/* Main editor area: Source + Preview dual-pane */}
-      <div className={isPreviewVisible ? 'split-editor' : 'split-editor no-preview'}>
-        <div className="markdown-editor-pane" style={{ flexBasis: isPreviewVisible ? `${editorWidth}%` : '100%' }}>
-          {/* Search bar */}
-          {searchQuery && (
-            <div className="editor-search-bar">
-              <span className="editor-search-label">🔍 {searchQuery}</span>
-              <button className="editor-search-close" title={t('note.clearSearch')} onClick={() => setSearchQuery('')}>✕</button>
-            </div>
-          )}
-
-          <div ref={editorContainerRef} style={{ position: 'relative', flex: 1, minHeight: 0 }}>
-            <SourceEditor
+      {/* ── WYSIWYG Mode: single-pane, no preview (editor IS the rendered view) ── */}
+      {editorMode === 'wysiwyg' && (
+        <div className="split-editor" style={{ flex: 1, minHeight: 0 }}>
+          <div className="wysiwyg-editor-pane" ref={editorContainerRef} style={{ width: '100%', height: '100%' }}>
+            <WysiwygEditor
               ref={editorRef}
+              noteKey={note?.meta.id ?? ''}
               initialContent={note.content ?? ''}
               searchQuery={searchQuery}
+              pluginManager={pluginRegistry}
               onChange={(next) => {
                 updateContent(next);
-                if (wikiOpen) openWikiSuggestions();
               }}
-              onSelectionChange={(from, to) => {
-                persistCursor();
-                if (wikiOpen) openWikiSuggestions();
-                handleEditorSelectionChange(from, to);
+              onSelectionChange={(from, to, selectedText) => {
+                handleEditorSelectionChange(from, to, selectedText);
               }}
-              onImagePaste={handleImagePaste}
-              onImageDrop={handleImageDrop}
-              onWikiLinkClick={(title) => {
-                const found = notes.find((n) => n.meta.title.toLowerCase() === title.toLowerCase());
-                if (found) {
-                  selectNote(found.meta.id);
-                  showToast('info', t('note.jumpedToNote', { title: found.meta.title }));
-                } else {
-                  showToast('error', t('note.noteNotFound', { title }));
-                }
-              }}
-            />
-
-            <AIToolbar
-              selectedText={aiSelectedText}
-              noteContent={note.content}
-              position={aiToolbarPos}
-              onInsert={handleAiInsert}
-              visible={aiToolbarVisible}
-              onClose={() => setAiToolbarVisible(false)}
             />
           </div>
 
-          {/* Wiki autocomplete */}
-          {wikiOpen && (
-            <div className="wiki-autocomplete" onKeyDown={handleEditorKeyDown}>
-              <div className="wiki-autocomplete-header">Wiki Link {wikiQuery ? `：${wikiQuery}` : ''}</div>
-              {wikiSuggestions.length ? wikiSuggestions.map((title, index) => (
-                <button
-                  key={title}
-                  className={index === wikiActiveIndex ? 'wiki-autocomplete-item active' : 'wiki-autocomplete-item'}
-                  onMouseDown={(event) => { event.preventDefault(); commitWikiLink(title); }}
-                >
-                  {title}
-                </button>
-              )) : <div className="wiki-autocomplete-empty">{t('note.noWikiMatch')}</div>}
-              <div className="wiki-autocomplete-empty">{t('note.wikiHint')}</div>
-            </div>
-          )}
+          {/* WYSIWYG mode: AI toolbar overlays the editor */}
+          <AIToolbar
+            selectedText={aiSelectedText}
+            noteContent={note.content}
+            position={aiToolbarPos}
+            onInsert={handleAiInsert}
+            visible={aiToolbarVisible}
+            onClose={() => setAiToolbarVisible(false)}
+          />
         </div>
+      )}
 
-        {/* Preview panel */}
-        {isPreviewVisible && (
-          <>
-            <div className="editor-resizer" onMouseDown={startResize} role="separator" aria-orientation="vertical"><span /></div>
-            <article
-              ref={(el) => {
-                (previewRef as React.MutableRefObject<HTMLElement | null>).current = el;
-                if (el) {
-                  setTimeout(() => {
-                    const math = el.querySelectorAll('.math-block[data-latex]');
-                    if (math.length > 0) renderMathBlocks(el).catch(() => {});
-                  }, 0);
-                }
-              }}
-              className="markdown-preview-pane"
-              style={{ flexBasis: `${100 - editorWidth}%` }}
-              dangerouslySetInnerHTML={{ __html: renderedHtml }}
-              onClick={handlePreviewClick}
-              onMouseOver={handlePreviewMouseOver}
-              onMouseOut={() => { setHoveredWikiLink(null); setHoverPreviewContent(null); }}
-            />
-            {hoveredWikiLink && (
-              <div className="wiki-link-preview" style={{ left: hoveredWikiLink.x - 300, top: hoveredWikiLink.y + 16 }}>
-                <div className="wiki-link-preview-title">{hoveredWikiLink.title}</div>
-                {hoverPreviewContent ? (
-                  <div className="wiki-link-preview-content">{hoverPreviewContent}</div>
-                ) : (
-                  <div className="wiki-link-preview-empty">{t('note.noteNotFoundSimple')}</div>
-                )}
+      {/* ── Source Mode: Dual-pane (editor + preview) ── */}
+      {editorMode === 'source' && (
+        <div className={isPreviewVisible ? 'split-editor' : 'split-editor no-preview'}>
+          <div className="markdown-editor-pane" style={{ flexBasis: isPreviewVisible ? `${editorWidth}%` : '100%' }}>
+            {/* Search bar */}
+            {searchQuery && (
+              <div className="editor-search-bar">
+                <span className="editor-search-label">🔍 {searchQuery}</span>
+                <button className="editor-search-close" title={t('note.clearSearch')} onClick={() => setSearchQuery('')}>✕</button>
               </div>
             )}
-          </>
-        )}
-      </div>
+
+            <div ref={editorContainerRef} style={{ position: 'relative', flex: 1, minHeight: 0 }}>
+              <SourceEditor
+                ref={editorRef}
+                initialContent={note.content ?? ''}
+                searchQuery={searchQuery}
+                onChange={(next) => {
+                  updateContent(next);
+                  if (wikiOpen) openWikiSuggestions();
+                }}
+                onSelectionChange={(from, to) => {
+                  persistCursor();
+                  if (wikiOpen) openWikiSuggestions();
+                  handleEditorSelectionChange(from, to);
+                }}
+                onImagePaste={handleImagePaste}
+                onImageDrop={handleImageDrop}
+                onWikiLinkClick={(title) => {
+                  const found = notes.find((n) => n.meta.title.toLowerCase() === title.toLowerCase());
+                  if (found) {
+                    selectNote(found.meta.id);
+                    showToast('info', t('note.jumpedToNote', { title: found.meta.title }));
+                  } else {
+                    showToast('error', t('note.noteNotFound', { title }));
+                  }
+                }}
+              />
+
+              <AIToolbar
+                selectedText={aiSelectedText}
+                noteContent={note.content}
+                position={aiToolbarPos}
+                onInsert={handleAiInsert}
+                visible={aiToolbarVisible}
+                onClose={() => setAiToolbarVisible(false)}
+              />
+            </div>
+
+            {/* Wiki autocomplete */}
+            {wikiOpen && (
+              <div className="wiki-autocomplete" onKeyDown={handleEditorKeyDown}>
+                <div className="wiki-autocomplete-header">Wiki Link {wikiQuery ? `：${wikiQuery}` : ''}</div>
+                {wikiSuggestions.length ? wikiSuggestions.map((title, index) => (
+                  <button
+                    key={title}
+                    className={index === wikiActiveIndex ? 'wiki-autocomplete-item active' : 'wiki-autocomplete-item'}
+                    onMouseDown={(event) => { event.preventDefault(); commitWikiLink(title); }}
+                  >
+                    {title}
+                  </button>
+                )) : <div className="wiki-autocomplete-empty">{t('note.noWikiMatch')}</div>}
+                <div className="wiki-autocomplete-empty">{t('note.wikiHint')}</div>
+              </div>
+            )}
+          </div>
+
+          {/* Preview panel (source mode only) */}
+          {isPreviewVisible && (
+            <>
+              <div className="editor-resizer" onMouseDown={startResize} role="separator" aria-orientation="vertical"><span /></div>
+              <article
+                ref={(el) => {
+                  (previewRef as React.MutableRefObject<HTMLElement | null>).current = el;
+                  if (el) {
+                    setTimeout(() => {
+                      const math = el.querySelectorAll('.math-block[data-latex]');
+                      if (math.length > 0) renderMathBlocks(el).catch(() => {});
+                    }, 0);
+                  }
+                }}
+                className="markdown-preview-pane"
+                style={{ flexBasis: `${100 - editorWidth}%` }}
+                dangerouslySetInnerHTML={{ __html: renderedHtml }}
+                onClick={handlePreviewClick}
+                onMouseOver={handlePreviewMouseOver}
+                onMouseOut={() => { setHoveredWikiLink(null); setHoverPreviewContent(null); }}
+              />
+              {hoveredWikiLink && (
+                <div className="wiki-link-preview" style={{ left: hoveredWikiLink.x - 300, top: hoveredWikiLink.y + 16 }}>
+                  <div className="wiki-link-preview-title">{hoveredWikiLink.title}</div>
+                  {hoverPreviewContent ? (
+                    <div className="wiki-link-preview-content">{hoverPreviewContent}</div>
+                  ) : (
+                    <div className="wiki-link-preview-empty">{t('note.noteNotFoundSimple')}</div>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
 
       {/* Attachment panel */}
       {attachmentPanelOpen && (

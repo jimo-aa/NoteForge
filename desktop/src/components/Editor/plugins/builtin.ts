@@ -12,6 +12,7 @@ import { ImageResize } from '../wysiwyg/extensions/ImageResize';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import Underline from '@tiptap/extension-underline';
+import Highlight from '@tiptap/extension-highlight';
 import { TextStyle } from '@tiptap/extension-text-style';
 import TextAlign from '@tiptap/extension-text-align';
 import TaskList from '@tiptap/extension-task-list';
@@ -23,6 +24,7 @@ import { TableHeader } from '@tiptap/extension-table-header';
 import ImageExtension from '@tiptap/extension-image';
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
 import { createLowlight, common } from 'lowlight';
+import { TagMark, CalloutNode, DetailsNode, TableCellAlignment, MermaidNode, MathBlockNode, MathInlineMark } from '../wysiwyg/extensions/CustomExtensions';
 
 const lowlight = createLowlight(common);
 
@@ -39,8 +41,10 @@ export const coreExtensionsPlugin: EditorPlugin = {
       codeBlock: false,
       heading: { levels: [1, 2, 3, 4, 5, 6] },
       link: { openOnClick: false },
+      underline: false, // We add Underline separately
     }),
     Underline,
+    Highlight.configure({ multicolor: false }),
     CodeBlockLowlight.configure({
       lowlight,
       defaultLanguage: 'plaintext',
@@ -55,7 +59,7 @@ export const coreExtensionsPlugin: EditorPlugin = {
     TableCell,
     TableHeader,
     TextStyle,
-    TextAlign.configure({ types: ['heading', 'paragraph'] }),
+    TextAlign.configure({ types: ['heading', 'paragraph', 'tableCell', 'tableHeader'] }),
   ],
 };
 
@@ -183,13 +187,83 @@ export const footnotePlugin: EditorPlugin = {
   meta: { phase: 'builtin' },
 };
 
-/** Highlight — ^^text^^ syntax */
+/** Highlight — ^^text^^ syntax (uses @tiptap/extension-highlight) */
 export const highlightPlugin: EditorPlugin = {
   id: 'highlight',
   name: '高亮语法',
   version: '1.0.0',
   description: '^^text^^ 语法，渲染为 <mark> 高亮标签',
   meta: { phase: 'builtin' },
+};
+
+/** Tag mark — #tag syntax */
+export const tagPlugin: EditorPlugin = {
+  id: 'tag-mark',
+  name: '标签语法',
+  version: '1.0.0',
+  description: '#tag 标签语法，渲染为彩色标签',
+  meta: { phase: 'builtin' },
+  extensions: TagMark,
+};
+
+/** Callout node — > [!note/warning/tip/danger] */
+export const calloutNodePlugin: EditorPlugin = {
+  id: 'callout-node',
+  name: 'Callout 节点',
+  version: '1.0.0',
+  description: 'Callout 警示块 TipTap 节点，保留结构和样式',
+  meta: { phase: 'builtin' },
+  extensions: CalloutNode,
+};
+
+/** Details node — >+++ collapsible details */
+export const detailsNodePlugin: EditorPlugin = {
+  id: 'details-node',
+  name: '可折叠详情',
+  version: '1.0.0',
+  description: '>+++ 可折叠详情 TipTap 节点',
+  meta: { phase: 'builtin' },
+  extensions: DetailsNode,
+};
+
+/** Table cell alignment */
+export const tableAlignmentPlugin: EditorPlugin = {
+  id: 'table-alignment',
+  name: '表格对齐',
+  version: '1.0.0',
+  description: '表格列对齐样式 (ta-left/center/right)',
+  meta: { phase: 'builtin' },
+  extensions: TableCellAlignment,
+};
+
+/** Mermaid diagram node */
+export const mermaidNodePlugin: EditorPlugin = {
+  id: 'mermaid-node',
+  name: 'Mermaid 图表节点',
+  version: '1.0.0',
+  description: '```mermaid 图表，保留源码并渲染 SVG',
+  meta: { phase: 'builtin' },
+  extensions: MermaidNode,
+};
+
+/** Block math node */
+export const mathBlockNodePlugin: EditorPlugin = {
+  id: 'math-block-node',
+  name: '块级公式节点',
+  version: '1.0.0',
+  description: '$$...$$ 块级公式，保留 LaTeX 并在预览时渲染',
+  meta: { phase: 'builtin' },
+  extensions: MathBlockNode,
+};
+
+/** Inline math mark */
+export const mathInlineMarkPlugin: EditorPlugin = {
+  id: 'math-inline-mark',
+  name: '行内公式标记',
+  version: '1.0.0',
+  description: '$...$ 行内公式，保留 LaTeX',
+  meta: { phase: 'builtin' },
+  extensions: MathInlineMark,
 };
 
 /** Emoji shortcodes — :smile: → 😊 */
@@ -219,6 +293,13 @@ export const BUILTIN_PLUGINS: EditorPlugin[] = [
   footnotePlugin,
   highlightPlugin,
   emojiPlugin,
+  tagPlugin,
+  calloutNodePlugin,
+  detailsNodePlugin,
+  tableAlignmentPlugin,
+  mermaidNodePlugin,
+  mathBlockNodePlugin,
+  mathInlineMarkPlugin,
 ];
 
 /** Create the default PluginManager with all built-in plugins registered */

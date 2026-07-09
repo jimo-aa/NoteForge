@@ -1,7 +1,8 @@
 // NoteForge — WYSIWYG Editor (TipTap)
-// Clean TipTap wrapper that uses the extension registry.
+// Typora-like WYSIWYG markdown editor — renders markdown as rich text inline.
+// Markdown syntax characters are hidden; content appears as rendered HTML.
+// Uses the same styling as the dual-pane preview pane for visual consistency.
 // Supports PluginManager integration for extensible plugin loading.
-// Extracted from the legacy RichTextEditor.tsx.
 
 import {
   useImperativeHandle,
@@ -18,6 +19,7 @@ import type { EditorHandle } from '../types/editor';
 import type { PluginManager } from '../plugins';
 
 interface WysiwygEditorProps {
+  noteKey?: string;
   initialContent: string;
   onChange: (text: string) => void;
   onSelectionChange?: (from: number, to: number, selectedText?: string) => void;
@@ -31,7 +33,7 @@ interface WysiwygEditorProps {
 
 export const WysiwygEditor = forwardRef<EditorHandle, WysiwygEditorProps>(
   function WysiwygEditor(
-    { initialContent, onChange, onSelectionChange, placeholderText = '...', searchQuery, pluginManager, extensions: extensionsProp },
+    { noteKey, initialContent, onChange, onSelectionChange, placeholderText = '...', searchQuery, pluginManager, extensions: extensionsProp },
     ref,
   ) {
     const editorRef = useRef<Editor | null>(null);
@@ -55,12 +57,19 @@ export const WysiwygEditor = forwardRef<EditorHandle, WysiwygEditorProps>(
     }, [pluginManager]);
 
     // Flatten all extensions into a single array for TipTap
+    // IMPORTANT: When PluginManager is available, use ONLY its extensions
+    // (which include core+builtin from builtin.ts). Do NOT also load
+    // getAllExtensions() — that would duplicate every extension and crash
+    // on keyed ProseMirror plugins like tableColumnResizing$.
     const editor = useEditor({
       extensions: (() => {
         if (extensionsProp) return extensionsProp;
-        const base = getAllExtensions(placeholderText, searchQuery);
-        const plugin = pluginExts.flat();
-        return [...base, ...plugin];
+        if (pluginManager) {
+          // PluginManager already includes all core + builtin extensions
+          return pluginExts.flat();
+        }
+        // No PluginManager: use the static registry
+        return getAllExtensions(placeholderText, searchQuery);
       })(),
       content: markdownToHtml(initialContent),
       onUpdate: ({ editor: ed }) => {
@@ -75,10 +84,19 @@ export const WysiwygEditor = forwardRef<EditorHandle, WysiwygEditorProps>(
       },
       editorProps: {
         attributes: {
-          class: 'rich-editor-content prose prose-sm max-w-none',
+          class: 'wysiwyg-editor-content',
         },
         handleDOMEvents: {
           dragover: () => false,
+          // Prevent footnote anchor links from navigating the page
+          click: (_view, event) => {
+            const target = event.target as HTMLElement;
+            if (target.closest('.footnote-ref') || target.closest('.footnote-backref')) {
+              event.preventDefault();
+              return true;
+            }
+            return false;
+          },
         },
       },
     });
@@ -86,35 +104,18 @@ export const WysiwygEditor = forwardRef<EditorHandle, WysiwygEditorProps>(
     // Keep ref in sync
     editorRef.current = editor;
 
-    // Sync initial content on first load
-    useEffect(() => {
-      if (editor && initialContent) {
-        const currentHtml = editor.getHTML();
-        const expectedHtml = markdownToHtml(initialContent);
-        if (currentHtml !== expectedHtml && currentHtml === '<p></p>') {
-          editor.commands.setContent(expectedHtml);
-        }
-      }
-    }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-    // Add line numbers to code blocks
+    // Sync content when noteKey changes (note switching).
+    // Uses noteKey (note ID) instead of initialContent to avoid the infinite loop:
+    // setContent → onUpdate → store update → initialContent changes → sync again.
+    const prevNoteKeyRef = useRef('');
     useEffect(() => {
       if (!editor) return;
-      const updateLineNumbers = () => {
-        editor.view.dom.querySelectorAll<HTMLPreElement>('pre').forEach((pre) => {
-          const code = pre.querySelector('code');
-          if (!code) return;
-          const text = code.textContent || '';
-          const lineCount = text.split('\n').length;
-          const nums = Array.from({ length: lineCount }, (_, i) => String(i + 1)).join('\n');
-          pre.setAttribute('data-line-nums', nums);
-        });
-      };
-      requestAnimationFrame(updateLineNumbers);
-      const observer = new MutationObserver(() => requestAnimationFrame(updateLineNumbers));
-      observer.observe(editor.view.dom, { childList: true, subtree: true, characterData: true });
-      return () => observer.disconnect();
-    }, [editor]);
+      const key = noteKey ?? '';
+      if (key === prevNoteKeyRef.current) return;
+      prevNoteKeyRef.current = key;
+      console.debug('[WysiwygEditor] Content sync — noteKey:', key.slice(0, 8));
+      editor.commands.setContent(markdownToHtml(initialContent ?? ''));
+    }, [editor, noteKey, initialContent]);
 
     useImperativeHandle(ref, () => ({
       focus: () => editor?.commands.focus(),
@@ -140,7 +141,8 @@ export const WysiwygEditor = forwardRef<EditorHandle, WysiwygEditorProps>(
         }
       },
       setSelection: () => {
-        // TipTap doesn't expose raw setSelection easily
+        // TipTap doesn't expose raw setSelection easily;
+        // cursor restoration in WYSIWYG mode is limited
       },
       getContent: () => {
         if (editor) return htmlToMarkdown(editor.getHTML());
@@ -155,9 +157,70 @@ export const WysiwygEditor = forwardRef<EditorHandle, WysiwygEditorProps>(
       },
     }), [editor]);
 
+    // ── Code block enhancements: language labels + copy buttons ──
+    useEffect(() => {
+      if (!editor) return;
+      const viewDom = editor.view.dom;
+
+      const updateCodeBlockLabels = () => {
+        viewDom.querySelectorAll<HTMLPreElement>('pre').forEach((pre) => {
+          const code = pre.querySelector('code');
+          if (!code) return;
+          const langClass = Array.from(code.classList).find((c) => c.startsWith('language-'));
+          const lang = langClass ? langClass.replace('language-', '') : '';
+          if (lang && !pre.hasAttribute('data-language')) {
+            pre.setAttribute('data-language', lang);
+          }
+          if (!pre.querySelector('.code-copy-btn')) {
+            const btn = document.createElement('button');
+            btn.className = 'code-copy-btn';
+            btn.innerHTML = '📋';
+            btn.title = '复制代码';
+            btn.addEventListener('click', (e) => {
+              e.stopPropagation();
+              const text = code.textContent || '';
+              navigator.clipboard.writeText(text).catch(() => {});
+              btn.innerHTML = '✓';
+              setTimeout(() => { btn.innerHTML = '📋'; }, 1500);
+            });
+            pre.appendChild(btn);
+          }
+        });
+      };
+
+      requestAnimationFrame(updateCodeBlockLabels);
+      const observer = new MutationObserver(() => requestAnimationFrame(updateCodeBlockLabels));
+      observer.observe(viewDom, { childList: true, subtree: true });
+      return () => observer.disconnect();
+    }, [editor]);
+
+    // ── Inline math rendering (marks use NodeViews too, but for safety scan any that slipped through) ──
+    // Block Math (MathBlockNode) and Mermaid (MermaidNode) use NodeViews — they render themselves.
+    // Inline math ($...$) uses a Mark which can't have a NodeView, so we scan for unrendered
+    // .math-inline elements and render them via KaTeX.
+    useEffect(() => {
+      if (!editor) return;
+      const viewDom = editor.view.dom;
+
+      const renderInlineMath = async () => {
+        const inlineMath = viewDom.querySelectorAll<HTMLElement>('.math-inline[data-latex]');
+        if (inlineMath.length === 0) return;
+        console.debug('[WysiwygEditor] Rendering inline math:', inlineMath.length);
+        try {
+          const { renderMathBlocks } = await import('@/utils/mathRenderer');
+          await renderMathBlocks(viewDom);
+        } catch (e) {
+          console.debug('[WysiwygEditor] Inline math error:', e);
+        }
+      };
+
+      const timer = setTimeout(renderInlineMath, 300);
+      return () => clearTimeout(timer);
+    }, [editor, noteKey]);
+
     return (
-      <div className="rich-editor wysiwyg-mode" style={{ width: '100%', height: '100%' }}>
-        <EditorContent editor={editor} className="rich-editor-wysiwyg" />
+      <div className="wysiwyg-editor-pane" style={{ width: '100%', height: '100%' }}>
+        <EditorContent editor={editor} className="wysiwyg-editor-content" />
       </div>
     );
   },
