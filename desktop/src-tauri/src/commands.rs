@@ -123,6 +123,29 @@ impl NoteForgeDesktopCore {
             println!("🔄 搜索索引重建完成: {} 条笔记", indexable.len());
         }
 
+        // Index external .md files from extra storage roots into search
+        let roots = storage.get_storage_roots()?;
+        if roots.len() > 1 {
+            // Has extra roots beyond primary
+            let primary = storage.get_primary_root()?.unwrap_or_default();
+            for root in &roots {
+                if *root == primary { continue; }
+                let scanned = storage.scan_directory_for_notes(root)?;
+                let mut indexed = 0usize;
+                for note in &scanned {
+                    let content = std::fs::read_to_string(&note.file_path).unwrap_or_default();
+                    let ext_id = format!("ext:{}", note.file_path);
+                    if let Ok(()) = search.add_note(&ext_id, &note.title, &content, &[], note.modified_at) {
+                        indexed += 1;
+                    }
+                }
+                if indexed > 0 {
+                    let _ = search.commit();
+                    println!("📁 外部目录已索引: {} - {} 个文件", root, indexed);
+                }
+            }
+        }
+
         Ok(Self { storage, search, encryption: None })
     }
 }
@@ -285,6 +308,65 @@ pub fn search_in_note(state: State<'_, AppState>, note_id: String, query: String
 
 /// Rebuild the search index from scratch using all notes from storage.
 /// Called automatically on startup if schema version mismatch is detected,
+/// Index all .md files from extra storage roots into the Tantivy search index.
+/// Each external file is indexed with an "ext:" prefix ID to distinguish from
+/// regular notes.
+#[tauri::command]
+pub fn index_external_directories(state: State<'_, AppState>) -> Result<usize, String> {
+    timed_command!("index_external_directories", {
+        let mut core = state.core.lock().map_err(|e| e.to_string())?;
+        let roots = core.storage.get_storage_roots().map_err(|e| e.to_string())?;
+        let mut total_indexed = 0usize;
+
+        for root in &roots {
+            let scanned = core.storage.scan_directory_for_notes(root)
+                .map_err(|e| e.to_string())?;
+            
+            for note in &scanned {
+                let content = std::fs::read_to_string(&note.file_path)
+                    .unwrap_or_default();
+                let ext_id = format!("ext:{}", note.file_path);
+                
+                // Extract tags from frontmatter if any
+                let tags = if content.starts_with("---") {
+                    let end = content.find("---").and_then(|pos| {
+                        if pos > 3 { content[3..].find("---").map(|p| p + 3) } else { None }
+                    }).unwrap_or(0);
+                    let frontmatter = &content[..end];
+                    frontmatter.lines()
+                        .filter(|l| l.trim().starts_with("tags:"))
+                        .flat_map(|l| {
+                            l.trim_start_matches("tags:").trim()
+                                .trim_start_matches('[').trim_end_matches(']')
+                                .split(',')
+                                .map(|t| t.trim().trim_matches('"').trim_matches('\'').to_string())
+                                .collect::<Vec<_>>()
+                        })
+                        .filter(|t| !t.is_empty())
+                        .collect::<Vec<_>>()
+                } else {
+                    Vec::new()
+                };
+
+                let _ = core.search.add_note(
+                    &ext_id,
+                    &note.title,
+                    &content,
+                    &tags,
+                    note.modified_at,
+                );
+                total_indexed += 1;
+            }
+        }
+
+        if total_indexed > 0 {
+            let _ = core.search.commit();
+            println!("📁 外部目录索引完成: {} 个文件已索引", total_indexed);
+        }
+        Ok(total_indexed)
+    })
+}
+
 /// Commit the search index writer to flush pending changes to disk.
 /// Called after save operations to ensure search results are up-to-date.
 #[tauri::command]
