@@ -1,0 +1,482 @@
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
+import { useNoteStore } from '@/stores/useNoteStore';
+import { tauriInvoke } from '@/utils/invoke';
+import { searchCache } from '@/utils/searchCache';
+import * as aiService from '@/services/aiService';
+
+// ── Types ──
+
+export type SearchResult = {
+  note_id: string;
+  title: string;
+  snippet: string;
+  score: number;
+  updated_at: number;
+  total_hits: number;
+};
+
+export type SearchPage = {
+  results: SearchResult[];
+  total_hits: number;
+};
+
+export type SearchResultItem = {
+  id: string;
+  title: string;
+  snippet: string;
+  score: number;
+  updatedAt: string;
+  noteId?: string;
+};
+
+export interface SearchDirective {
+  kind: 'tag' | 'notebook' | 'pinned' | 'favorite';
+  raw: string;
+  value: string;
+}
+
+export interface UseSearchReturn {
+  open: boolean;
+  query: string;
+  setQuery: (q: string) => void;
+  activeIndex: number;
+  setActiveIndex: (i: number) => void;
+  results: SearchResultItem[];
+  loading: boolean;
+  highlightedId: string | null;
+  currentPage: number;
+  totalResults: number;
+  fuzzyFallback: boolean;
+  showHistory: boolean;
+  searchHistory: string[];
+  searchMode: 'fulltext' | 'semantic' | 'hybrid';
+  directives: { textOnly: string; directives: SearchDirective[] };
+  textQuery: string;
+  totalPages: number;
+  currentPageNum: number;
+  pageSize: number;
+  inputRef: React.RefObject<HTMLInputElement | null>;
+  setSearchMode: (mode: 'fulltext' | 'semantic' | 'hybrid') => void;
+  close: () => void;
+  openSearch: () => void;
+  loadPage: (pageNum: number) => Promise<void>;
+  handleSelect: (index: number) => Promise<void>;
+  handleHistorySelect: (q: string) => void;
+  clearHistory: () => void;
+  removeFilterChip: (d: SearchDirective) => void;
+}
+
+// ── Constants ──
+
+const HISTORY_KEY = 'noteforge:search:history';
+const MAX_HISTORY = 10;
+const PAGE_SIZE = 5;
+
+// ── Helpers ──
+
+function loadHistory(): string[] {
+  try {
+    const raw = window.localStorage.getItem(HISTORY_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.slice(0, MAX_HISTORY) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveHistory(history: string[]) {
+  try {
+    window.localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, MAX_HISTORY)));
+  } catch { /* ignore */ }
+}
+
+function pushHistory(query: string) {
+  const trimmed = query.trim();
+  if (!trimmed) return;
+  const prev = loadHistory().filter((q) => q !== trimmed);
+  saveHistory([trimmed, ...prev]);
+}
+
+/**
+ * Parse search directives from query; returns { textOnly, directives }.
+ */
+export function parseDirectives(raw: string): { textOnly: string; directives: SearchDirective[] } {
+  const dirs: SearchDirective[] = [];
+  const parts: string[] = [];
+  for (const token of raw.split(/\s+/)) {
+    const tagMatch = token.match(/^tag:(\S+)$/i);
+    if (tagMatch?.[1]) {
+      dirs.push({ kind: 'tag', raw: token, value: tagMatch[1] });
+      continue;
+    }
+    const nbMatch = token.match(/^notebook:(\S+)$/i);
+    if (nbMatch?.[1]) {
+      dirs.push({ kind: 'notebook', raw: token, value: nbMatch[1] });
+      continue;
+    }
+    const isMatch = token.match(/^is:(\S+)$/i);
+    if (isMatch?.[1]) {
+      const val = isMatch[1].toLowerCase();
+      if (val === 'pinned') {
+        dirs.push({ kind: 'pinned', raw: token, value: 'pinned' });
+        continue;
+      }
+      if (val === 'favorite' || val === 'fav') {
+        dirs.push({ kind: 'favorite', raw: token, value: 'favorite' });
+        continue;
+      }
+    }
+    parts.push(token);
+  }
+  return { textOnly: parts.join(' ').trim(), directives: dirs };
+}
+
+// ── Hook ──
+
+export function useSearch(): UseSearchReturn {
+  const store = useNoteStore();
+  const { t } = useTranslation();
+
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [results, setResults] = useState<SearchResultItem[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [highlightedId, setHighlightedId] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(0);
+  const [totalResults, setTotalResults] = useState(0);
+  const [fuzzyFallback, setFuzzyFallback] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [searchHistory, setSearchHistory] = useState<string[]>(() => loadHistory());
+  const [searchMode, setSearchMode] = useState<'fulltext' | 'semantic' | 'hybrid'>('fulltext');
+
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const pageSize = PAGE_SIZE;
+
+  const directives = useMemo(() => parseDirectives(query), [query]);
+  const textQuery = directives.textOnly;
+
+  const totalPages = totalResults > 0 ? Math.ceil(totalResults / pageSize) : 0;
+  const currentPageNum = currentPage + 1;
+
+  // ── Actions ──
+
+  const close = useCallback(() => {
+    setOpen(false);
+    setShowHistory(false);
+  }, []);
+
+  const openSearch = useCallback(() => {
+    setQuery('');
+    setActiveIndex(0);
+    setResults([]);
+    setTotalResults(0);
+    setFuzzyFallback(false);
+    setShowHistory(true);
+    setSearchHistory(loadHistory());
+    setOpen(true);
+    window.setTimeout(() => inputRef.current?.focus(), 0);
+  }, []);
+
+  const removeDirective = useCallback((kind: SearchDirective['kind']) => {
+    switch (kind) {
+      case 'tag': break;
+      case 'notebook': store.setActiveNotebook('all'); break;
+      case 'pinned': store.setCurrentFilter('all'); break;
+      case 'favorite': store.setCurrentFilter('all'); break;
+    }
+  }, [store]);
+
+  const loadPage = useCallback(async (pageNum: number) => {
+    const useQuery = textQuery || query;
+    if (!useQuery) return;
+
+    try {
+      setLoading(true);
+      const page = await tauriInvoke<SearchPage>('search_notes_advanced', {
+        query: useQuery,
+        limit: pageSize,
+        offset: pageNum * pageSize,
+      });
+
+      if (page && page.results.length > 0) {
+        setResults(
+          page.results.map((hit: SearchResult) => ({
+            id: hit.note_id,
+            title: hit.title,
+            snippet: hit.snippet || t('search.noPreview'),
+            score: hit.score,
+            updatedAt: new Date(hit.updated_at).toLocaleString(),
+            noteId: hit.note_id,
+          }))
+        );
+        setTotalResults(page.total_hits);
+        setCurrentPage(pageNum);
+        setActiveIndex(0);
+      }
+    } catch (error) {
+      console.error('Page load error:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [textQuery, query, pageSize, t]);
+
+  const handleSelect = useCallback(async (index: number) => {
+    const item = results[index];
+    if (!item?.noteId) return;
+
+    pushHistory(textQuery || query);
+    setSearchHistory(loadHistory());
+
+    setHighlightedId(item.noteId);
+    store.selectNote(item.noteId);
+    close();
+
+    if (highlightTimeoutRef.current) {
+      clearTimeout(highlightTimeoutRef.current);
+    }
+    highlightTimeoutRef.current = setTimeout(() => {
+      setHighlightedId(null);
+    }, 2000);
+  }, [results, textQuery, query, store, close]);
+
+  const handleHistorySelect = useCallback((q: string) => {
+    setQuery(q);
+    setShowHistory(false);
+    setActiveIndex(0);
+    inputRef.current?.focus();
+  }, []);
+
+  const clearHistory = useCallback(() => {
+    saveHistory([]);
+    setSearchHistory([]);
+  }, []);
+
+  const removeFilterChip = useCallback((d: SearchDirective) => {
+    const parts = query.split(/\s+/).filter((t) => t !== d.raw);
+    setQuery(parts.join(' ').trim());
+    removeDirective(d.kind);
+  }, [query, removeDirective]);
+
+  // ── Effects ──
+
+  // Main search effect
+  useEffect(() => {
+    if (!open || !query) {
+      if (results.length > 0 || currentPage !== 0 || totalResults !== 0 || fuzzyFallback) {
+        setResults([]);
+        setCurrentPage(0);
+        setTotalResults(0);
+        setFuzzyFallback(false);
+      }
+      return;
+    }
+
+    // Apply directives to store as side-effect
+    if (directives.directives.length > 0) {
+      const applyDirectives = (dirs: SearchDirective[]) => {
+        for (const d of dirs) {
+          switch (d.kind) {
+            case 'tag': {
+              if (store.tags.includes(d.value)) {
+                store.setActiveTags((prev: string[]) =>
+                  prev.includes(d.value) ? prev : [...prev, d.value],
+                );
+              }
+              break;
+            }
+            case 'notebook': {
+              const found = store.notebooks.find(
+                (nb: { name: string }) => nb.name.toLowerCase() === d.value.toLowerCase(),
+              );
+              if (found) store.setActiveNotebook(found.id);
+              break;
+            }
+            case 'pinned':
+              store.setCurrentFilter('pinned');
+              break;
+            case 'favorite':
+              store.setCurrentFilter('favorites');
+              break;
+          }
+        }
+      };
+      applyDirectives(directives.directives);
+    }
+
+    // If no text query after stripping directives, skip backend search
+    if (!textQuery) {
+      setResults([]);
+      setTotalResults(0);
+      setLoading(false);
+      return;
+    }
+
+    const timer = window.setTimeout(async () => {
+      // Check cache first
+      const cached = searchCache.get<SearchPage>('adv', textQuery, 0);
+      if (cached) {
+        setTotalResults(cached.total_hits);
+        setResults(
+          cached.results.map((hit: SearchResult) => ({
+            id: hit.note_id,
+            title: hit.title,
+            snippet: hit.snippet || t('search.noPreview'),
+            score: hit.score,
+            updatedAt: new Date(hit.updated_at).toLocaleString(),
+            noteId: hit.note_id,
+          }))
+        );
+        setCurrentPage(0);
+        setLoading(false);
+        setActiveIndex(0);
+        return;
+      }
+
+      setLoading(true);
+      setFuzzyFallback(false);
+      const t0 = performance.now();
+      try {
+        if (searchMode !== 'fulltext') {
+          const semResult = await aiService.semanticSearch(textQuery, searchMode, pageSize, 0);
+          if (semResult && semResult.results.length > 0) {
+            setTotalResults(semResult.total);
+            setResults(
+              semResult.results.map((hit) => ({
+                id: hit.noteId,
+                title: hit.title,
+                snippet: hit.snippet || t('search.noPreview'),
+                score: hit.score,
+                updatedAt: '',
+                noteId: hit.noteId,
+              }))
+            );
+            setCurrentPage(0);
+            setFuzzyFallback(false);
+          } else {
+            setResults([]);
+            setTotalResults(0);
+          }
+        } else {
+          const page = await tauriInvoke<SearchPage>('search_notes_advanced', {
+            query: textQuery,
+            limit: pageSize,
+            offset: 0,
+          });
+
+          if (page && page.results.length > 0) {
+            searchCache.set('adv', textQuery, 0, page);
+            setTotalResults(page.total_hits);
+            setResults(
+              page.results.map((hit: SearchResult) => ({
+                id: hit.note_id,
+                title: hit.title,
+                snippet: hit.snippet || t('search.noPreview'),
+                score: hit.score,
+                updatedAt: new Date(hit.updated_at).toLocaleString(),
+                noteId: hit.note_id,
+              }))
+            );
+            setCurrentPage(0);
+          } else {
+            const fuzzyResults = await tauriInvoke<SearchResult[]>('search_notes_fuzzy', {
+              query: textQuery,
+            });
+            if (fuzzyResults && fuzzyResults.length > 0) {
+              setTotalResults(fuzzyResults.length);
+              setResults(
+                fuzzyResults.slice(0, pageSize).map((hit: SearchResult) => ({
+                  id: hit.note_id,
+                  title: hit.title,
+                  snippet: hit.snippet || t('search.noPreview'),
+                  score: hit.score,
+                  updatedAt: new Date(hit.updated_at).toLocaleString(),
+                  noteId: hit.note_id,
+                }))
+              );
+              setFuzzyFallback(true);
+            } else {
+              setResults([]);
+              setTotalResults(0);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Search error:', error);
+        setResults([]);
+        setTotalResults(0);
+      } finally {
+        const elapsed = performance.now() - t0;
+        if (elapsed > 100) {
+          console.debug(`[Perf] search "${textQuery}" took ${elapsed.toFixed(0)}ms`);
+        }
+        setLoading(false);
+        setActiveIndex(0);
+      }
+    }, 200);
+
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, textQuery, searchMode, directives.directives]);
+
+  // noteforge:open-search event
+  useEffect(() => {
+    const handler = () => openSearch();
+    window.addEventListener('noteforge:open-search', handler);
+    return () => window.removeEventListener('noteforge:open-search', handler);
+  }, [openSearch]);
+
+  // Escape key
+  useEffect(() => {
+    if (!open) return;
+    const onEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') close();
+    };
+    window.addEventListener('keydown', onEscape);
+    return () => window.removeEventListener('keydown', onEscape);
+  }, [open, close]);
+
+  // Cleanup highlight timeout
+  useEffect(() => {
+    return () => {
+      if (highlightTimeoutRef.current) {
+        clearTimeout(highlightTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  return {
+    open,
+    query,
+    setQuery,
+    activeIndex,
+    setActiveIndex,
+    results,
+    loading,
+    highlightedId,
+    currentPage,
+    totalResults,
+    fuzzyFallback,
+    showHistory,
+    searchHistory,
+    searchMode,
+    directives,
+    textQuery,
+    totalPages,
+    currentPageNum,
+    pageSize,
+    inputRef,
+    setSearchMode,
+    close,
+    openSearch,
+    loadPage,
+    handleSelect,
+    handleHistorySelect,
+    clearHistory,
+    removeFilterChip,
+  };
+}
