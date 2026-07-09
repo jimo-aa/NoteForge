@@ -41,7 +41,7 @@ export interface UseSearchReturn {
   query: string;
   setQuery: (q: string) => void;
   activeIndex: number;
-  setActiveIndex: (i: number) => void;
+  setActiveIndex: React.Dispatch<React.SetStateAction<number>>;
   results: SearchResultItem[];
   loading: boolean;
   highlightedId: string | null;
