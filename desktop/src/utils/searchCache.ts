@@ -9,7 +9,7 @@ interface CacheEntry<T> {
   query: string;
 }
 
-const CACHE_TTL_MS = 30_000; // 30秒缓存
+const CACHE_TTL_MS = 300_000; // 5分钟缓存（原30秒）
 const MAX_ENTRIES = 50;
 
 class SearchCache {
@@ -64,6 +64,18 @@ class SearchCache {
       if (key.startsWith(prefix)) {
         this.cache.delete(key);
       }
+    }
+  }
+
+  has(prefix: string, query: string, page: number): boolean {
+    return this.get(prefix, query, page) !== null;
+  }
+
+  /** Prefetch a page: set data only if not already cached. */
+  prefetch<T>(prefix: string, query: string, page: number, data: T): void {
+    const key = this.makeKey(prefix, query, page);
+    if (!this.cache.has(key)) {
+      this.set(prefix, query, page, data);
     }
   }
 

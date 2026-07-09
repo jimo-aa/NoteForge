@@ -154,6 +154,8 @@ export function useSearch(): UseSearchReturn {
 
   const inputRef = useRef<HTMLInputElement | null>(null);
   const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchVersionRef = useRef(0);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const pageSize = PAGE_SIZE;
 
@@ -197,33 +199,54 @@ export function useSearch(): UseSearchReturn {
 
     try {
       setLoading(true);
-      const page = await tauriInvoke<SearchPage>('search_notes_advanced', {
-        query: useQuery,
-        limit: pageSize,
-        offset: pageNum * pageSize,
-      });
+      if (searchMode !== 'fulltext') {
+        // Semantic or hybrid pagination via ai-service
+        const semResult = await aiService.semanticSearch(useQuery, searchMode, pageSize, pageNum * pageSize);
+        if (semResult && semResult.results.length > 0) {
+          setResults(
+            semResult.results.map((hit) => ({
+              id: hit.noteId,
+              title: hit.title,
+              snippet: hit.snippet || t('search.noPreview'),
+              score: hit.score,
+              updatedAt: '',
+              noteId: hit.noteId,
+            }))
+          );
+          setTotalResults(semResult.total);
+          setCurrentPage(pageNum);
+          setActiveIndex(0);
+        }
+      } else {
+        // Full-text pagination via Tauri
+        const page = await tauriInvoke<SearchPage>('search_notes_advanced', {
+          query: useQuery,
+          limit: pageSize,
+          offset: pageNum * pageSize,
+        });
 
-      if (page && page.results.length > 0) {
-        setResults(
-          page.results.map((hit: SearchResult) => ({
-            id: hit.note_id,
-            title: hit.title,
-            snippet: hit.snippet || t('search.noPreview'),
-            score: hit.score,
-            updatedAt: new Date(hit.updated_at).toLocaleString(),
-            noteId: hit.note_id,
-          }))
-        );
-        setTotalResults(page.total_hits);
-        setCurrentPage(pageNum);
-        setActiveIndex(0);
+        if (page && page.results.length > 0) {
+          setResults(
+            page.results.map((hit: SearchResult) => ({
+              id: hit.note_id,
+              title: hit.title,
+              snippet: hit.snippet || t('search.noPreview'),
+              score: hit.score,
+              updatedAt: new Date(hit.updated_at).toLocaleString(),
+              noteId: hit.note_id,
+            }))
+          );
+          setTotalResults(page.total_hits);
+          setCurrentPage(pageNum);
+          setActiveIndex(0);
+        }
       }
     } catch (error) {
       console.error('Page load error:', error);
     } finally {
       setLoading(false);
     }
-  }, [textQuery, query, pageSize, t]);
+  }, [textQuery, query, pageSize, searchMode, t]);
 
   const handleSelect = useCallback(async (index: number) => {
     const item = results[index];
@@ -337,9 +360,29 @@ export function useSearch(): UseSearchReturn {
         return;
       }
 
+      const currentVersion = ++searchVersionRef.current;
       setLoading(true);
       setFuzzyFallback(false);
       const t0 = performance.now();
+
+      const mapAdvanced = (hit: SearchResult) => ({
+        id: hit.note_id,
+        title: hit.title,
+        snippet: hit.snippet || t('search.noPreview'),
+        score: hit.score,
+        updatedAt: new Date(hit.updated_at).toLocaleString(),
+        noteId: hit.note_id,
+      });
+
+      const mapSemantic = (hit: { noteId: string; title: string; snippet: string; score: number }) => ({
+        id: hit.noteId,
+        title: hit.title,
+        snippet: hit.snippet || t('search.noPreview'),
+        score: hit.score,
+        updatedAt: '',
+        noteId: hit.noteId,
+      });
+
       try {
         if (searchMode !== 'fulltext') {
           const semResult = await aiService.semanticSearch(textQuery, searchMode, pageSize, 0);
@@ -362,47 +405,32 @@ export function useSearch(): UseSearchReturn {
             setTotalResults(0);
           }
         } else {
-          const page = await tauriInvoke<SearchPage>('search_notes_advanced', {
-            query: textQuery,
-            limit: pageSize,
-            offset: 0,
-          });
+          // Parallel full-text + fuzzy search (T9-B2)
+          const [advResult, fuzzyResult] = await Promise.allSettled([
+            tauriInvoke<SearchPage>('search_notes_advanced', { query: textQuery, limit: pageSize, offset: 0 }),
+            tauriInvoke<SearchResult[]>('search_notes_fuzzy', { query: textQuery }),
+          ]);
 
-          if (page && page.results.length > 0) {
+          if (currentVersion !== searchVersionRef.current) return; // stale response
+
+          const advOk = advResult.status === 'fulfilled' && advResult.value && advResult.value.results.length > 0;
+          const fuzzyOk = fuzzyResult.status === 'fulfilled' && fuzzyResult.value && fuzzyResult.value.length > 0;
+
+          if (advOk) {
+            const page = (advResult as PromiseFulfilledResult<SearchPage>).value;
             searchCache.set('adv', textQuery, 0, page);
             setTotalResults(page.total_hits);
-            setResults(
-              page.results.map((hit: SearchResult) => ({
-                id: hit.note_id,
-                title: hit.title,
-                snippet: hit.snippet || t('search.noPreview'),
-                score: hit.score,
-                updatedAt: new Date(hit.updated_at).toLocaleString(),
-                noteId: hit.note_id,
-              }))
-            );
+            setResults(page.results.map(mapAdvanced));
             setCurrentPage(0);
+            setFuzzyFallback(false);
+          } else if (fuzzyOk) {
+            const fuzzyResults = (fuzzyResult as PromiseFulfilledResult<SearchResult[]>).value;
+            setTotalResults(fuzzyResults.length);
+            setResults(fuzzyResults.slice(0, pageSize).map(mapAdvanced));
+            setFuzzyFallback(true);
           } else {
-            const fuzzyResults = await tauriInvoke<SearchResult[]>('search_notes_fuzzy', {
-              query: textQuery,
-            });
-            if (fuzzyResults && fuzzyResults.length > 0) {
-              setTotalResults(fuzzyResults.length);
-              setResults(
-                fuzzyResults.slice(0, pageSize).map((hit: SearchResult) => ({
-                  id: hit.note_id,
-                  title: hit.title,
-                  snippet: hit.snippet || t('search.noPreview'),
-                  score: hit.score,
-                  updatedAt: new Date(hit.updated_at).toLocaleString(),
-                  noteId: hit.note_id,
-                }))
-              );
-              setFuzzyFallback(true);
-            } else {
-              setResults([]);
-              setTotalResults(0);
-            }
+            setResults([]);
+            setTotalResults(0);
           }
         }
       } catch (error) {
