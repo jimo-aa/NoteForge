@@ -242,6 +242,23 @@ export function useSearch(): UseSearchReturn {
           setTotalResults(page.total_hits);
           setCurrentPage(pageNum);
           setActiveIndex(0);
+
+          // Prefetch next page in background
+          const nextPage = pageNum + 1;
+          if (nextPage * pageSize < page.total_hits) {
+            const cacheKey = 'adv';
+            if (!searchCache.has(cacheKey, useQuery, nextPage)) {
+              tauriInvoke<SearchPage>('search_notes_advanced', {
+                query: useQuery,
+                limit: pageSize,
+                offset: nextPage * pageSize,
+              }).then((nextPageData) => {
+                if (nextPageData) {
+                  searchCache.prefetch(cacheKey, useQuery, nextPage, nextPageData);
+                }
+              });
+            }
+          }
         }
       }
     } catch (error) {
