@@ -271,6 +271,23 @@ impl SearchEngine {
         }
     }
 
+    /// Create a QueryParser with field boosting applied.
+    /// Title matches rank highest (5x), then tags (3x), then content (1x).
+    fn create_query_parser(&self, fields: Vec<tantivy::schema::Field>) -> QueryParser {
+        let mut parser = QueryParser::for_index(&self.index, fields.clone());
+        // Field boosts: title=5, tags=3, content=1
+        for (i, f) in fields.iter().enumerate() {
+            let boost = match i {
+                0 => 5.0, // title
+                1 => 3.0, // tags
+                2 => 1.0, // content
+                _ => 1.0,
+            };
+            parser.set_field_boost(*f, boost);
+        }
+        parser
+    }
+
     pub fn search(&self, query_str: &str, limit: usize) -> Result<Vec<SearchResult>, CoreError> {
         let title_field = self.schema.get_field("title").unwrap();
         let content_field = self.schema.get_field("content").unwrap();
@@ -280,10 +297,7 @@ impl SearchEngine {
 
         let tokenized_query = Self::tokenize_chinese(query_str);
 
-        let query_parser = QueryParser::for_index(
-            &self.index,
-            vec![title_field, content_field, tags_field]
-        );
+        let query_parser = self.create_query_parser(vec![title_field, content_field, tags_field]);
 
         let query = query_parser.parse_query(&tokenized_query)?;
 
@@ -342,10 +356,7 @@ impl SearchEngine {
 
         let tokenized_query = Self::tokenize_chinese(query_str);
 
-        let query_parser = QueryParser::for_index(
-            &self.index,
-            vec![title_field, content_field, tags_field]
-        );
+        let query_parser = self.create_query_parser(vec![title_field, content_field, tags_field]);
 
         let query = query_parser.parse_query(&tokenized_query)?;
 
@@ -419,10 +430,7 @@ impl SearchEngine {
         let updated_at_field = self.schema.get_field("updated_at").unwrap();
 
         let tokenized_query = Self::tokenize_chinese(query_str);
-        let query_parser = QueryParser::for_index(
-            &self.index,
-            vec![title_field, content_field, tags_field]
-        );
+        let query_parser = self.create_query_parser(vec![title_field, content_field, tags_field]);
         let text_query = query_parser.parse_query(&tokenized_query)?;
 
         let id_query = TermQuery::new(
@@ -509,7 +517,7 @@ impl SearchEngine {
             }
         }
 
-        let query_parser = QueryParser::for_index(&self.index, vec![title_field, content_field, tags_field]);
+        let query_parser = self.create_query_parser(vec![title_field, content_field, tags_field]);
         if let Ok(parsed) = query_parser.parse_query(&tokenized) {
             subqueries.push((tantivy::query::Occur::Should, parsed));
         }
