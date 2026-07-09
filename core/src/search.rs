@@ -12,7 +12,7 @@ use tracing::{info, warn};
 use jieba_rs::Jieba;
 use lazy_static::lazy_static;
 
-use crate::types::{SearchResult, now_ms};
+use crate::types::{HighlightSpan, SearchResult, SnippetHighlights, now_ms};
 use crate::error::CoreError;
 
 /// Current schema version for search index.
@@ -234,7 +234,7 @@ impl SearchEngine {
         Ok(())
     }
 
-    fn extract_snippet(&self, content: &str, query_lower: &str, context_chars: usize) -> String {
+    fn extract_snippet(&self, content: &str, query_lower: &str, context_chars: usize) -> SnippetHighlights {
         let content_flat: Vec<char> = content.chars().collect();
         let flat_len = content_flat.len();
         let flat_string: String = content_flat.iter().collect();
@@ -247,28 +247,54 @@ impl SearchEngine {
             let start = pos_chars.saturating_sub(context_chars);
             let end = (pos_chars + qlen_chars + context_chars).min(flat_len);
             let mut snippet = String::new();
+
+            let highlight_offset;
             if start > 0 {
                 snippet.push_str("...");
+                highlight_offset = 3;
+                for c in &content_flat[start..pos_chars] {
+                    snippet.push(*c);
+                    // highlight offset unchanged, tracking "..." prefix
+                }
+            } else {
+                highlight_offset = 0;
             }
-            for c in &content_flat[start..end] {
+
+            let highlight_start = highlight_offset + (pos_chars - start);
+            for c in &content_flat[pos_chars..pos_chars + qlen_chars] {
                 snippet.push(*c);
             }
+            let highlight_end = highlight_start + qlen_chars;
+
             if end < flat_len {
+                for c in &content_flat[pos_chars + qlen_chars..end] {
+                    snippet.push(*c);
+                }
                 snippet.push_str("...");
+            } else {
+                for c in &content_flat[pos_chars + qlen_chars..end] {
+                    snippet.push(*c);
+                }
             }
-            return snippet;
+
+            return SnippetHighlights {
+                text: snippet,
+                highlights: vec![HighlightSpan {
+                    start: highlight_start as u16,
+                    end: highlight_end as u16,
+                }],
+            };
         }
 
-        if flat_len > context_chars * 2 {
-            let mut s = String::new();
-            for c in &content_flat[..context_chars * 2] {
-                s.push(*c);
-            }
+        let (text, highlights) = if flat_len > context_chars * 2 {
+            let mut s: String = content_flat.iter().take(context_chars * 2).collect();
             s.push_str("...");
-            s
+            (s, Vec::new())
         } else {
-            flat_string
-        }
+            (flat_string, Vec::new())
+        };
+
+        SnippetHighlights { text, highlights }
     }
 
     /// Create a QueryParser with field boosting applied.
@@ -331,15 +357,16 @@ impl SearchEngine {
                 .and_then(|v| v.as_u64())
                 .unwrap_or_else(now_ms);
 
-            let snippet = self.extract_snippet(&content, &query_lower, 60);
+            let sh = self.extract_snippet(&content, &query_lower, 60);
 
             results.push(SearchResult {
                 note_id: id,
                 title,
-                snippet,
+                snippet: sh.text.clone(),
                 score,
                 updated_at,
                 total_hits: 0,
+                snippet_highlights: Some(sh),
             });
         }
 
@@ -406,15 +433,16 @@ impl SearchEngine {
                 .and_then(|v| v.as_u64())
                 .unwrap_or_else(now_ms);
 
-            let snippet = self.extract_snippet(&content, &query_lower, 60);
+            let sh = self.extract_snippet(&content, &query_lower, 60);
 
             results.push(SearchResult {
                 note_id: id,
                 title,
-                snippet,
+                snippet: sh.text.clone(),
                 score,
                 updated_at,
-                total_hits,
+                total_hits: 0,
+                snippet_highlights: Some(sh),
             });
         }
 
@@ -473,15 +501,16 @@ impl SearchEngine {
                 .and_then(|v| v.as_u64())
                 .unwrap_or_else(now_ms);
 
-            let snippet = self.extract_snippet(&content, &query_lower, 60);
+            let sh = self.extract_snippet(&content, &query_lower, 60);
 
             results.push(SearchResult {
                 note_id: id,
                 title,
-                snippet,
+                snippet: sh.text.clone(),
                 score,
                 updated_at,
                 total_hits: 0,
+                snippet_highlights: Some(sh),
             });
         }
 
@@ -538,10 +567,12 @@ impl SearchEngine {
         for (score, addr) in &exact_results {
             let (id, title, content, updated_at) = self.read_doc(&searcher, *addr)?;
             if seen_ids.insert(id.clone()) {
+                let sh = self.extract_snippet(&content, &query_lower, 60);
                 results.push(SearchResult {
                     note_id: id,
                     title,
-                    snippet: self.extract_snippet(&content, &query_lower, 60),
+                    snippet: sh.text.clone(),
+                    snippet_highlights: Some(sh),
                     score: *score,
                     updated_at,
                     total_hits: 0,
@@ -564,10 +595,12 @@ impl SearchEngine {
         for (score, addr) in &parsed_results {
             let (id, title, content, updated_at) = self.read_doc(&searcher, *addr)?;
             if seen_ids.insert(id.clone()) {
+                let sh = self.extract_snippet(&content, &query_lower, 60);
                 results.push(SearchResult {
                     note_id: id,
                     title,
-                    snippet: self.extract_snippet(&content, &query_lower, 60),
+                    snippet: sh.text.clone(),
+                    snippet_highlights: Some(sh),
                     score: *score,
                     updated_at,
                     total_hits: 0,
@@ -598,10 +631,12 @@ impl SearchEngine {
         for (score, addr) in &fuzzy_results {
             let (id, title, content, updated_at) = self.read_doc(&searcher, *addr)?;
             if seen_ids.insert(id.clone()) {
+                let sh = self.extract_snippet(&content, &query_lower, 60);
                 results.push(SearchResult {
                     note_id: id,
                     title,
-                    snippet: self.extract_snippet(&content, &query_lower, 60),
+                    snippet: sh.text.clone(),
+                    snippet_highlights: Some(sh),
                     score: *score,
                     updated_at,
                     total_hits: 0,
@@ -612,7 +647,7 @@ impl SearchEngine {
             }
         }
 
-        info!("🔍 模糊搜索(精确+前缀+模糊): '{}' - {} 条结果", query_str, results.len());
+        info!("🔍 模糊搜索(精确+解析+模糊): '{}' - {} 条结果", query_str, results.len());
         Ok(results)
     }
 

@@ -98,6 +98,20 @@ pub struct Tag {
 // 搜索结果
 // ============================================================
 
+/// A character offset range within a snippet text marking a matched term.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HighlightSpan {
+    pub start: u16,
+    pub end: u16,
+}
+
+/// Snippet text with associated highlight spans for matched terms.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SnippetHighlights {
+    pub text: String,
+    pub highlights: Vec<HighlightSpan>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SearchResult {
     pub note_id: String,
@@ -107,6 +121,10 @@ pub struct SearchResult {
     pub updated_at: u64,
     #[serde(default)]
     pub total_hits: usize,
+    /// Structured snippet with character-level highlight spans.
+    /// Frontend should use this for rendering <mark> tags when available.
+    #[serde(default)]
+    pub snippet_highlights: Option<SnippetHighlights>,
 }
 
 // ============================================================
