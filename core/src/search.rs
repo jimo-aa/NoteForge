@@ -1,4 +1,5 @@
-use std::path::Path;
+use std::fs;
+use std::path::{Path, PathBuf};
 use tantivy::{
     collector::{Count, TopDocs},
     doc,
@@ -7,12 +8,26 @@ use tantivy::{
     query::{BooleanQuery, FuzzyTermQuery, QueryParser, TermQuery},
     Term,
 };
-use tracing::info;
+use tracing::{info, warn};
 use jieba_rs::Jieba;
 use lazy_static::lazy_static;
 
 use crate::types::{SearchResult, now_ms};
 use crate::error::CoreError;
+
+/// Current schema version for search index.
+/// Increment when making breaking schema changes that require re-indexing.
+pub const SCHEMA_VERSION: u32 = 2;
+
+/// A minimal note representation for index rebuild operations.
+#[derive(Debug, Clone)]
+pub struct IndexableNote {
+    pub id: String,
+    pub title: String,
+    pub content: String,
+    pub tags: Vec<String>,
+    pub updated_at: u64,
+}
 
 lazy_static! {
     static ref JIEBA: Jieba = Jieba::new();
@@ -28,6 +43,9 @@ pub struct SearchEngine {
     index: Index,
     schema: Schema,
     writer: IndexWriter,
+    index_dir: PathBuf,
+    schema_version: u32,
+    needs_rebuild: bool,
 }
 
 impl SearchEngine {
@@ -47,16 +65,138 @@ impl SearchEngine {
     }
 
     pub fn open<P: AsRef<Path>>(index_dir: P) -> Result<Self, CoreError> {
+        let index_dir_path = index_dir.as_ref().to_path_buf();
         let schema = Self::build_schema();
-        let index = if index_dir.as_ref().exists() {
-            Index::open_in_dir(&index_dir)?
+        let is_new = !index_dir_path.exists();
+
+        let index = if is_new {
+            std::fs::create_dir_all(&index_dir_path)?;
+            Index::create_in_dir(&index_dir_path, schema.clone())?
         } else {
-            std::fs::create_dir_all(&index_dir)?;
-            Index::create_in_dir(&index_dir, schema.clone())?
+            Index::open_in_dir(&index_dir_path)?
         };
         let writer = index.writer(50_000_000)?;
-        info!("🔍 搜索引擎已打开: {:?}", index_dir.as_ref());
-        Ok(Self { index, schema, writer })
+
+        // Check schema version
+        let (schema_version, needs_rebuild) = if is_new {
+            // New index — write current schema version
+            Self::write_schema_version(&index_dir_path, SCHEMA_VERSION)?;
+            (SCHEMA_VERSION, false)
+        } else {
+            let disk_version = Self::read_schema_version(&index_dir_path);
+            if disk_version < SCHEMA_VERSION {
+                warn!(
+                    "🔍 索引 schema 版本不匹配: disk={}, current={}. 需要重建索引",
+                    disk_version, SCHEMA_VERSION
+                );
+                (disk_version, true)
+            } else {
+                (SCHEMA_VERSION, false)
+            }
+        };
+
+        info!("🔍 搜索引擎已打开: {:?}", index_dir_path);
+        Ok(Self {
+            index,
+            schema,
+            writer,
+            index_dir: index_dir_path,
+            schema_version,
+            needs_rebuild,
+        })
+    }
+
+    fn schema_version_path(dir: &Path) -> PathBuf {
+        dir.join("schema_version.txt")
+    }
+
+    fn read_schema_version(dir: &Path) -> u32 {
+        let path = Self::schema_version_path(dir);
+        fs::read_to_string(path)
+            .ok()
+            .and_then(|s| s.trim().parse::<u32>().ok())
+            .unwrap_or(0)
+    }
+
+    fn write_schema_version(dir: &Path, version: u32) -> Result<(), CoreError> {
+        let path = Self::schema_version_path(dir);
+        fs::write(&path, version.to_string())?;
+        Ok(())
+    }
+
+    /// Check whether the index needs a rebuild due to schema version mismatch.
+    pub fn needs_rebuild(&self) -> bool {
+        self.needs_rebuild
+    }
+
+    /// Rebuild the search index from scratch using the provided notes.
+    ///
+    /// Creates a new index in a temporary directory, indexes all notes,
+    /// then atomically swaps with the existing index directory.
+    /// After successful rebuild, the schema version is updated.
+    pub fn rebuild_index(&mut self, notes: &[IndexableNote]) -> Result<(), CoreError> {
+        let temp_dir = self.index_dir.with_extension("index_rebuild_tmp");
+        let _ = fs::remove_dir_all(&temp_dir);
+
+        // Create a new index in the temp directory
+        let schema = Self::build_schema();
+        std::fs::create_dir_all(&temp_dir)?;
+        let new_index = Index::create_in_dir(&temp_dir, schema.clone())?;
+        let mut new_writer = new_index.writer(50_000_000)?;
+
+        // Index all notes
+        for note in notes {
+            let tokenized_content = Self::tokenize_chinese(&note.content);
+            let tokenized_title = Self::tokenize_chinese(&note.title);
+            let id_field = schema.get_field("id").unwrap();
+            let title_field = schema.get_field("title").unwrap();
+            let content_field = schema.get_field("content").unwrap();
+            let tags_field = schema.get_field("tags").unwrap();
+            let updated_at_field = schema.get_field("updated_at").unwrap();
+
+            new_writer.add_document(doc!(
+                id_field => note.id.as_str(),
+                title_field => tokenized_title,
+                content_field => tokenized_content,
+                tags_field => note.tags.join(" "),
+                updated_at_field => note.updated_at,
+            ))?;
+        }
+
+        new_writer.commit()?;
+        drop(new_writer);
+
+        // Write schema version marker in temp dir
+        Self::write_schema_version(&temp_dir, SCHEMA_VERSION)?;
+        info!("🔍 索引重建完成，共 {} 条笔记", notes.len());
+
+        // Atomic swap: rename old -> backup, rename new -> live
+        let backup_dir = self.index_dir.with_extension("index_backup");
+        let _ = fs::remove_dir_all(&backup_dir);
+
+        // On Windows, rename fails if dest exists, so remove old first
+        // Use a two-step rename approach
+        if self.index_dir.exists() {
+            fs::rename(&self.index_dir, &backup_dir)?;
+        }
+        fs::rename(&temp_dir, &self.index_dir)?;
+
+        // Clean up backup
+        let _ = fs::remove_dir_all(&backup_dir);
+
+        // Update self to use the new index
+        let new_index = Index::open_in_dir(&self.index_dir)?;
+        let new_writer = new_index.writer(50_000_000)?;
+        let schema_version = Self::read_schema_version(&self.index_dir);
+
+        self.index = new_index;
+        self.schema = schema;
+        self.writer = new_writer;
+        self.schema_version = schema_version;
+        self.needs_rebuild = false;
+
+        info!("🔍 索引重建已生效 (schema v{})", schema_version);
+        Ok(())
     }
 
     pub fn add_note(&mut self, id: &str, title: &str, content: &str, tags: &[String], updated_at: u64) -> Result<(), CoreError> {
@@ -213,6 +353,19 @@ impl SearchEngine {
         let searcher = reader.searcher();
 
         let total_hits = searcher.search(&query, &Count)?;
+
+        // Safety cap: prevent excessive memory usage from large offsets
+        const MAX_OFFSET: usize = 10_000;
+        if options.offset > MAX_OFFSET {
+            warn!(
+                "🔍 分页偏移过大 (offset={}), 上限为 {}，返回空结果",
+                options.offset, MAX_OFFSET
+            );
+            return Ok(SearchPage {
+                results: Vec::new(),
+                total_hits,
+            });
+        }
 
         let top_docs = searcher.search(&query, &TopDocs::with_limit(options.limit + options.offset))?;
 
@@ -584,6 +737,61 @@ mod tests {
         let results = engine.search("Updated", 10).unwrap();
         assert!(!results.is_empty());
         assert_eq!(results[0].title, "Updated");
+    }
+
+    #[test]
+    fn test_paginated_large_offset_capped() {
+        let dir = tempdir().unwrap();
+        let mut engine = SearchEngine::open(dir.path().join("index")).unwrap();
+        for i in 0..5 {
+            engine.add_note(&i.to_string(), &format!("Note {}", i), "内容包含 Rust 编程", &[], now_ms()).unwrap();
+        }
+        engine.commit().unwrap();
+
+        // Offset beyond MAX_OFFSET should return empty results without panicking
+        let page = engine.search_paginated("Rust", SearchOptions { limit: 3, offset: 999_999 }).unwrap();
+        assert!(page.results.is_empty());
+        assert_eq!(page.total_hits, 5);
+    }
+
+    #[test]
+    fn test_index_rebuild() {
+        let dir = tempdir().unwrap();
+        let index_dir = dir.path().join("index");
+        let mut engine = SearchEngine::open(&index_dir).unwrap();
+        engine.add_note("1", "Original", "Original content", &[], now_ms()).unwrap();
+        engine.add_note("2", "Another", "More content", &[], now_ms()).unwrap();
+        engine.commit().unwrap();
+        drop(engine);
+
+        // Re-open to simulate old version detection (schema version will be 0 since
+        // no marker file existed before this change)
+        let mut engine = SearchEngine::open(&index_dir).unwrap();
+        if engine.needs_rebuild() {
+            let notes = vec![
+                crate::search::IndexableNote {
+                    id: "1".into(),
+                    title: "Original".into(),
+                    content: "Original content".into(),
+                    tags: vec![],
+                    updated_at: now_ms(),
+                },
+                crate::search::IndexableNote {
+                    id: "2".into(),
+                    title: "Another".into(),
+                    content: "More content".into(),
+                    tags: vec![],
+                    updated_at: now_ms(),
+                },
+            ];
+            engine.rebuild_index(&notes).unwrap();
+            assert!(!engine.needs_rebuild());
+        }
+
+        // Verify search works after rebuild
+        let results = engine.search("Original", 10).unwrap();
+        assert!(!results.is_empty());
+        assert_eq!(results[0].note_id, "1");
     }
 
     #[test]

@@ -268,7 +268,7 @@ impl LocalStorage {
         }
 
         // 按修改时间降序排列（最新在前）
-        notes.sort_by(|a, b| b.modified_at.cmp(&a.modified_at));
+        notes.sort_by_key(|a| std::cmp::Reverse(a.modified_at));
 
         Ok(notes)
     }
