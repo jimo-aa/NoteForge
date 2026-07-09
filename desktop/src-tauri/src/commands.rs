@@ -98,11 +98,32 @@ pub struct NoteForgeDesktopCore {
 impl NoteForgeDesktopCore {
     pub fn open(data_dir: PathBuf) -> Result<Self, noteforge_core::error::CoreError> {
         std::fs::create_dir_all(&data_dir)?;
-        Ok(Self { 
-            storage: LocalStorage::open(data_dir.join("noteforge.db"))?, 
-            search: SearchEngine::open(data_dir.join("index"))?,
-            encryption: None,
-        })
+        let storage = LocalStorage::open(data_dir.join("noteforge.db"))?;
+        let mut search = SearchEngine::open(data_dir.join("index"))?;
+
+        // Auto-rebuild search index if schema version mismatch
+        if search.needs_rebuild() {
+            println!("🔄 检测到搜索索引 schema 版本不匹配，正在重建...");
+            let all_notes = storage.list_notes(None, 100_000, 0)?;
+            let ids: Vec<&str> = all_notes.iter().map(|n| n.id.as_str()).collect();
+            let notes_with_content = storage.get_notes_batch(&ids)?;
+
+            let indexable: Vec<noteforge_core::search::IndexableNote> = notes_with_content.iter().map(|n| {
+                let index_content = if n.content_plain.is_empty() { &n.content } else { &n.content_plain };
+                noteforge_core::search::IndexableNote {
+                    id: n.meta.id.clone(),
+                    title: n.meta.title.clone(),
+                    content: index_content.clone(),
+                    tags: n.meta.tags.clone(),
+                    updated_at: n.meta.updated_at,
+                }
+            }).collect();
+
+            search.rebuild_index(&indexable)?;
+            println!("🔄 搜索索引重建完成: {} 条笔记", indexable.len());
+        }
+
+        Ok(Self { storage, search, encryption: None })
     }
 }
 
@@ -259,6 +280,34 @@ pub fn search_in_note(state: State<'_, AppState>, note_id: String, query: String
             .search
             .search_in_note(&note_id, &query, 1000)
             .map_err(|e| e.to_string())
+    })
+}
+
+/// Rebuild the search index from scratch using all notes from storage.
+/// Called automatically on startup if schema version mismatch is detected,
+/// and can also be triggered manually from the frontend.
+#[tauri::command]
+pub fn reindex_search_index(state: State<'_, AppState>) -> Result<(), String> {
+    timed_command!("reindex_search_index", {
+        let mut core = state.core.lock().map_err(|e| e.to_string())?;
+        let all_notes = core.storage.list_notes(None, 100_000, 0).map_err(|e| e.to_string())?;
+        let ids: Vec<&str> = all_notes.iter().map(|n| n.id.as_str()).collect();
+        let notes_with_content = core.storage.get_notes_batch(&ids).map_err(|e| e.to_string())?;
+        
+        let indexable: Vec<noteforge_core::search::IndexableNote> = notes_with_content.iter().map(|n| {
+            let index_content = if n.content_plain.is_empty() { &n.content } else { &n.content_plain };
+            noteforge_core::search::IndexableNote {
+                id: n.meta.id.clone(),
+                title: n.meta.title.clone(),
+                content: index_content.clone(),
+                tags: n.meta.tags.clone(),
+                updated_at: n.meta.updated_at,
+            }
+        }).collect();
+        
+        core.search.rebuild_index(&indexable).map_err(|e| e.to_string())?;
+        println!("🔄 搜索索引重建完成: {} 条笔记已索引", indexable.len());
+        Ok(())
     })
 }
 

@@ -50,6 +50,7 @@ pub fn run() {
             commands::search_notes_fuzzy,
             commands::search_in_note,
             commands::search_notes_advanced,
+            commands::reindex_search_index,
             commands::init_encryption,
             commands::has_stored_encryption,
             commands::try_unlock_encryption,
