@@ -28,6 +28,9 @@ export type SearchResultItem = {
   score: number;
   updatedAt: string;
   noteId?: string;
+  tags?: string[];
+  notebookName?: string;
+  highlightSpans?: { start: number; end: number }[];
 };
 
 export interface SearchDirective {
@@ -365,13 +368,14 @@ export function useSearch(): UseSearchReturn {
       setFuzzyFallback(false);
       const t0 = performance.now();
 
-      const mapAdvanced = (hit: SearchResult) => ({
+      const mapAdvanced = (hit: SearchResult & { snippetHighlights?: { text: string; highlights: { start: number; end: number }[] } }) => ({
         id: hit.note_id,
         title: hit.title,
         snippet: hit.snippet || t('search.noPreview'),
         score: hit.score,
         updatedAt: new Date(hit.updated_at).toLocaleString(),
         noteId: hit.note_id,
+        highlightSpans: hit.snippetHighlights?.highlights,
       });
 
       const mapSemantic = (hit: { noteId: string; title: string; snippet: string; score: number }) => ({
