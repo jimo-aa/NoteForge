@@ -14,6 +14,7 @@ export type SearchResult = {
   score: number;
   updated_at: number;
   total_hits: number;
+  snippetHighlights?: { text: string; highlights: { start: number; end: number }[] };
 };
 
 export type SearchPage = {
@@ -104,11 +105,43 @@ function pushHistory(query: string) {
 
 /**
  * Parse search directives from query; returns { textOnly, directives }.
+ *
+ * Supported syntax:
+ *   tag:xxx          — filter by tag
+ *   notebook:xxx     — filter by notebook name
+ *   is:pinned        — show only pinned notes
+ *   is:favorite/fav  — show only favorited notes
+ *   title:xxx        — search only in title field
+ *   "quoted phrase"  — exact phrase match (preserved as-is, not tokenized)
+ *   -tag:xxx         — exclude tag
  */
 export function parseDirectives(raw: string): { textOnly: string; directives: SearchDirective[] } {
   const dirs: SearchDirective[] = [];
   const parts: string[] = [];
-  for (const token of raw.split(/\s+/)) {
+
+  // Handle quoted phrases: extract them first and rejoin later
+  let remaining = raw;
+  const quotedPhrases: string[] = [];
+  const quoteRegex = /"([^"]+)"/g;
+  let quoteMatch: RegExpExecArray | null;
+  while ((quoteMatch = quoteRegex.exec(raw)) !== null) {
+    if (quoteMatch[1]) quotedPhrases.push(quoteMatch[1]);
+  }
+  // Remove quoted parts from the raw text for token parsing
+  remaining = raw.replace(/"([^"]+)"/g, '').trim();
+
+  // Parse tokens from the unquoted remainder
+  for (const token of remaining.split(/\s+/)) {
+    if (!token) continue;
+
+    // Exclude directive: -tag:xxx -notebook:xxx
+    const excludeMatch = token.match(/^-(tag|notebook):(\S+)$/i);
+    if (excludeMatch?.[1] && excludeMatch[2]) {
+      const kind = excludeMatch[1].toLowerCase() as 'tag' | 'notebook';
+      dirs.push({ kind, raw: token, value: `-${excludeMatch[2]}` });
+      continue;
+    }
+
     const tagMatch = token.match(/^tag:(\S+)$/i);
     if (tagMatch?.[1]) {
       dirs.push({ kind: 'tag', raw: token, value: tagMatch[1] });
@@ -117,6 +150,13 @@ export function parseDirectives(raw: string): { textOnly: string; directives: Se
     const nbMatch = token.match(/^notebook:(\S+)$/i);
     if (nbMatch?.[1]) {
       dirs.push({ kind: 'notebook', raw: token, value: nbMatch[1] });
+      continue;
+    }
+    const titleMatch = token.match(/^title:(\S+)$/i);
+    if (titleMatch?.[1]) {
+      // title: prefix alters query but doesn't create a UI chip
+      // It works by prepending a field-specific search term
+      parts.push(`title:${titleMatch[1]}`);
       continue;
     }
     const isMatch = token.match(/^is:(\S+)$/i);
@@ -133,6 +173,12 @@ export function parseDirectives(raw: string): { textOnly: string; directives: Se
     }
     parts.push(token);
   }
+
+  // Append quoted phrases as exact-match tokens
+  for (const phrase of quotedPhrases) {
+    parts.push(`"${phrase}"`);
+  }
+
   return { textOnly: parts.join(' ').trim(), directives: dirs };
 }
 
@@ -360,32 +406,12 @@ export function useSearch(): UseSearchReturn {
     }
 
     const timer = window.setTimeout(async () => {
-      // Check cache first
-      const cached = searchCache.get<SearchPage>('adv', textQuery, 0);
-      if (cached) {
-        setTotalResults(cached.total_hits);
-        setResults(
-          cached.results.map((hit: SearchResult) => ({
-            id: hit.note_id,
-            title: hit.title,
-            snippet: hit.snippet || t('search.noPreview'),
-            score: hit.score,
-            updatedAt: new Date(hit.updated_at).toLocaleString(),
-            noteId: hit.note_id,
-          }))
-        );
-        setCurrentPage(0);
-        setLoading(false);
-        setActiveIndex(0);
-        return;
-      }
-
       const currentVersion = ++searchVersionRef.current;
       setLoading(true);
       setFuzzyFallback(false);
       const t0 = performance.now();
 
-      const mapAdvanced = (hit: SearchResult & { snippetHighlights?: { text: string; highlights: { start: number; end: number }[] } }) => ({
+      const mapAdvanced = (hit: SearchResult) => ({
         id: hit.note_id,
         title: hit.title,
         snippet: hit.snippet || t('search.noPreview'),
@@ -466,7 +492,7 @@ export function useSearch(): UseSearchReturn {
         setLoading(false);
         setActiveIndex(0);
       }
-    }, 200);
+    }, 50); // Reduced from 200ms to 50ms for faster first-result appearance
 
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps

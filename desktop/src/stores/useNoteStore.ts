@@ -195,11 +195,49 @@ function scheduleAutosave(id: string, title: string, content: string) {
   autosaveTimers[id] = setTimeout(() => {
     useNoteStore.setState({ saveStatus: 'saving' });
     safeWrite(autosaveKey(id), { content, title, updatedAt: Date.now() });
-    tauriInvoke('update_note', { id, title: null, content, tags: null, isPinned: null, isFavorite: null })
-      .then(() => useNoteStore.setState({ saveStatus: 'saved', lastSavedAt: Date.now() }))
-      .catch(() => useNoteStore.setState({ saveStatus: 'saved' }));
+    // Persist to localStorage immediately (always works)
+    localStore.updateLocalNote(id, { content });
+    // Attempt Tauri backend save (may fail silently if backend unavailable)
+    if (isBackendAvail()) {
+      tauriInvoke('update_note', { id, title: null, content, tags: null, isPinned: null, isFavorite: null })
+        .then(() => {
+          useNoteStore.setState({ saveStatus: 'saved', lastSavedAt: Date.now() });
+          // Also commit the search index flush
+          tauriInvoke('commit_search_index', {}).catch(() => {});
+        })
+        .catch(() => {
+          markBackendUnavail();
+          useNoteStore.setState({ saveStatus: 'saved' });
+        });
+    } else {
+      useNoteStore.setState({ saveStatus: 'saved', lastSavedAt: Date.now() });
+    }
     autosaveTimers[id] = null;
-  }, 5000);
+  }, 2000); // Reduced from 5000ms to 2000ms
+}
+
+/** Force an immediate save (for Ctrl+S or manual save button). */
+export function forceSave(id: string, title: string, content: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    safeWrite(autosaveKey(id), { content, title, updatedAt: Date.now() });
+    localStore.updateLocalNote(id, { content });
+    if (isBackendAvail()) {
+      tauriInvoke('update_note', { id, title: null, content, tags: null, isPinned: null, isFavorite: null })
+        .then(() => {
+          useNoteStore.setState({ saveStatus: 'saved', lastSavedAt: Date.now() });
+          tauriInvoke('commit_search_index', {}).catch(() => {});
+          resolve(true);
+        })
+        .catch(() => {
+          markBackendUnavail();
+          useNoteStore.setState({ saveStatus: 'saved' });
+          resolve(false);
+        });
+    } else {
+      useNoteStore.setState({ saveStatus: 'saved', lastSavedAt: Date.now() });
+      resolve(true);
+    }
+  });
 }
 
 function triggerSync() {

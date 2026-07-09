@@ -285,6 +285,16 @@ pub fn search_in_note(state: State<'_, AppState>, note_id: String, query: String
 
 /// Rebuild the search index from scratch using all notes from storage.
 /// Called automatically on startup if schema version mismatch is detected,
+/// Commit the search index writer to flush pending changes to disk.
+/// Called after save operations to ensure search results are up-to-date.
+#[tauri::command]
+pub fn commit_search_index(state: State<'_, AppState>) -> Result<(), String> {
+    timed_command!("commit_search_index", {
+        let mut core = state.core.lock().map_err(|e| e.to_string())?;
+        core.search.commit().map_err(|e| e.to_string())
+    })
+}
+
 /// and can also be triggered manually from the frontend.
 #[tauri::command]
 pub fn reindex_search_index(state: State<'_, AppState>) -> Result<(), String> {

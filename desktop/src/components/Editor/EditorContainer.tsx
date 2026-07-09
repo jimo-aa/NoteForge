@@ -15,6 +15,7 @@ import {
 } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useStore } from '@/stores/context';
+import { forceSave } from '@/stores/useNoteStore';
 import { renderMarkdown, formatTable } from '@/utils/markdown';
 import { SourceEditor } from './source/SourceEditor';
 import { WysiwygEditor } from './wysiwyg/WysiwygEditor';
@@ -301,6 +302,21 @@ export function EditorContainer() {
     saveDraft(note.meta.id, note.content);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [note?.meta.id, saveDraft]);
+
+  // ── Manual save handler (Ctrl+S / Cmd+S) ──
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        if (note) {
+          forceSave(note.meta.id, note.meta.title, note.content)
+            .then((ok) => { if (ok) showToast('success', t('note.saved')); });
+        }
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [note, showToast, t]);
 
   // ── Jump to line listener (source mode) ──
   useEffect(() => {
