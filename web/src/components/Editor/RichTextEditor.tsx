@@ -14,6 +14,8 @@ import { TableHeader } from '@tiptap/extension-table-header';
 import { TextStyle } from '@tiptap/extension-text-style';
 import { RichTextToolbar } from './RichTextToolbar';
 import { markdownToHtml, htmlToMarkdown } from '@/lib/markdownConverter';
+import { createSlashCommandExtension } from './SlashCommand';
+import { PluginKey } from '@tiptap/pm/state';
 
 export interface RichTextHandle {
   getContent: () => string;
@@ -25,15 +27,17 @@ interface RichTextEditorProps {
   initialContent: string;
   onChange: (text: string) => void;
   placeholderText?: string;
+  editorSearchQuery?: string;
 }
 
 export const RichTextEditor = forwardRef<RichTextHandle, RichTextEditorProps>(
-  function RichTextEditor({ initialContent, onChange, placeholderText }, ref) {
+  function RichTextEditor({ initialContent, onChange, placeholderText, editorSearchQuery }, ref) {
     const [mode, setMode] = useState<'wysiwyg' | 'source'>('wysiwyg');
     const [sourceContent, setSourceContent] = useState(initialContent);
     const isUpdating = useRef(false);
     const onChangeRef = useRef(onChange);
     onChangeRef.current = onChange;
+    const searchHighlightsRef = useRef<{ from: number; to: number }[]>([]);
 
     const editor = useEditor({
       extensions: [
@@ -47,6 +51,7 @@ export const RichTextEditor = forwardRef<RichTextHandle, RichTextEditorProps>(
         Table.configure({ resizable: true }),
         TableRow, TableCell, TableHeader,
         TextStyle,
+        createSlashCommandExtension(new PluginKey('slash-command')),
       ],
       content: markdownToHtml(initialContent),
       onUpdate: ({ editor: ed }) => {
@@ -59,6 +64,35 @@ export const RichTextEditor = forwardRef<RichTextHandle, RichTextEditorProps>(
         attributes: { class: 'rich-editor-wysiwyg prose prose-sm max-w-none' },
       },
     });
+
+    // Editor search — simple match count (inline highlighting requires ProseMirror decoration)
+    useEffect(() => {
+      if (!editor || mode !== 'wysiwyg') return;
+      if (!editorSearchQuery?.trim()) {
+        searchHighlightsRef.current = [];
+        return;
+      }
+
+      const query = editorSearchQuery.toLowerCase();
+      const { doc } = editor.state;
+      const highlights: { from: number; to: number }[] = [];
+
+      doc.descendants((node, pos) => {
+        if (node.isText && node.text) {
+          const text = node.text.toLowerCase();
+          let idx = 0;
+          while ((idx = text.indexOf(query, idx)) !== -1) {
+            highlights.push({
+              from: pos + idx,
+              to: pos + idx + query.length,
+            });
+            idx += query.length;
+          }
+        }
+      });
+
+      searchHighlightsRef.current = highlights;
+    }, [editor, editorSearchQuery, mode]);
 
     const switchToSource = useCallback(() => {
       if (!editor) return;
@@ -97,12 +131,28 @@ export const RichTextEditor = forwardRef<RichTextHandle, RichTextEditorProps>(
         <RichTextToolbar editor={editor} mode={mode} onModeSwitch={mode === 'wysiwyg' ? switchToSource : switchToWysiwyg} />
         <div className="rich-editor-body">
           {mode === 'wysiwyg' ? (
-            <EditorContent editor={editor} />
+            <>
+              <EditorContent editor={editor} />
+              {/* Search match count */}
+              {editorSearchQuery && searchHighlightsRef.current.length > 0 && (
+                <div style={{
+                  position: 'sticky', bottom: 0, padding: '4px 12px',
+                  background: 'var(--panel-2)', borderTop: '1px solid var(--line)',
+                  fontSize: 11, color: 'var(--text-muted)', textAlign: 'center'
+                }}>
+                  {searchHighlightsRef.current.length} matches found
+                </div>
+              )}
+            </>
           ) : (
             <textarea
               value={sourceContent}
               onChange={handleSourceChange}
-              style={{ width: '100%', minHeight: 300, padding: 16, border: 'none', background: 'transparent', color: 'var(--text)', fontFamily: 'monospace', fontSize: 14, resize: 'none', outline: 'none' }}
+              style={{
+                width: '100%', minHeight: 300, padding: 16, border: 'none',
+                background: 'transparent', color: 'var(--text)', fontFamily: 'monospace',
+                fontSize: 14, resize: 'none', outline: 'none'
+              }}
               placeholder={placeholderText}
               spellCheck={false}
             />

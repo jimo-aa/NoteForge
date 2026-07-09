@@ -1,17 +1,19 @@
 # NoteForge — Production Override
 # Usage: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
-# Pre-build images first:
+#
+# Build images:
 #   docker compose -f docker-compose.yml -f docker-compose.prod.yml build
 # Or build individually:
 #   docker build --build-arg SERVICE=note-service -t noteforge/note-service backend/
 #   docker build --build-arg SERVICE=user-service -t noteforge/user-service backend/
 #   docker build -t noteforge/gateway -f backend/gateway/Dockerfile backend/
 #   docker build -t noteforge/ai-service -f backend/ai-service/Dockerfile backend/
-version: '3.8'
 
-# Shared JWT secret for all services (override via env var)
+name: noteforge
+
+# Shared JWT secret for all services (override via .env file)
 x-shared-env: &shared-env
-  JWT_SECRET: ${JWT_SECRET:-noteforge-prod-jwt-secret-change-me}
+  JWT_SECRET: ${JWT_SECRET:-noteforge-dev-jwt-secret-key-2026}
   DB_URL: jdbc:postgresql://postgres:5432/noteforge
   DB_USER: noteforge
   DB_PASS: noteforge123
@@ -23,10 +25,10 @@ services:
       context: ../backend
       dockerfile: gateway/Dockerfile
     image: noteforge/gateway:latest
-    container_name: noteforge-gateway-prod
-    command: []
+    container_name: noteforge-gateway
     environment:
       <<: *shared-env
+      SERVER_PORT: 8000
     ports:
       - "8000:8000"
     depends_on:
@@ -45,7 +47,7 @@ services:
     restart: unless-stopped
     networks:
       - noteforge-net
-    logging:
+    logging: &logging
       driver: "json-file"
       options:
         max-size: "10m"
@@ -57,18 +59,18 @@ services:
       context: ../backend
       dockerfile: note-service/Dockerfile
     image: noteforge/note-service:latest
-    container_name: noteforge-note-service-prod
-    command: []
+    container_name: noteforge-note-service
     environment:
       <<: *shared-env
       SPRING_PROFILES_ACTIVE: prod
+      SERVER_PORT: 8081
       REDIS_HOST: redis
       REDIS_PORT: 6379
       MINIO_ENDPOINT: http://minio:9000
       MINIO_ACCESS_KEY: noteforge
       MINIO_SECRET_KEY: noteforge123
       MINIO_BUCKET: noteforge-attachments
-      CORS_ALLOWED_ORIGINS: http://localhost:1420,tauri://localhost
+      CORS_ALLOWED_ORIGINS: http://localhost:1420,tauri://localhost,http://localhost:3000
     ports:
       - "8081:8081"
     depends_on:
@@ -87,11 +89,7 @@ services:
     restart: unless-stopped
     networks:
       - noteforge-net
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *logging
 
   # === user-service ===
   user-service:
@@ -99,20 +97,16 @@ services:
       context: ../backend
       dockerfile: user-service/Dockerfile
     image: noteforge/user-service:latest
-    container_name: noteforge-user-service-prod
-    command: []
+    container_name: noteforge-user-service
     environment:
       <<: *shared-env
       SPRING_PROFILES_ACTIVE: prod
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
+      SERVER_PORT: 8082
     ports:
       - "8082:8082"
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
-        condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8082/actuator/health"]
       interval: 30s
@@ -122,11 +116,7 @@ services:
     restart: unless-stopped
     networks:
       - noteforge-net
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *logging
 
   # === ai-service ===
   ai-service:
@@ -134,11 +124,11 @@ services:
       context: ../backend
       dockerfile: ai-service/Dockerfile
     image: noteforge/ai-service:latest
-    container_name: noteforge-ai-service-prod
-    command: []
+    container_name: noteforge-ai-service
     environment:
       <<: *shared-env
       SPRING_PROFILES_ACTIVE: prod
+      SERVER_PORT: 8083
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
       OPENAI_ENDPOINT: ${OPENAI_ENDPOINT:-https://api.openai.com/v1}
@@ -157,8 +147,4 @@ services:
     restart: unless-stopped
     networks:
       - noteforge-net
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *logging
