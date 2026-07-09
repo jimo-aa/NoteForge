@@ -10,23 +10,55 @@ import org.springframework.stereotype.Service;
 
 import java.sql.ResultSet;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Hybrid search service combining vector similarity (pgvector) with BM25 full-text search.
+ * Hybrid search service combining vector similarity (BM25) full-text search.
  * Uses the existing embedding infrastructure to enable semantic search across notes.
  */
 @Service
 public class AiSearchService {
     private static final Logger log = LoggerFactory.getLogger(AiSearchService.class);
 
+    private static final int EMBED_CACHE_MAX = 256;
+    private static final int RRF_K = 60;
+
     private final LlmClient llmClient;
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
+
+    /** LRU-like query embedding cache (query text → embedding vector). */
+    private final Map<String, float[]> embedCache = new ConcurrentHashMap<>();
 
     public AiSearchService(LlmClient llmClient, JdbcTemplate jdbcTemplate, ObjectMapper objectMapper) {
         this.llmClient = llmClient;
         this.jdbcTemplate = jdbcTemplate;
         this.objectMapper = objectMapper;
+    }
+
+    /**
+     * Clear the query embedding cache (useful for testing or when model changes).
+     */
+    public void clearEmbeddingCache() {
+        embedCache.clear();
+        log.info("Query embedding cache cleared");
+    }
+
+    /**
+     * Get embedding from cache or compute via LLM client.
+     */
+    private float[] getOrEmbed(String query) {
+        // Evict oldest if at capacity
+        if (embedCache.size() >= EMBED_CACHE_MAX) {
+            // Simple eviction: clear all (acceptable for MVP)
+            embedCache.clear();
+            log.debug("Embedding cache full, cleared");
+        }
+        return embedCache.computeIfAbsent(query, q -> {
+            float[] emb = llmClient.embed(q);
+            log.debug("Computed embedding for query (length={})", emb.length);
+            return emb;
+        });
     }
 
     /**
@@ -82,40 +114,57 @@ public class AiSearchService {
     }
 
     /**
+     * Result holder with total count for paginated search.
+     */
+    public static class SearchResultWithTotal {
+        public List<Map<String, Object>> results;
+        public int total;
+
+        public SearchResultWithTotal(List<Map<String, Object>> results, int total) {
+            this.results = results;
+            this.total = total;
+        }
+    }
+
+    /**
      * Perform hybrid search combining vector similarity and full-text.
      *
      * @param query     Search query text
      * @param mode      Search mode: "semantic", "fulltext", or "hybrid"
      * @param limit     Max results
      * @param offset    Pagination offset
-     * @return List of search results with scores
+     * @return SearchResultWithTotal with results and accurate total count
      */
-    public List<Map<String, Object>> search(String query, String mode, int limit, int offset) {
-        if (query == null || query.isBlank()) return List.of();
-
-        List<Map<String, Object>> results = new ArrayList<>();
+    public SearchResultWithTotal search(String query, String mode, int limit, int offset) {
+        if (query == null || query.isBlank()) return new SearchResultWithTotal(List.of(), 0);
 
         try {
-            switch (mode != null ? mode : "hybrid") {
-                case "semantic" -> results = semanticSearch(query, limit, offset);
-                case "fulltext" -> results = fulltextSearch(query, limit, offset);
-                default -> results = hybridSearch(query, limit, offset);
-            }
+            return switch (mode != null ? mode : "hybrid") {
+                case "semantic" -> semanticSearch(query, limit, offset);
+                case "fulltext" -> fulltextSearch(query, limit, offset);
+                default -> hybridSearch(query, limit, offset);
+            };
         } catch (Exception e) {
             log.error("Search failed: {}", e.getMessage());
+            return new SearchResultWithTotal(List.of(), 0);
         }
-
-        return results;
     }
 
     /**
      * Pure vector similarity search using pgvector.
      */
-    private List<Map<String, Object>> semanticSearch(String query, int limit, int offset) {
-        float[] queryEmbedding = llmClient.embed(query);
-        if (queryEmbedding.length == 0) return List.of();
+    private SearchResultWithTotal semanticSearch(String query, int limit, int offset) {
+        float[] queryEmbedding = getOrEmbed(query);
+        if (queryEmbedding.length == 0) return new SearchResultWithTotal(List.of(), 0);
 
         String vectorStr = arrayToPgvector(queryEmbedding);
+
+        // Get total count first
+        String countSql = """
+            SELECT COUNT(*) FROM notes 
+            WHERE embedding IS NOT NULL AND is_deleted = 0
+            """;
+        Integer total = jdbcTemplate.queryForObject(countSql, Integer.class);
 
         String sql = """
             SELECT id, title, content_plain, 
@@ -126,7 +175,7 @@ public class AiSearchService {
             LIMIT ? OFFSET ?
             """;
 
-        return jdbcTemplate.query(sql, 
+        List<Map<String, Object>> results = jdbcTemplate.query(sql, 
             new Object[]{vectorStr, limit, offset},
             (ResultSet rs, int rowNum) -> {
                 Map<String, Object> item = new HashMap<>();
@@ -137,18 +186,26 @@ public class AiSearchService {
                 return item;
             }
         );
+        return new SearchResultWithTotal(results, total != null ? total : results.size());
     }
 
     /**
      * PostgreSQL full-text search (tsvector).
      */
-    private List<Map<String, Object>> fulltextSearch(String query, int limit, int offset) {
-        // Use PostgreSQL ts_query for full-text search
+    private SearchResultWithTotal fulltextSearch(String query, int limit, int offset) {
         String tsquery = Arrays.stream(query.toLowerCase().split("\\s+"))
             .filter(w -> w.length() > 1)
             .map(w -> w + ":*")
             .reduce((a, b) -> a + " & " + b)
             .orElse(query);
+
+        // Get total count
+        String countSql = """
+            SELECT COUNT(*) FROM notes
+            WHERE is_deleted = 0
+              AND to_tsvector('simple', coalesce(title,'') || ' ' || coalesce(content_plain,'')) @@ to_tsquery('simple', ?)
+            """;
+        Integer total = jdbcTemplate.queryForObject(countSql, Integer.class, tsquery);
 
         String sql = """
             SELECT id, title, content_plain,
@@ -161,7 +218,7 @@ public class AiSearchService {
             LIMIT ? OFFSET ?
             """;
 
-        return jdbcTemplate.query(sql,
+        List<Map<String, Object>> results = jdbcTemplate.query(sql,
             new Object[]{tsquery, tsquery, limit, offset},
             (ResultSet rs, int rowNum) -> {
                 Map<String, Object> item = new HashMap<>();
@@ -172,54 +229,64 @@ public class AiSearchService {
                 return item;
             }
         );
+        return new SearchResultWithTotal(results, total != null ? total : results.size());
     }
 
     /**
-     * Hybrid search: combines vector similarity and full-text scores.
-     * Simple approach: run both searches and merge results.
+     * Hybrid search using Reciprocal Rank Fusion (RRF).
+     * Combines semantic and full-text rankings instead of raw score weighting.
      */
-    private List<Map<String, Object>> hybridSearch(String query, int limit, int offset) {
-        Map<String, Map<String, Object>> merged = new LinkedHashMap<>();
-        double semanticWeight = 0.6;
-        double fulltextWeight = 0.4;
+    private SearchResultWithTotal hybridSearch(String query, int limit, int offset) {
+        // Fetch full result sets (no pagination yet — we need all for RRF merge)
+        SearchResultWithTotal semanticResult = semanticSearch(query, Math.max(limit, 20) + offset, 0);
+        SearchResultWithTotal fulltextResult = fulltextSearch(query, Math.max(limit, 20) + offset, 0);
 
-        // Get semantic results
-        List<Map<String, Object>> semanticResults = semanticSearch(query, limit + offset, 0);
+        List<Map<String, Object>> semanticResults = semanticResult.results;
+        List<Map<String, Object>> fulltextResults = fulltextResult.results;
+
+        // RRF: score = sum of 1/(k + rank(i)) for each result list
+        Map<String, Map<String, Object>> merged = new LinkedHashMap<>();
+
+        int rank = 1;
         for (Map<String, Object> item : semanticResults) {
             String noteId = (String) item.get("noteId");
-            item.put("semanticScore", item.get("score"));
-            item.put("fulltextScore", 0.0);
-            item.put("score", (Double) item.get("score") * semanticWeight);
+            item.put("rrfScore", 1.0 / (RRF_K + rank));
+            item.put("semanticRank", rank);
             merged.put(noteId, item);
+            rank++;
         }
 
-        // Get full-text results and merge
-        List<Map<String, Object>> fulltextResults = fulltextSearch(query, limit + offset, 0);
+        rank = 1;
         for (Map<String, Object> item : fulltextResults) {
             String noteId = (String) item.get("noteId");
-            double ftScore = (Double) item.get("score");
+            double rrfContribution = 1.0 / (RRF_K + rank);
             if (merged.containsKey(noteId)) {
                 Map<String, Object> existing = merged.get(noteId);
-                existing.put("fulltextScore", ftScore);
-                double semScore = (Double) existing.getOrDefault("semanticScore", 0.0);
-                existing.put("score", semScore * semanticWeight + ftScore * fulltextWeight);
+                double existingRrf = (Double) existing.getOrDefault("rrfScore", 0.0);
+                existing.put("rrfScore", existingRrf + rrfContribution);
+                existing.put("fulltextRank", rank);
+                existing.put("score", existingRrf + rrfContribution);
             } else {
-                item.put("semanticScore", 0.0);
-                item.put("fulltextScore", ftScore);
-                item.put("score", ftScore * fulltextWeight);
+                item.put("rrfScore", rrfContribution);
+                item.put("semanticRank", 0);
+                item.put("score", rrfContribution);
                 merged.put(noteId, item);
             }
+            rank++;
         }
 
-        // Sort by combined score descending
+        // Sort by RRF score descending
         List<Map<String, Object>> sorted = new ArrayList<>(merged.values());
-        sorted.sort((a, b) -> Double.compare((Double) b.get("score"), (Double) a.get("score")));
+        sorted.sort((a, b) -> Double.compare((Double) b.get("rrfScore"), (Double) a.get("rrfScore")));
+
+        int total = sorted.size();
+        // Also use the larger of the two totals as the best estimate
+        int estimatedTotal = Math.max(semanticResult.total, fulltextResult.total);
 
         // Apply pagination
-        int total = sorted.size();
         int from = Math.min(offset, total);
         int to = Math.min(offset + limit, total);
-        return sorted.subList(from, to);
+        return new SearchResultWithTotal(sorted.subList(from, to), estimatedTotal);
     }
 
     /**

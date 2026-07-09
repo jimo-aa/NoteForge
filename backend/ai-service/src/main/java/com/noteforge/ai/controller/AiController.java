@@ -155,8 +155,8 @@ public class AiController {
             return ResponseEntity.ok(Map.of("code", 0, "data", Map.of("results", List.of(), "total", 0)));
         }
 
-        List<Map<String, Object>> results = searchService.search(query, mode, limit, offset);
-        return ResponseEntity.ok(Map.of("code", 0, "data", Map.of("results", results, "total", results.size())));
+        AiSearchService.SearchResultWithTotal searchResult = searchService.search(query, mode, limit, offset);
+        return ResponseEntity.ok(Map.of("code", 0, "data", Map.of("results", searchResult.results, "total", searchResult.total)));
     }
 
     /**
