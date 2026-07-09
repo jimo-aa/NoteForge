@@ -11,6 +11,7 @@ import { AuthModal } from '@/components/Modals/AuthModal';
 import { formatTime } from '@/utils/markdown';
 import { SYNTAX_DEMO_ID } from '@/stores/useNoteStore';
 import { tauriInvoke } from '@/utils/invoke';
+import { ScannedTree } from '@/components/Sidebar/ScannedTree';
 import type { Note } from '@/types';
 
 interface SidebarProps {
@@ -50,53 +51,58 @@ export function Sidebar({ onNewNote, onNewNotebook, onManage, onDraftRecovery, o
   });
   const [storageRoots, setStorageRoots] = useState<string[]>([]);
   const [treeRoots, setTreeRoots] = useState<TreeRootNode[]>([]);
+  // Separate map for notebook expanded state so it persists across tree rebuilds
+  const [expandedNotebooks, setExpandedNotebooks] = useState<Record<string, boolean>>({});
 
-  // Fetch storage roots on mount
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const roots = await tauriInvoke<string[]>('list_storage_roots');
-        if (!cancelled) setStorageRoots(roots ?? []);
-      } catch { /* storage not configured */ }
-    })();
-    return () => { cancelled = true; };
+  // Fetch storage roots on mount, and re-fetch when ManageModal changes them
+  const fetchStorageRoots = useCallback(async () => {
+    try {
+      const roots = await tauriInvoke<string[]>('list_storage_roots');
+      setStorageRoots(roots ?? []);
+    } catch { /* storage not configured */ }
   }, []);
+
+  useEffect(() => {
+    void fetchStorageRoots();
+    // Listen for storage changes from ManageModal
+    const handler = () => { void fetchStorageRoots(); };
+    window.addEventListener('noteforge:storage-changed', handler);
+    return () => {
+      window.removeEventListener('noteforge:storage-changed', handler);
+    };
+  }, [fetchStorageRoots]);
 
   // Build tree from filteredNotes + notebooks whenever either changes
   const visibleNotes = useMemo(() => filteredNotes.slice(0, 30), [filteredNotes]);
 
-  const toggleTreeRoot = useCallback((index: number) => {
-    setTreeRoots(prev => prev.map((r, i) => i === index ? { ...r, expanded: !r.expanded } : r));
+  const toggleTreeRoot = useCallback(() => {
+    setTreeRoots(prev => prev.map(r => ({ ...r, expanded: !r.expanded })));
   }, []);
 
-  const toggleTreeNotebook = useCallback((rootIdx: number, nbIdx: number) => {
-    setTreeRoots(prev => prev.map((r, ri) => ri !== rootIdx ? r : {
-      ...r,
-      notebooks: r.notebooks.map((nb, ni) => ni === nbIdx ? { ...nb, expanded: !nb.expanded } : nb),
-    }));
+  const toggleTreeNotebook = useCallback((notebookId: string) => {
+    setExpandedNotebooks(prev => ({ ...prev, [notebookId]: !prev[notebookId] }));
   }, []);
 
   useEffect(() => {
     if (storageRoots.length === 0) return;
-    const tree: TreeRootNode[] = storageRoots.map(rootPath => {
-      const rootName = rootPath.split(/[/\\]/).filter(Boolean).pop() || rootPath;
-      // Find notebooks that have notes in this root (match by notebookId-derived path)
-      const noteBooks = notebooks.filter(nb => nb.id !== 'all');
-      const nbNodes: TreeNotebookNode[] = noteBooks.map(nb => {
-        const noteList = visibleNotes.filter(n => (n.meta.notebookId || 'default') === nb.id);
-        return {
-          id: nb.id,
-          name: nb.name,
-          icon: nb.icon || '📓',
-          notes: noteList,
-          expanded: activeNotebook === nb.id,
-        };
-      }).filter(nb => nb.notes.length > 0);
-      return { path: rootPath, name: rootName, notebooks: nbNodes, expanded: true };
-    }).filter(r => r.notebooks.length > 0);
-    setTreeRoots(tree);
-  }, [storageRoots, notebooks, visibleNotes, activeNotebook]);
+    const primaryRoot = storageRoots[0]!;
+    const rootName = primaryRoot.split(/[/\\]/).filter(Boolean).pop() || primaryRoot;
+    const noteBooks = notebooks.filter(nb => nb.id !== 'all');
+    const nbNodes: TreeNotebookNode[] = noteBooks.map(nb => {
+      const noteList = filteredNotes.filter(n => (n.meta.notebookId || 'default') === nb.id);
+      return {
+        id: nb.id,
+        name: nb.name,
+        icon: nb.icon || '📓',
+        notes: noteList,
+        // Preserve user's toggled expanded state; fall back to open if active
+        expanded: nb.id in expandedNotebooks ? expandedNotebooks[nb.id]! : activeNotebook === nb.id,
+      };
+    }).filter(nb => nb.notes.length > 0);
+    setTreeRoots(nbNodes.length > 0
+      ? [{ path: primaryRoot, name: rootName, notebooks: nbNodes, expanded: true }]
+      : []);
+  }, [storageRoots, notebooks, filteredNotes, activeNotebook, expandedNotebooks]);
 
   const toggleSection = useCallback((section: CollapsibleSection) => {
     setCollapsedSections((prev) => ({ ...prev, [section]: !prev[section] }));
@@ -248,17 +254,17 @@ export function Sidebar({ onNewNote, onNewNotebook, onManage, onDraftRecovery, o
 
           {/* ── Tree: notes organized under storage roots → notebooks ── */}
           {treeRoots.length > 0 ? (
-            treeRoots.map((root, ri) => (
+            treeRoots.map((root) => (
               <div key={root.path} className="storage-tree-root" style={{ marginBottom: 4 }}>
-                <button className="storage-tree-toggle" onClick={() => toggleTreeRoot(ri)}>
+                <button className="storage-tree-toggle" onClick={toggleTreeRoot}>
                   <span className="storage-tree-arrow">{root.expanded ? '▼' : '▶'}</span>
                   <span className="storage-tree-folder">📁</span>
                   <span className="storage-tree-name">{root.name}</span>
                   <span className="storage-tree-count">{root.notebooks.reduce((s, nb) => s + nb.notes.length, 0)}</span>
                 </button>
-                {root.expanded && root.notebooks.map((nb, ni) => (
+                {root.expanded && root.notebooks.map((nb) => (
                   <div key={nb.id} style={{ paddingLeft: 12 }}>
-                    <button className="storage-tree-toggle" onClick={() => toggleTreeNotebook(ri, ni)}>
+                    <button className="storage-tree-toggle" onClick={() => toggleTreeNotebook(nb.id)}>
                       <span className="storage-tree-arrow" style={{ fontSize: 7 }}>{nb.expanded ? '▼' : '▶'}</span>
                       <span className="storage-tree-folder" style={{ fontSize: 12 }}>{nb.icon}</span>
                       <span className="storage-tree-name" style={{ fontSize: 11 }}>{nb.name}</span>
@@ -312,6 +318,18 @@ export function Sidebar({ onNewNote, onNewNotebook, onManage, onDraftRecovery, o
                 </div>
               </button>
             ))
+          )}
+
+          {/* ── Imported directories (extra storage roots) ── */}
+          {storageRoots.length > 1 && (
+            <div className="scanned-section" style={{ marginTop: 8, borderTop: '1px solid var(--border)', paddingTop: 8 }}>
+              <div className="section-heading static" style={{ marginBottom: 4 }}>
+                <span>📂 {t('sidebar.importedDirs')}</span>
+              </div>
+              {storageRoots.slice(1).map((rootPath) => (
+                <ScannedTree key={rootPath} rootPath={rootPath} />
+              ))}
+            </div>
           )}
         </div>
       </section>

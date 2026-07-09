@@ -92,6 +92,12 @@ interface NoteState {
   selectedNoteIds: string[];
   recoveryDrafts: Array<{ id: string; title: string; content: string; updatedAt: number }> | null;
 
+  // External file viewing (scanned .md files from extra roots)
+  externalFile: { title: string; content: string; path: string } | null;
+
+  // Recently viewed timestamps (only used when filter='recent', separate from updatedAt)
+  recentlyViewed: Record<string, number>;
+
   // Computed properties (kept in sync via subscribe)
   tags: string[];
   totalCount: number;
@@ -172,6 +178,11 @@ interface NoteActions {
 
   // Lifecycle
   initialize: () => Promise<void>;
+
+  // External file viewing (scanned .md files from extra roots)
+  externalFile: { title: string; content: string; path: string } | null;
+  openExternalFile: (path: string) => Promise<void>;
+  closeExternalFile: () => void;
 }
 
 export type NoteStore = NoteState & NoteActions;
@@ -215,7 +226,7 @@ async function startSyncCycle(applyPull: (pull: SyncPullResponse) => void) {
 
 // ── Computed selectors (convenience hooks) ──
 
-function computeFilteredNotes(notes: Note[], activeNotebook: string, currentFilter: NoteFilter, activeTags: string[], sortBy: SortOption): Note[] {
+function computeFilteredNotes(notes: Note[], activeNotebook: string, currentFilter: NoteFilter, activeTags: string[], sortBy: SortOption, recentlyViewed: Record<string, number> = {}): Note[] {
   const filtered = notes.filter((n) => {
     if (activeNotebook !== 'all') {
       const noteNotebookId = n.meta.notebookId || 'default';
@@ -228,11 +239,20 @@ function computeFilteredNotes(notes: Note[], activeNotebook: string, currentFilt
   });
 
   const copy = [...filtered];
-  switch (sortBy) {
-    case 'updated': copy.sort((a, b) => b.meta.updatedAt - a.meta.updatedAt); break;
-    case 'created': copy.sort((a, b) => b.meta.createdAt - a.meta.createdAt); break;
-    case 'title': copy.sort((a, b) => a.meta.title.localeCompare(b.meta.title)); break;
-    case 'words': copy.sort((a, b) => b.meta.wordCount - a.meta.wordCount); break;
+  // 当筛选为"最近查看"时，按独立 recentlyViewed 字段排序，不污染 updatedAt
+  if (currentFilter === 'recent' && Object.keys(recentlyViewed).length > 0) {
+    copy.sort((a, b) => {
+      const aTime = recentlyViewed[a.meta.id] ?? a.meta.updatedAt;
+      const bTime = recentlyViewed[b.meta.id] ?? b.meta.updatedAt;
+      return bTime - aTime;
+    });
+  } else {
+    switch (sortBy) {
+      case 'updated': copy.sort((a, b) => b.meta.updatedAt - a.meta.updatedAt); break;
+      case 'created': copy.sort((a, b) => b.meta.createdAt - a.meta.createdAt); break;
+      case 'title': copy.sort((a, b) => a.meta.title.localeCompare(b.meta.title)); break;
+      case 'words': copy.sort((a, b) => b.meta.wordCount - a.meta.wordCount); break;
+    }
   }
   return copy;
 }
@@ -276,6 +296,8 @@ export const useNoteStore = create<NoteStore>()((set, get) => ({
   totalCount: 0,
   favoriteCount: 0,
   searchResultCount: null,
+  externalFile: null,
+  recentlyViewed: {},
 
   // ── Actions ──
 
@@ -340,7 +362,29 @@ export const useNoteStore = create<NoteStore>()((set, get) => ({
         safeWrite(autosaveKey(state.currentNoteId), { content: prev.content, title: prev.meta.title, updatedAt: Date.now() });
       }
     }
-    set({ currentNoteId: id });
+    set({ currentNoteId: id, externalFile: null });
+    // 仅当"最近查看"筛选激活时，记录查看时间到独立字段（不污染 updatedAt）
+    if (state.currentFilter === 'recent') {
+      set((s) => ({ recentlyViewed: { ...s.recentlyViewed, [id]: Date.now() } }));
+    }
+  },
+
+  openExternalFile: async (path) => {
+    try {
+      const content = await tauriInvoke<string>('read_note_file', { path });
+      if (content == null) return;
+      // Extract title from first # heading or filename
+      const titleMatch = content.match(/^#\s+(.+)/m);
+      const title = titleMatch
+        ? titleMatch[1]!.trim()
+        : path.split(/[/\\]/).pop()?.replace(/\.md$/i, '') || '未命名笔记';
+      set({ externalFile: { title, content, path }, currentNoteId: '' });
+    } catch (err) {
+      console.error('[openExternalFile] Failed to read file:', err);
+    }
+  },
+  closeExternalFile: () => {
+    set({ externalFile: null });
   },
 
   createNote: async (title, content, notebookId, tags) => {
@@ -847,7 +891,7 @@ useNoteStore.subscribe(() => {
   isComputingDerived = true;
   try {
     const s = useNoteStore.getState();
-    const filtered = computeFilteredNotes(s.notes, s.activeNotebook, s.currentFilter, s.activeTags, s.sortBy);
+    const filtered = computeFilteredNotes(s.notes, s.activeNotebook, s.currentFilter, s.activeTags, s.sortBy, s.recentlyViewed);
     const current = s.currentNoteId === SYNTAX_DEMO_ID
       ? getSyntaxDemoNote()
       : s.notes.find((n) => n.meta.id === s.currentNoteId) || null;

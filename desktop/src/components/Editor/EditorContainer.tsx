@@ -34,6 +34,7 @@ export function EditorContainer() {
   const {
     notes,
     currentNote,
+    externalFile,
     updateNote,
     toggleFavorite,
     togglePin,
@@ -48,13 +49,18 @@ export function EditorContainer() {
     saveCursor,
     loadCursor,
     selectNote,
+    closeExternalFile,
     searchQuery,
     setSearchQuery,
     saveStatus,
     lastSavedAt,
   } = useStore();
 
-  const note = currentNote;
+  // If an external file is open, use that instead of the current note
+  const isExternalFile = externalFile !== null;
+  const note = isExternalFile
+    ? { meta: { id: externalFile.path, title: externalFile.title, tags: [] as string[], isPinned: false, isFavorite: false, wordCount: 0, version: 1, createdAt: 0, updatedAt: 0, notebookId: null }, content: externalFile.content, contentPlain: '' }
+    : currentNote;
   const editorRef = useRef<EditorHandle>(null);
   const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSavedSnapshotRef = useRef('');
@@ -615,20 +621,34 @@ export function EditorContainer() {
         onOpenVersionHistory={() => window.dispatchEvent(new CustomEvent('noteforge:open-version-history'))}
       />
 
+      {/* External file banner */}
+      {isExternalFile && externalFile && (
+        <div className="external-file-banner">
+          <span className="external-file-banner__icon">📄</span>
+          <span className="external-file-banner__label">{t('editor.externalFileLabel')}</span>
+          <span className="external-file-banner__path" title={externalFile.path}>{externalFile.path}</span>
+          <button className="external-file-banner__close" onClick={closeExternalFile} title={t('common.close')}>
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* Document header */}
-      <DocumentHeader
-        title={meta.title}
-        isFavorite={meta.isFavorite ?? false}
-        isPinned={meta.isPinned ?? false}
-        onTitleChange={(title) => updateNote(meta.id, { title })}
-        onToggleFavorite={() => toggleFavorite(meta.id)}
-        onTogglePin={() => togglePin(meta.id)}
-        onOpenProperties={() => setIsPropertiesOpen(true)}
-        onClearDraft={() => { clearDraft(meta.id); showToast('success', t('note.draftCleared')); }}
-        onExport={exportedFile}
-        onToggleAttachment={() => setAttachmentPanelOpen((v) => !v)}
-        isAttachmentOpen={attachmentPanelOpen}
-      />
+      {!isExternalFile && (
+        <DocumentHeader
+          title={meta.title}
+          isFavorite={meta.isFavorite ?? false}
+          isPinned={meta.isPinned ?? false}
+          onTitleChange={(title) => updateNote(meta.id, { title })}
+          onToggleFavorite={() => toggleFavorite(meta.id)}
+          onTogglePin={() => togglePin(meta.id)}
+          onOpenProperties={() => setIsPropertiesOpen(true)}
+          onClearDraft={() => { clearDraft(meta.id); showToast('success', t('note.draftCleared')); }}
+          onExport={exportedFile}
+          onToggleAttachment={() => setAttachmentPanelOpen((v) => !v)}
+          isAttachmentOpen={attachmentPanelOpen}
+        />
+      )}
 
       {/* Toolbar */}
       <EditorToolbar

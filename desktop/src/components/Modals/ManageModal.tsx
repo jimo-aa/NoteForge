@@ -58,9 +58,17 @@ export function ManageModal({ open, onClose }: { open: boolean; onClose: () => v
         const { invoke } = await import('@tauri-apps/api/core');
         const roots = await invoke<string[]>('list_storage_roots');
         setStorageRoots(roots ?? []);
+        // Populate extraDirs from backend so they are shown correctly on reopen
+        setExtraDirs(roots ? roots.slice(1) : []);
       } catch { /* tauri cmd not yet available */ }
     })();
   }, [open, tab]);
+
+  const fireStorageChanged = () => {
+    try {
+      window.dispatchEvent(new CustomEvent('noteforge:storage-changed'));
+    } catch { /* ignore */ }
+  };
 
   const handleSelectPrimaryDir = async () => {
     try {
@@ -72,6 +80,7 @@ export function ManageModal({ open, onClose }: { open: boolean; onClose: () => v
         await invoke('set_primary_root', { path });
         setStorageRoots([path, ...storageRoots.slice(1)]);
         showToast('success', t('manage.storageRootChanged'));
+        fireStorageChanged();
       }
     } catch { /* */ }
   };
@@ -86,6 +95,7 @@ export function ManageModal({ open, onClose }: { open: boolean; onClose: () => v
         await invoke('add_extra_root', { path });
         setExtraDirs([...extraDirs, path]);
         showToast('success', t('manage.storageDirAdded'));
+        fireStorageChanged();
       }
     } catch { /* */ }
   };
@@ -96,6 +106,7 @@ export function ManageModal({ open, onClose }: { open: boolean; onClose: () => v
       await invoke('remove_extra_root', { path });
       setExtraDirs(extraDirs.filter(d => d !== path));
       showToast('success', t('manage.storageDirRemoved'));
+      fireStorageChanged();
     } catch { /* */ }
   };
 

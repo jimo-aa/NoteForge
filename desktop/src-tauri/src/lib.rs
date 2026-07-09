@@ -89,6 +89,7 @@ pub fn run() {
             commands::add_extra_root,
             commands::remove_extra_root,
             commands::scan_dir_for_notes,
+            commands::scan_dir_recursive,
             // .md File Operations
             commands::write_note_file,
             commands::read_note_file,

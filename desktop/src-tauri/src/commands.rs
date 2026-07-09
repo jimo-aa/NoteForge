@@ -539,6 +539,12 @@ pub fn scan_dir_for_notes(state: State<'_, AppState>, dir_path: String) -> Resul
     core.storage.scan_directory_for_notes(&dir_path).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+pub fn scan_dir_recursive(state: State<'_, AppState>, dir_path: String) -> Result<Vec<noteforge_core::types::ScannedFileTree>, String> {
+    let core = state.core.lock().map_err(|e| e.to_string())?;
+    core.storage.scan_directory_recursive(&dir_path).map_err(|e| e.to_string())
+}
+
 // ============================================================
 // .md 文件读写操作
 // ============================================================

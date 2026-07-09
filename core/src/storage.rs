@@ -134,16 +134,20 @@ impl LocalStorage {
     // 存储目录管理 (storage roots)
     // ============================================================
 
-    /// 获取所有已配置的存储目录根路径
+    /// 获取所有已配置的存储目录根路径（已去重）
     pub fn get_storage_roots(&self) -> Result<Vec<String>, CoreError> {
         let primary = self.get_primary_root()?;
         let extras = self.list_config_prefix("storage:extra_root:")?;
+        let mut seen = std::collections::HashSet::new();
         let mut roots = Vec::new();
         if let Some(p) = primary {
+            seen.insert(p.clone());
             roots.push(p);
         }
         for (_, path) in extras {
-            roots.push(path);
+            if seen.insert(path.clone()) {
+                roots.push(path);
+            }
         }
         Ok(roots)
     }
@@ -160,7 +164,19 @@ impl LocalStorage {
 
     /// 添加一个额外的存储目录
     pub fn add_extra_root(&self, path: &str) -> Result<(), CoreError> {
+        // 检查是否已存在相同的路径（避免重复）
         let existing = self.list_config_prefix("storage:extra_root:")?;
+        for (_, val) in &existing {
+            if val == path {
+                return Ok(()); // 已存在，静默跳过
+            }
+        }
+        // 检查是否与主存储目录相同
+        if let Some(primary) = self.get_primary_root()? {
+            if primary == path {
+                return Ok(()); // 与主目录相同，静默跳过
+            }
+        }
         let next_index = existing.len();
         let key = format!("storage:extra_root:{}", next_index);
         self.set_config(&key, path)
@@ -255,6 +271,83 @@ impl LocalStorage {
         notes.sort_by(|a, b| b.modified_at.cmp(&a.modified_at));
 
         Ok(notes)
+    }
+
+    /// 递归扫描目录下的所有 .md 文件，返回树形结构
+    pub fn scan_directory_recursive(&self, dir_path: &str) -> Result<Vec<types::ScannedFileTree>, CoreError> {
+        let dir = fs::read_dir(dir_path)?;
+        let mut entries: Vec<types::ScannedFileTree> = Vec::new();
+
+        for entry in dir {
+            let entry = entry?;
+            let path = entry.path();
+            let name = path.file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or("")
+                .to_string();
+
+            if path.is_dir() {
+                // 递归扫描子目录
+                let children = self.scan_directory_recursive(&path.to_string_lossy())?;
+                // 跳过空目录
+                if children.is_empty() {
+                    continue;
+                }
+                entries.push(types::ScannedFileTree {
+                    name,
+                    path: path.to_string_lossy().to_string(),
+                    is_dir: true,
+                    children,
+                    title: String::new(),
+                    modified_at: 0,
+                });
+            } else if path.extension().and_then(|e| e.to_str()) == Some("md") {
+                let metadata = fs::metadata(&path)?;
+                let modified_at = metadata
+                    .modified()
+                    .ok()
+                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                    .map(|d| d.as_millis() as u64)
+                    .unwrap_or(0);
+
+                // 读取文件提取第一个 # 标题行作为标题
+                let content = fs::read_to_string(&path).unwrap_or_default();
+                let title = content
+                    .lines()
+                    .find(|line| line.trim().starts_with("# ") || line.trim().starts_with("#　"))
+                    .map(|line| {
+                        let trimmed = line.trim();
+                        let after_hash = &trimmed[trimmed.find(|c: char| c != '#').unwrap_or(1)..];
+                        after_hash.trim().to_string()
+                    })
+                    .unwrap_or_else(|| {
+                        path.file_stem()
+                            .and_then(|s| s.to_str())
+                            .unwrap_or("未命名")
+                            .to_string()
+                    });
+
+                entries.push(types::ScannedFileTree {
+                    name: name.strip_suffix(".md").unwrap_or(&name).to_string(),
+                    path: path.to_string_lossy().to_string(),
+                    is_dir: false,
+                    children: Vec::new(),
+                    title,
+                    modified_at,
+                });
+            }
+        }
+
+        // 排序：目录在前，文件在后，按名称字母序
+        entries.sort_by(|a, b| {
+            if a.is_dir != b.is_dir {
+                b.is_dir.cmp(&a.is_dir) // 目录优先
+            } else {
+                a.name.to_lowercase().cmp(&b.name.to_lowercase())
+            }
+        });
+
+        Ok(entries)
     }
 
     /// 初始化数据库表

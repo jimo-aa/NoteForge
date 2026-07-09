@@ -249,14 +249,19 @@ export function NewNoteModal({ open, notebooks = [], onClose, onCreate }: NewNot
   const [storageRoots, setStorageRoots] = useState<string[]>([]);
   const [selectedRoot, setSelectedRoot] = useState('');
 
-  // Fetch storage roots on open
+  // Fetch storage roots on open (deduplicated)
   useEffect(() => {
     if (!open) return;
     void (async () => {
       const roots = await tauriInvoke<string[]>('list_storage_roots');
       if (roots && roots.length > 0) {
-        setStorageRoots(roots);
-        setSelectedRoot(roots[0] ?? '');
+        const unique = [...new Set(roots)];
+        setStorageRoots(unique);
+        // Ensure selectedRoot is always a valid value from the list
+        setSelectedRoot((prev) => (unique.includes(prev) ? prev : unique[0] ?? ''));
+      } else {
+        setStorageRoots([]);
+        setSelectedRoot('');
       }
     })();
   }, [open]);
@@ -388,11 +393,11 @@ export function NewNoteModal({ open, notebooks = [], onClose, onCreate }: NewNot
           </label>
         </div>
 
-        {storageRoots.length > 0 && (
-          <label className="new-note-field new-note-field--full">
-            <span>{t('manage.storageTitle')}</span>
+        <label className="new-note-field new-note-field--full">
+          <span>{t('manage.storageTitle')}</span>
+          {storageRoots.length > 0 ? (
             <select
-              value={selectedRoot}
+              value={selectedRoot || storageRoots[0] || ''}
               onChange={(event) => setSelectedRoot(event.target.value)}
               disabled={isLoading}
             >
@@ -403,8 +408,12 @@ export function NewNoteModal({ open, notebooks = [], onClose, onCreate }: NewNot
                 );
               })}
             </select>
-          </label>
-        )}
+          ) : (
+            <select disabled className="new-note-field-select--disabled">
+              <option>{t('manage.storageNoRoots')}</option>
+            </select>
+          )}
+        </label>
 
         <label className="new-note-field new-note-field--full">
           <span>{t('noteModal.tagsLabel')}</span>

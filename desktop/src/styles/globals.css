@@ -159,7 +159,7 @@ button { cursor: pointer; }
 /* ── Storage directory tree (sidebar) ── */
 .storage-tree-root { display: grid; gap: 1px; }
 .storage-tree-toggle {
-  width: 100%; display: flex; align-items: center; gap: 6px;
+  width: 100%; box-sizing: border-box; display: flex; align-items: center; gap: 6px;
   padding: 5px 8px; border: 0; border-radius: 6px;
   background: transparent; color: var(--text-soft); font-size: 12px; cursor: pointer; text-align: left;
 }
@@ -168,6 +168,20 @@ button { cursor: pointer; }
 .storage-tree-folder { font-size: 14px; flex-shrink: 0; }
 .storage-tree-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
 .storage-tree-count { font-size: 10px; color: var(--text-muted); background: rgba(255,255,255,0.06); padding: 1px 6px; border-radius: 999px; }
+
+/* ── Scanned directory tree (imported extra roots) ── */
+.scanned-section { display: grid; gap: 4px; }
+.scanned-tree-root { display: grid; gap: 1px; }
+.scanned-tree-loading,
+.scanned-tree-error,
+.scanned-tree-empty { font-size: 11px; color: var(--text-muted); padding: 4px 8px; font-style: italic; }
+/* Each nesting level indents children by 16px (no inline paddingLeft needed) */
+.scanned-dir-children { padding-left: 16px; }
+.scanned-file-badge {
+  font-size: 9px; padding: 0 5px; height: 16px; line-height: 16px;
+  border-radius: 999px; background: rgba(106, 99, 255, 0.1); color: var(--accent, #6a63ff);
+  white-space: nowrap; flex-shrink: 0;
+}
 .sidebar-actions .icon-button,
 .new-note-button,
 .new-notebook-button { -webkit-app-region: no-drag; }
@@ -304,6 +318,7 @@ button { cursor: pointer; }
 }
 .sidebar-note {
   width: 100%;
+  box-sizing: border-box;
   border: 1px solid transparent;
   border-radius: 10px;
   padding: 10px 12px;
@@ -3688,6 +3703,32 @@ blockquote blockquote p, .markdown-preview-pane blockquote blockquote p { font-s
   background: rgba(0,0,0,0.5);
   color: rgba(255,255,255,0.9);
 }
+
+/* ── External file banner (scanned .md from extra roots) ── */
+.external-file-banner {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 12px; margin: 0 12px;
+  border-radius: 8px;
+  background: rgba(106, 99, 255, 0.08);
+  border: 1px solid rgba(106, 99, 255, 0.18);
+  font-size: 12px;
+}
+.external-file-banner__icon { font-size: 14px; flex-shrink: 0; }
+.external-file-banner__label {
+  font-weight: 600; color: var(--accent, #6a63ff);
+  white-space: nowrap; flex-shrink: 0;
+}
+.external-file-banner__path {
+  flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--text-muted); font-size: 11px;
+}
+.external-file-banner__close {
+  border: 0; background: transparent; cursor: pointer;
+  color: var(--text-muted); font-size: 14px; padding: 2px 6px;
+  border-radius: 4px; flex-shrink: 0;
+}
+.external-file-banner__close:hover { background: rgba(255,255,255,0.1); color: var(--text); }
 
 /* ── URL Input Modal ── */
 .url-input-modal {

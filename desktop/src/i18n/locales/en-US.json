@@ -35,7 +35,11 @@
     "batchDeleteConfirm": "Delete {{count}} notes?",
     "batchMoveTo": "Move to...",
     "tagInputPlaceholder": "Enter tag name...",
-    "cancel": "✕ Cancel"
+    "cancel": "✕ Cancel",
+    "importedDirs": "Imported Directories",
+    "noMdFiles": "No Markdown files",
+    "scanError": "Failed to scan directory",
+    "fileNote": "File"
   },
   "noteList": {
     "emptyTitle": "No notes yet",
@@ -57,7 +61,8 @@
     "welcomeTitle": "Select a note to start editing",
     "welcomeDesc": "Choose a note from the sidebar, or create a new one.",
     "sourceMode": "Source",
-    "visualMode": "Visual"
+    "visualMode": "Visual",
+    "externalFileLabel": "External File (Read-only)"
   },
   "auth": {
     "login": "Login",
@@ -406,6 +411,7 @@
     "storageSelectDir": "Select Directory",
     "storageAddDir": "Add Directory",
     "storageRemoveDir": "Remove",
+    "storageNoRoots": "Set a storage location first",
     "storageNoExtra": "No additional directories",
     "storageScanning": "Scanning...",
     "storageScannedNotes": "Found {{count}} notes",

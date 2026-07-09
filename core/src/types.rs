@@ -236,6 +236,19 @@ pub struct ScannedNote {
     pub modified_at: u64,
 }
 
+/// 递归扫描得到的文件树节点
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScannedFileTree {
+    pub name: String,
+    pub path: String,
+    pub is_dir: bool,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub children: Vec<ScannedFileTree>,
+    pub title: String,
+    pub modified_at: u64,
+}
+
 /// 获取当前时间戳（毫秒）
 pub fn now_ms() -> u64 {
     std::time::SystemTime::now()

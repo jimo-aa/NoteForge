@@ -35,7 +35,11 @@
     "batchDeleteConfirm": "确认删除 {{count}} 条笔记？",
     "batchMoveTo": "移动到...",
     "tagInputPlaceholder": "输入标签名...",
-    "cancel": "✕ 取消"
+    "cancel": "✕ 取消",
+    "importedDirs": "导入目录",
+    "noMdFiles": "无 Markdown 文件",
+    "scanError": "扫描目录失败",
+    "fileNote": "文件"
   },
   "noteList": {
     "emptyTitle": "暂无笔记",
@@ -57,7 +61,8 @@
     "welcomeTitle": "选择一个笔记来开始编辑",
     "welcomeDesc": "从左侧选择一个笔记，或创建一个新笔记。",
     "sourceMode": "源码模式",
-    "visualMode": "可视化编辑"
+    "visualMode": "可视化编辑",
+    "externalFileLabel": "外部文件（只读）"
   },
   "auth": {
     "login": "登录",
@@ -406,6 +411,7 @@
     "storageSelectDir": "选择目录",
     "storageAddDir": "添加目录",
     "storageRemoveDir": "移除",
+    "storageNoRoots": "请先设置存储位置",
     "storageNoExtra": "暂无额外目录",
     "storageScanning": "扫描中...",
     "storageScannedNotes": "扫描到 {{count}} 篇笔记",
