@@ -493,8 +493,9 @@ impl SearchEngine {
         let title_field = self.schema.get_field("title").unwrap();
         let content_field = self.schema.get_field("content").unwrap();
         let tags_field = self.schema.get_field("tags").unwrap();
-        let updated_at_field = self.schema.get_field("updated_at").unwrap();
-        let id_field = self.schema.get_field("id").unwrap();
+        let _updated_at_field = self.schema.get_field("updated_at").unwrap();
+        let _id_field = self.schema.get_field("id").unwrap();
+        let fields = [title_field, content_field, tags_field];
 
         let tokenized = Self::tokenize_chinese(query_str);
         let words: Vec<&str> = tokenized.split_whitespace().collect();
@@ -502,72 +503,151 @@ impl SearchEngine {
             return Ok(Vec::new());
         }
 
-        let mut subqueries: Vec<(tantivy::query::Occur, Box<dyn tantivy::query::Query>)> = Vec::new();
+        let reader = self.index.reader()?;
+        let searcher = reader.searcher();
+        let query_lower = query_str.to_lowercase();
+
+        // Execute a set of subqueries combined with SHOULD and collect results.
+        let execute = |subqueries: Vec<(tantivy::query::Occur, Box<dyn tantivy::query::Query>)>|
+            -> Result<Vec<(f32, tantivy::DocAddress)>, CoreError>
+        {
+            let bool_q = BooleanQuery::new(subqueries);
+            let docs = searcher.search(&bool_q, &TopDocs::with_limit(limit))?;
+            Ok(docs)
+        };
+
+        // Tier 1: Exact match (TermQuery only)
+        let mut exact_queries: Vec<(tantivy::query::Occur, Box<dyn tantivy::query::Query>)> = Vec::new();
         for word in &words {
-            for field in &[title_field, content_field, tags_field] {
-                subqueries.push((tantivy::query::Occur::Should, Box::new(FuzzyTermQuery::new(
-                    Term::from_field_text(*field, word),
-                    1,
-                    true,
-                ))));
-                subqueries.push((tantivy::query::Occur::Should, Box::new(TermQuery::new(
+            for field in &fields {
+                exact_queries.push((tantivy::query::Occur::Should, Box::new(TermQuery::new(
                     Term::from_field_text(*field, word),
                     tantivy::schema::IndexRecordOption::Basic,
                 ))));
             }
         }
-
+        // Also include parsed query for phrase-level matching
         let query_parser = self.create_query_parser(vec![title_field, content_field, tags_field]);
         if let Ok(parsed) = query_parser.parse_query(&tokenized) {
-            subqueries.push((tantivy::query::Occur::Should, parsed));
+            exact_queries.push((tantivy::query::Occur::Should, parsed));
         }
-
-        let boolean_query = BooleanQuery::new(subqueries);
-
-        let reader = self.index.reader()?;
-        let searcher = reader.searcher();
-
-        let top_docs = searcher.search(&boolean_query, &TopDocs::with_limit(limit))?;
-
-        let query_lower = query_str.to_lowercase();
+        let exact_results = execute(exact_queries)?;
+        let mut seen_ids = std::collections::HashSet::new();
         let mut results = Vec::new();
 
-        for (score, addr) in top_docs {
-            let retrieved: tantivy::TantivyDocument = searcher.doc(addr)?;
-            let id = retrieved
-                .get_first(id_field)
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string();
-            let title = retrieved
-                .get_first(title_field)
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string();
-            let content = retrieved
-                .get_first(content_field)
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string();
-            let updated_at = retrieved
-                .get_first(updated_at_field)
-                .and_then(|v| v.as_u64())
-                .unwrap_or_else(now_ms);
-
-            let snippet = self.extract_snippet(&content, &query_lower, 60);
-
-            results.push(SearchResult {
-                note_id: id,
-                title,
-                snippet,
-                score,
-                updated_at,
-                total_hits: 0,
-            });
+        for (score, addr) in &exact_results {
+            let (id, title, content, updated_at) = self.read_doc(&searcher, *addr)?;
+            if seen_ids.insert(id.clone()) {
+                results.push(SearchResult {
+                    note_id: id,
+                    title,
+                    snippet: self.extract_snippet(&content, &query_lower, 60),
+                    score: *score,
+                    updated_at,
+                    total_hits: 0,
+                });
+            }
+        }
+        if results.len() >= limit {
+            info!("🔍 模糊搜索(精确匹配): '{}' - {} 条结果", query_str, results.len());
+            return Ok(results);
         }
 
-        info!("🔍 模糊搜索完成: '{}' - {} 条结果", query_str, results.len());
+        // Tier 2: Use parsed query which handles general/fuzzy matching
+        let mut parsed_queries: Vec<(tantivy::query::Occur, Box<dyn tantivy::query::Query>)> = Vec::new();
+        let query_parser2 = self.create_query_parser(vec![title_field, content_field, tags_field]);
+        if let Ok(parsed) = query_parser2.parse_query(&tokenized) {
+            parsed_queries.push((tantivy::query::Occur::Should, parsed));
+        }
+        let parsed_results = execute(parsed_queries)?;
+
+        for (score, addr) in &parsed_results {
+            let (id, title, content, updated_at) = self.read_doc(&searcher, *addr)?;
+            if seen_ids.insert(id.clone()) {
+                results.push(SearchResult {
+                    note_id: id,
+                    title,
+                    snippet: self.extract_snippet(&content, &query_lower, 60),
+                    score: *score,
+                    updated_at,
+                    total_hits: 0,
+                });
+                if results.len() >= limit {
+                    break;
+                }
+            }
+        }
+        if results.len() >= limit {
+            info!("🔍 模糊搜索(精确+解析): '{}' - {} 条结果", query_str, results.len());
+            return Ok(results);
+        }
+
+        // Tier 3: Add FuzzyTermQuery (edit distance 1) for typo tolerance
+        let mut fuzzy_queries: Vec<(tantivy::query::Occur, Box<dyn tantivy::query::Query>)> = Vec::new();
+        for word in &words {
+            for field in &fields {
+                fuzzy_queries.push((tantivy::query::Occur::Should, Box::new(FuzzyTermQuery::new(
+                    Term::from_field_text(*field, word),
+                    1,
+                    true,
+                ))));
+            }
+        }
+        let fuzzy_results = execute(fuzzy_queries)?;
+
+        for (score, addr) in &fuzzy_results {
+            let (id, title, content, updated_at) = self.read_doc(&searcher, *addr)?;
+            if seen_ids.insert(id.clone()) {
+                results.push(SearchResult {
+                    note_id: id,
+                    title,
+                    snippet: self.extract_snippet(&content, &query_lower, 60),
+                    score: *score,
+                    updated_at,
+                    total_hits: 0,
+                });
+                if results.len() >= limit {
+                    break;
+                }
+            }
+        }
+
+        info!("🔍 模糊搜索(精确+前缀+模糊): '{}' - {} 条结果", query_str, results.len());
         Ok(results)
+    }
+
+    /// Helper to read a document from the searcher and extract common fields.
+    fn read_doc(
+        &self,
+        searcher: &tantivy::Searcher,
+        addr: tantivy::DocAddress,
+    ) -> Result<(String, String, String, u64), CoreError> {
+        let id_field = self.schema.get_field("id").unwrap();
+        let title_field = self.schema.get_field("title").unwrap();
+        let content_field = self.schema.get_field("content").unwrap();
+        let updated_at_field = self.schema.get_field("updated_at").unwrap();
+
+        let retrieved: tantivy::TantivyDocument = searcher.doc(addr)?;
+        let id = retrieved
+            .get_first(id_field)
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let title = retrieved
+            .get_first(title_field)
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let content = retrieved
+            .get_first(content_field)
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let updated_at = retrieved
+            .get_first(updated_at_field)
+            .and_then(|v| v.as_u64())
+            .unwrap_or_else(now_ms);
+        Ok((id, title, content, updated_at))
     }
 
     pub fn get_trending_queries(&self, _limit: usize) -> Result<Vec<(String, u32)>, CoreError> {
