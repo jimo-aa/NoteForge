@@ -3,6 +3,7 @@
 // NodeViews own their DOM so ProseMirror won't overwrite.
 
 import { useEffect, useRef } from 'react';
+import { NodeViewWrapper } from '@tiptap/react';
 import type { NodeViewProps } from '@tiptap/react';
 
 /** Block math $$...$$ NodeView */
@@ -35,12 +36,13 @@ export function MathBlockNodeView({ node, selected }: NodeViewProps) {
   }, [latex]);
 
   return (
-    <div
-      ref={containerRef}
+    <NodeViewWrapper
       className={selected ? 'math-rendered ProseMirror-selectednode' : 'math-rendered'}
       style={{ textAlign: 'center', padding: '8px 0', overflowX: 'auto' }}
     >
-      <span style={{ color: 'var(--text-muted, #7a849e)', fontSize: '13px' }}>∫ {latex}</span>
-    </div>
+      <div ref={containerRef}>
+        <span style={{ color: 'var(--text-muted, #7a849e)', fontSize: '13px' }}>∫ {latex}</span>
+      </div>
+    </NodeViewWrapper>
   );
 }

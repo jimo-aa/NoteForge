@@ -240,3 +240,23 @@ export const MathInlineMark = Mark.create({
     return ['span', { class: 'math-inline', 'data-latex': HTMLAttributes.latex }, 0];
   },
 });
+
+// ── Footnotes Section Node ────────────────────────────────────────
+// Preserves <section class="footnotes"> containing footnote definitions
+// from utils/markdown.ts lines 478-483. Without this node, footnote
+// definition links (<a href="#fn:1">) have no target to scroll to.
+
+export const FootnotesSection = Node.create({
+  name: 'footnotesSection',
+  group: 'block',
+  content: 'block*',
+  defining: true,
+
+  parseHTML() {
+    return [{ tag: 'section.footnotes' }];
+  },
+
+  renderHTML() {
+    return ['section', { class: 'footnotes' }, 0];
+  },
+});

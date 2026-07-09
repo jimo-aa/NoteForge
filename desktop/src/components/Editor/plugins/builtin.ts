@@ -24,9 +24,26 @@ import { TableHeader } from '@tiptap/extension-table-header';
 import ImageExtension from '@tiptap/extension-image';
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
 import { createLowlight, common } from 'lowlight';
-import { TagMark, CalloutNode, DetailsNode, TableCellAlignment, MermaidNode, MathBlockNode, MathInlineMark } from '../wysiwyg/extensions/CustomExtensions';
+import { TagMark, CalloutNode, DetailsNode, TableCellAlignment, MermaidNode, MathBlockNode, MathInlineMark, FootnotesSection } from '../wysiwyg/extensions/CustomExtensions';
 
 const lowlight = createLowlight(common);
+
+// Register additional languages for syntax highlighting
+void Promise.all([
+  import('highlight.js/lib/languages/typescript').then(m => lowlight.register('typescript', m.default ?? m)),
+  import('highlight.js/lib/languages/javascript').then(m => lowlight.register('javascript', m.default ?? m)),
+  import('highlight.js/lib/languages/python').then(m => lowlight.register('python', m.default ?? m)),
+  import('highlight.js/lib/languages/rust').then(m => lowlight.register('rust', m.default ?? m)),
+  import('highlight.js/lib/languages/go').then(m => lowlight.register('go', m.default ?? m)),
+  import('highlight.js/lib/languages/java').then(m => lowlight.register('java', m.default ?? m)),
+  import('highlight.js/lib/languages/bash').then(m => lowlight.register('bash', m.default ?? m)),
+  import('highlight.js/lib/languages/json').then(m => lowlight.register('json', m.default ?? m)),
+  import('highlight.js/lib/languages/css').then(m => lowlight.register('css', m.default ?? m)),
+  import('highlight.js/lib/languages/sql').then(m => lowlight.register('sql', m.default ?? m)),
+  import('highlight.js/lib/languages/yaml').then(m => lowlight.register('yaml', m.default ?? m)),
+  import('highlight.js/lib/languages/dockerfile').then(m => lowlight.register('dockerfile', m.default ?? m)),
+  import('highlight.js/lib/languages/graphql').then(m => lowlight.register('graphql', m.default ?? m)),
+]).catch(() => {});
 
 // ── Core Extensions Plugin (Phase 1 — always active) ──
 
@@ -266,6 +283,16 @@ export const mathInlineMarkPlugin: EditorPlugin = {
   extensions: MathInlineMark,
 };
 
+/** Footnotes section node — preserves footnote definitions for scrolling */
+export const footnotesSectionPlugin: EditorPlugin = {
+  id: 'footnotes-section',
+  name: '脚注定义区',
+  version: '1.0.0',
+  description: '<section class="footnotes"> 脚注定义，支持点击跳转',
+  meta: { phase: 'builtin' },
+  extensions: FootnotesSection,
+};
+
 /** Emoji shortcodes — :smile: → 😊 */
 export const emojiPlugin: EditorPlugin = {
   id: 'emoji',
@@ -300,6 +327,7 @@ export const BUILTIN_PLUGINS: EditorPlugin[] = [
   mermaidNodePlugin,
   mathBlockNodePlugin,
   mathInlineMarkPlugin,
+  footnotesSectionPlugin,
 ];
 
 /** Create the default PluginManager with all built-in plugins registered */

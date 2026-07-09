@@ -3,6 +3,7 @@
 // ProseMirror won't overwrite the DOM because NodeViews own their DOM.
 
 import { useEffect, useRef } from 'react';
+import { NodeViewWrapper } from '@tiptap/react';
 import type { NodeViewProps } from '@tiptap/react';
 
 export function MermaidNodeView({ node, selected }: NodeViewProps) {
@@ -39,13 +40,13 @@ export function MermaidNodeView({ node, selected }: NodeViewProps) {
   }, [source]);
 
   return (
-    <div
-      ref={containerRef}
+    <NodeViewWrapper
       className={selected ? 'mermaid-rendered ProseMirror-selectednode' : 'mermaid-rendered'}
       style={{ textAlign: 'center', padding: '16px', minHeight: '60px' }}
     >
-      {/* Placeholder shown while mermaid renders */}
-      <span style={{ color: 'var(--text-muted, #7a849e)', fontSize: '13px' }}>⟳ {source.slice(0, 40)}…</span>
-    </div>
+      <div ref={containerRef}>
+        <span style={{ color: 'var(--text-muted, #7a849e)', fontSize: '13px' }}>⟳ {source.slice(0, 40)}…</span>
+      </div>
+    </NodeViewWrapper>
   );
 }

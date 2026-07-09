@@ -88,11 +88,20 @@ export const WysiwygEditor = forwardRef<EditorHandle, WysiwygEditorProps>(
         },
         handleDOMEvents: {
           dragover: () => false,
-          // Prevent footnote anchor links from navigating the page
+          // Footnote anchor links: scroll to definition instead of navigating
           click: (_view, event) => {
             const target = event.target as HTMLElement;
-            if (target.closest('.footnote-ref') || target.closest('.footnote-backref')) {
+            const fnLink = target.closest<HTMLAnchorElement>('a.footnote-ref, a.footnote-backref');
+            if (fnLink) {
               event.preventDefault();
+              const href = fnLink.getAttribute('href') || '';
+              // href is "#fn:xxx" or "#fnref:xxx" — find matching id in the DOM
+              const el = fnLink.closest('.wysiwyg-editor-pane')?.querySelector(`[id="${href.slice(1)}"]`);
+              if (el) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                (el as HTMLElement).style.outline = '2px solid var(--accent, #6a63ff)';
+                setTimeout(() => { (el as HTMLElement).style.outline = ''; }, 1500);
+              }
               return true;
             }
             return false;

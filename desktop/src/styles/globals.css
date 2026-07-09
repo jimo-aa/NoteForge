@@ -1265,11 +1265,24 @@ blockquote blockquote p, .markdown-preview-pane blockquote blockquote p { font-s
 }
 .wysiwyg-editor-pane .ProseMirror .footnote-ref:hover { text-decoration: underline; }
 .wysiwyg-editor-pane .ProseMirror .footnotes-sep { margin: 32px 0 16px; border-color: var(--line, #e3e7f0); }
-.wysiwyg-editor-pane .ProseMirror .footnotes { font-size: 13px; color: var(--text-muted, #7a849e); }
-.wysiwyg-editor-pane .ProseMirror .footnotes p { margin: 4px 0; }
-.wysiwyg-editor-pane .ProseMirror .footnotes sup { font-size: 0.8em; color: var(--accent, #6a63ff); }
-.wysiwyg-editor-pane .ProseMirror .footnote-backref { font-size: 12px; color: var(--accent, #6a63ff); text-decoration: none; margin-left: 4px; }
-.wysiwyg-editor-pane .ProseMirror .footnote-def-num { font-weight: 600; color: var(--accent, #6a63ff); }
+.wysiwyg-editor-pane .ProseMirror section.footnotes {
+  margin-top: 24px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line, #e3e7f0);
+  font-size: 13px;
+  color: var(--text-muted, #7a849e);
+}
+.wysiwyg-editor-pane .ProseMirror section.footnotes p { margin: 6px 0; line-height: 1.6; }
+.wysiwyg-editor-pane .ProseMirror section.footnotes .footnote-def-num {
+  font-weight: 700;
+  color: var(--accent, #6a63ff);
+  margin-right: 4px;
+}
+.wysiwyg-editor-pane .ProseMirror .footnote-backref {
+  font-size: 12px; color: var(--accent, #6a63ff); text-decoration: none;
+  margin-left: 6px; opacity: 0.6;
+}
+.wysiwyg-editor-pane .ProseMirror .footnote-backref:hover { opacity: 1; text-decoration: underline; }
 
 /* ── Math & Mermaid placeholders ── */
 .wysiwyg-editor-pane .ProseMirror .math-block,
@@ -1316,6 +1329,36 @@ blockquote blockquote p, .markdown-preview-pane blockquote blockquote p { font-s
 .wysiwyg-editor-pane .ProseMirror pre:hover .code-copy-btn { opacity: 1; }
 .wysiwyg-editor-pane .ProseMirror pre .code-copy-btn:hover { background: rgba(255,255,255,0.12); color: #fff; }
 
+/* ── Syntax highlighting inside WYSIWYG code blocks ──
+   lowlight uses highlight.js token classes (.hljs-*).
+   Dark background (default for code blocks) with light text. */
+.wysiwyg-editor-pane .ProseMirror pre code .hljs-keyword,
+.wysiwyg-editor-pane .ProseMirror pre code .hljs-selector-tag,
+.wysiwyg-editor-pane .ProseMirror pre code .hljs-title { color: #c792ea; }
+
+.wysiwyg-editor-pane .ProseMirror pre code .hljs-string,
+.wysiwyg-editor-pane .ProseMirror pre code .hljs-selector-id { color: #c3e88d; }
+
+.wysiwyg-editor-pane .ProseMirror pre code .hljs-number,
+.wysiwyg-editor-pane .ProseMirror pre code .hljs-literal { color: #f78c6c; }
+
+.wysiwyg-editor-pane .ProseMirror pre code .hljs-comment,
+.wysiwyg-editor-pane .ProseMirror pre code .hljs-quote { color: #546e7a; font-style: italic; }
+
+.wysiwyg-editor-pane .ProseMirror pre code .hljs-built_in,
+.wysiwyg-editor-pane .ProseMirror pre code .hljs-type { color: #82aaff; }
+
+.wysiwyg-editor-pane .ProseMirror pre code .hljs-attr,
+.wysiwyg-editor-pane .ProseMirror pre code .hljs-variable { color: #f07178; }
+
+.wysiwyg-editor-pane .ProseMirror pre code .hljs-function { color: #82aaff; }
+
+.wysiwyg-editor-pane .ProseMirror pre code .hljs-params { color: #ffcb6b; }
+
+.wysiwyg-editor-pane .ProseMirror pre code .hljs-regexp { color: #89ddff; }
+
+.wysiwyg-editor-pane .ProseMirror pre code .hljs-meta { color: #f78c6c; }
+
 /* ── Collapsible Details (native <details> element) ── */
 .wysiwyg-editor-pane .ProseMirror details {
   margin: 12px 0;
@@ -1356,27 +1399,45 @@ blockquote blockquote p, .markdown-preview-pane blockquote blockquote p { font-s
   padding: 0 14px 10px;
 }
 
-/* ── Callout blocks (NoteForge custom) ── */
+/* ── Callout blocks (NoteForge custom) ──
+   Note: The CalloutNode produces a flat structure (no inner header/body divs),
+   so the first <p> is styled as header, subsequent <p> as body content. */
 .wysiwyg-editor-pane .ProseMirror .callout {
-  margin: 12px 0; border-radius: 8px; border-left: 4px solid; overflow: hidden;
+  margin: 14px 0;
+  border-radius: 10px;
+  border-left: 4px solid;
+  overflow: hidden;
 }
-.wysiwyg-editor-pane .ProseMirror .callout-header {
-  padding: 8px 14px; font-weight: 600; font-size: 13px;
+/* First paragraph inside callout = title/header */
+.wysiwyg-editor-pane .ProseMirror .callout > p:first-child {
+  padding: 8px 14px;
+  font-weight: 700;
+  font-size: 13px;
+  margin: 0;
+  letter-spacing: 0.3px;
 }
-.wysiwyg-editor-pane .ProseMirror .callout-body { padding: 4px 14px 10px; }
-.wysiwyg-editor-pane .ProseMirror .callout-body p { margin: 4px 0; font-size: 13px; }
+/* Subsequent paragraphs = body */
+.wysiwyg-editor-pane .ProseMirror .callout > p:not(:first-child) {
+  padding: 2px 14px 8px;
+  margin: 0;
+  font-size: 13px;
+}
+.wysiwyg-editor-pane .ProseMirror .callout > p:last-child {
+  padding-bottom: 10px;
+}
+/* Type-specific colors */
 .wysiwyg-editor-pane .ProseMirror .callout-note { border-left-color: #6a63ff; background: rgba(106, 99, 255, 0.05); }
-.wysiwyg-editor-pane .ProseMirror .callout-note .callout-header { background: rgba(106, 99, 255, 0.1); color: #6a63ff; }
+.wysiwyg-editor-pane .ProseMirror .callout-note > p:first-child { background: rgba(106, 99, 255, 0.1); color: #6a63ff; }
 .wysiwyg-editor-pane .ProseMirror .callout-warning { border-left-color: #e67e00; background: rgba(230, 126, 0, 0.05); }
-.wysiwyg-editor-pane .ProseMirror .callout-warning .callout-header { background: rgba(230, 126, 0, 0.1); color: #b85e00; }
+.wysiwyg-editor-pane .ProseMirror .callout-warning > p:first-child { background: rgba(230, 126, 0, 0.1); color: #b85e00; }
 .wysiwyg-editor-pane .ProseMirror .callout-tip { border-left-color: #2e7d32; background: rgba(46, 125, 50, 0.05); }
-.wysiwyg-editor-pane .ProseMirror .callout-tip .callout-header { background: rgba(46, 125, 50, 0.1); color: #1b5e20; }
+.wysiwyg-editor-pane .ProseMirror .callout-tip > p:first-child { background: rgba(46, 125, 50, 0.1); color: #1b5e20; }
 .wysiwyg-editor-pane .ProseMirror .callout-danger { border-left-color: #c62828; background: rgba(198, 40, 40, 0.05); }
-.wysiwyg-editor-pane .ProseMirror .callout-danger .callout-header { background: rgba(198, 40, 40, 0.1); color: #b71c1c; }
+.wysiwyg-editor-pane .ProseMirror .callout-danger > p:first-child { background: rgba(198, 40, 40, 0.1); color: #b71c1c; }
 .wysiwyg-editor-pane .ProseMirror .callout-info { border-left-color: #00838f; background: rgba(0, 131, 143, 0.05); }
-.wysiwyg-editor-pane .ProseMirror .callout-info .callout-header { background: rgba(0, 131, 143, 0.1); color: #006064; }
+.wysiwyg-editor-pane .ProseMirror .callout-info > p:first-child { background: rgba(0, 131, 143, 0.1); color: #006064; }
 .wysiwyg-editor-pane .ProseMirror .callout-success { border-left-color: #2e7d32; background: rgba(46, 125, 50, 0.05); }
-.wysiwyg-editor-pane .ProseMirror .callout-success .callout-header { background: rgba(46, 125, 50, 0.1); color: #1b5e20; }
+.wysiwyg-editor-pane .ProseMirror .callout-success > p:first-child { background: rgba(46, 125, 50, 0.1); color: #1b5e20; }
 
 /* ── Frontmatter metadata ── */
 .wysiwyg-editor-pane .ProseMirror .frontmatter {
