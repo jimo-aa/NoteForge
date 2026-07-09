@@ -2,12 +2,12 @@
 // Matches the primary tree (storage → notebooks → notes) styling pattern:
 // - Directories → storage-tree-toggle (with inline paddingLeft for indentation)
 // - Files → sidebar-note (with inline paddingLeft for indentation)
-// Expanded directory state is stored at the root level (by path).
 
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useStore } from '@/stores/context';
 import { tauriInvoke } from '@/utils/invoke';
+import { Icon } from '@/components/Common/Icon';
 
 // ── Types ──
 
@@ -56,7 +56,9 @@ const FileNode = memo(function FileNode({ node, depth }: { node: ScannedFileTree
       title={node.path}
     >
       <div className="sidebar-note-title">
-        <span style={{ fontSize: 12, flexShrink: 0, marginLeft: (1 + depth) * 24 }}>📄</span>
+        <span style={{ fontSize: 12, flexShrink: 0, marginLeft: (1 + depth) * 24 }}>
+          <Icon type="note" size={14} />
+        </span>
         <strong style={{ fontSize: 13 }}>{node.title || node.name}</strong>
       </div>
       <p style={{ fontSize: 11, margin: 0, color: 'var(--text-muted)' }}>{node.path.split(/[/\\]/).pop()}</p>
@@ -93,8 +95,10 @@ function DirNode({
         className="storage-tree-toggle"
         onClick={handleToggle}
       >
-        <span className="storage-tree-arrow" style={{ marginLeft: (1 + depth) * 24 }}>{expanded ? '▼' : '▶'}</span>
-        <span className="storage-tree-folder" style={{ fontSize: 12 }}>📁</span>
+        <span className="storage-tree-arrow" style={{ marginLeft: (1 + depth) * 24 }}>
+          <Icon type={expanded ? 'chevron-down' : 'chevron-right'} size={8} />
+        </span>
+        <Icon type={expanded ? 'folder-open' : 'folder'} size={13} />
         <span className="storage-tree-name" style={{ fontSize: 11 }}>{node.name}</span>
         <span className="storage-tree-count">{node.children.length}</span>
       </button>
@@ -188,8 +192,10 @@ export function ScannedTree({ rootPath }: ScannedTreeProps) {
   return (
     <div className="storage-tree-root" style={{ marginBottom: 4 }}>
       <button className="storage-tree-toggle" onClick={handleRootToggle}>
-        <span className="storage-tree-arrow">{rootExpanded ? '▼' : '▶'}</span>
-        <span className="storage-tree-folder">📂</span>
+        <span className="storage-tree-arrow">
+          <Icon type={rootExpanded ? 'chevron-down' : 'chevron-right'} size={10} />
+        </span>
+        <Icon type="folder-open" size={14} />
         <span className="storage-tree-name">{rootName}</span>
         {!loading && <span className="storage-tree-count">{fileCount}</span>}
       </button>

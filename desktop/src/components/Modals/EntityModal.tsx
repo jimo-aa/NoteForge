@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Icon } from '@/components/Common/Icon';
 
 export type EntityModalMode = 'create-notebook' | 'rename-notebook' | 'rename-note';
 
@@ -23,7 +24,7 @@ export function EntityModal({ state, onClose, onConfirm }: { state: EntityModalS
   return (
     <div className="modal-backdrop new-note-backdrop" onClick={onClose}>
       <div className="modal new-note-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="new-note-title"><span>✎</span><h3>{state.title}</h3></div>
+        <div className="new-note-title"><span><Icon type="draft" size={18} /></span><h3>{state.title}</h3></div>
         <label className="new-note-field new-note-field--full"><span>{state.label}</span><input value={value} onChange={(e) => setValue(e.target.value)} autoFocus /></label>
         <div className="modal-actions new-note-actions"><button className="ghost-btn" onClick={onClose}>{t('common.cancel')}</button><button className="primary-btn" onClick={() => onConfirm(value.trim())}>{state.confirmText}</button></div>
       </div>

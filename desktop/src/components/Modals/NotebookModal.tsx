@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Icon } from '@/components/Common/Icon';
 
 export interface NotebookModalState {
   open: boolean;
@@ -8,8 +9,6 @@ export interface NotebookModalState {
   value: string;
   notebookId?: string | null;
 }
-
-const NOTEBOOK_ICONS = ['📓', '📔', '📙', '📕', '📚', '📖', '📝', '✏️', '📋', '📰', '📑', '🗂️', '💻', '🎯', '🔄', '🤖'];
 
 const NOTEBOOK_COLORS = [
   { value: '#6366f1', name: '靛蓝' },
@@ -31,7 +30,6 @@ interface NotebookModalProps {
 export function NotebookModal({ state, onClose, onConfirm }: NotebookModalProps) {
   const { t } = useTranslation();
   const [name, setName] = useState(state.value);
-  const [selectedIcon, setSelectedIcon] = useState(NOTEBOOK_ICONS[0]!);
   const [selectedColor, setSelectedColor] = useState(NOTEBOOK_COLORS[0]!.value);
   const [isLoading, setIsLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -39,7 +37,6 @@ export function NotebookModal({ state, onClose, onConfirm }: NotebookModalProps)
   useEffect(() => {
     if (state.open) {
       setName(state.value);
-      setSelectedIcon(NOTEBOOK_ICONS[0]!);
       setSelectedColor(NOTEBOOK_COLORS[0]!.value);
       setIsLoading(false);
       setTimeout(() => inputRef.current?.focus(), 60);
@@ -54,7 +51,7 @@ export function NotebookModal({ state, onClose, onConfirm }: NotebookModalProps)
     if (!trimmedName) return;
     setIsLoading(true);
     try {
-      await onConfirm(trimmedName, selectedIcon, selectedColor);
+      await onConfirm(trimmedName, '', selectedColor);
     } finally {
       setIsLoading(false);
     }
@@ -75,9 +72,13 @@ export function NotebookModal({ state, onClose, onConfirm }: NotebookModalProps)
       <div className="modal new-note-modal nb-modal" onClick={(e) => e.stopPropagation()}
         onKeyDown={handleKeyDown}>
         <div className="new-note-title">
-          <span>{selectedIcon}</span>
+          <span className="nb-modal-title-icon" style={{ color: selectedColor }}>
+            <Icon type="notebook" size={20} />
+          </span>
           <h3>{state.title}</h3>
-          <button className="modal-close" onClick={onClose} type="button" aria-label={t('common.close')}>✕</button>
+          <button className="modal-close" onClick={onClose} type="button" aria-label={t('common.close')}>
+            <Icon type="close" size={16} />
+          </button>
         </div>
 
         <label className="new-note-field new-note-field--full">
@@ -95,23 +96,6 @@ export function NotebookModal({ state, onClose, onConfirm }: NotebookModalProps)
         </label>
 
         <div className="new-note-grid">
-          <div className="new-note-field">
-            <span>{t('notebook.icon')}</span>
-            <div className="nb-icon-grid">
-              {NOTEBOOK_ICONS.map((icon) => (
-                <button
-                  key={icon}
-                  className={`nb-icon-btn ${selectedIcon === icon ? 'selected' : ''}`}
-                  onClick={() => setSelectedIcon(icon)}
-                  type="button"
-                  title={icon}
-                >
-                  {icon}
-                </button>
-              ))}
-            </div>
-          </div>
-
           <div className="new-note-field">
             <span>{t('notebook.color')}</span>
             <div className="nb-color-grid">
@@ -136,9 +120,11 @@ export function NotebookModal({ state, onClose, onConfirm }: NotebookModalProps)
         </div>
 
         <div className="nb-preview-card">
-          <span className="nb-preview-icon">{selectedIcon}</span>
-          <span className="nb-preview-name">{name.trim() || t('notebook.previewTitle')}</span>
+          <span className="nb-preview-icon" style={{ color: selectedColor }}>
+            <Icon type="notebook" size={20} />
+          </span>
           <span className="nb-preview-color-dot" style={{ backgroundColor: selectedColor }} />
+          <span className="nb-preview-name">{name.trim() || t('notebook.previewTitle')}</span>
           <span className="nb-preview-count">{t('notebook.noteCount', { count: 0 })}</span>
         </div>
 

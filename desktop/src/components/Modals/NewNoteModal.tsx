@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Notebook } from '@/types';
 import { tauriInvoke } from '@/utils/invoke';
+import { Icon } from '@/components/Common/Icon';
 
 interface NewNotePayload {
   title: string;
@@ -18,17 +19,19 @@ interface NewNoteModalProps {
   onCreate: (payload: NewNotePayload) => void | Promise<void>;
 }
 
-const TEMPLATES = [
-  {
-    id: 'blank',
-    name: '空白笔记',
-    icon: '📄',
-    content: '',
-  },
+interface TemplateDef {
+  id: string;
+  name: string;
+  iconType: string;
+  content: string;
+}
+
+const TEMPLATES: TemplateDef[] = [
+  { id: 'blank', name: '空白笔记', iconType: 'note', content: '' },
   {
     id: 'meeting',
     name: '会议记录',
-    icon: '🗓️',
+    iconType: 'calendar',
     content: `# 会议记录
 
 **日期**: ${new Date().toLocaleDateString('zh-CN')}  
@@ -64,7 +67,7 @@ const TEMPLATES = [
   {
     id: 'project',
     name: '项目文档',
-    icon: '📋',
+    iconType: 'folder',
     content: `# 项目文档
 
 ## 项目概述
@@ -121,7 +124,7 @@ flowchart LR
   {
     id: 'daily',
     name: '日常记录',
-    icon: '📅',
+    iconType: 'calendar',
     content: `# ${new Date().toLocaleDateString('zh-CN')}
 
 ## 今日要事
@@ -166,7 +169,7 @@ flowchart LR
   {
     id: 'brainstorm',
     name: '头脑风暴',
-    icon: '💡',
+    iconType: 'lightbulb',
     content: `# 头脑风暴
 
 **主题**: 
@@ -197,7 +200,7 @@ flowchart LR
   {
     id: 'review',
     name: '书籍评论',
-    icon: '📚',
+    iconType: 'notebook',
     content: `# 书籍评论
 
 **书名**: 
@@ -335,7 +338,7 @@ export function NewNoteModal({ open, notebooks = [], onClose, onCreate }: NewNot
     <div className="modal-backdrop new-note-backdrop" onClick={onClose}>
       <div className="modal new-note-modal" onClick={(event) => event.stopPropagation()}>
         <div className="new-note-title">
-          <span>＋</span>
+          <span className="new-note-title-icon"><Icon type="plus" size={18} /></span>
           <h3>{t('noteModal.title')}</h3>
           <button
             className="modal-close"
@@ -343,7 +346,7 @@ export function NewNoteModal({ open, notebooks = [], onClose, onCreate }: NewNot
             type="button"
             aria-label={t('common.close')}
           >
-            ✕
+            <Icon type="close" size={16} />
           </button>
         </div>
 
@@ -371,25 +374,32 @@ export function NewNoteModal({ open, notebooks = [], onClose, onCreate }: NewNot
                 .filter((item) => item.id !== 'all')
                 .map((notebook) => (
                   <option key={notebook.id} value={notebook.id}>
-                    {notebook.icon} {notebook.name}
+                    {notebook.name}
                   </option>
                 ))}
             </select>
           </label>
 
-          <label className="new-note-field">
+          <label className="new-note-field new-note-field--template">
             <span>{t('noteModal.templateLabel')}</span>
-            <select
-              value={templateId}
-              onChange={(event) => setTemplateId(event.target.value)}
-              disabled={isLoading}
-            >
-              {TEMPLATES.map((template) => (
-                <option key={template.id} value={template.id}>
-                  {template.icon} {template.name}
-                </option>
-              ))}
-            </select>
+            <div className="template-picker">
+              {TEMPLATES.map((tpl) => {
+                const selected = templateId === tpl.id;
+                return (
+                  <button
+                    key={tpl.id}
+                    type="button"
+                    className={`template-picker-btn${selected ? ' selected' : ''}`}
+                    onClick={() => setTemplateId(tpl.id)}
+                    disabled={isLoading}
+                    title={tpl.name}
+                  >
+                    <Icon type={tpl.iconType as any} size={20} />
+                    <span>{tpl.name}</span>
+                  </button>
+                );
+              })}
+            </div>
           </label>
         </div>
 
